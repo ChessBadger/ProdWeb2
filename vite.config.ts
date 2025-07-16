@@ -3,8 +3,8 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   plugins: [react()],
-  // ← must exactly match your new repo name
-  base: "/ProdWeb2/",
+  // Use relative paths so you don't have to change this if your repo name changes
+  base: "./",
   build: {
     outDir: "docs",
   },
