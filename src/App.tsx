@@ -1,4 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
+import { auth, googleProvider } from "./firebase";
+import type { User } from "firebase/auth";
+import { signInWithPopup, onAuthStateChanged, signOut } from "firebase/auth";
 import { usePerformanceData, FilterState } from "./hooks/usePerformanceData";
 import DashboardFilters from "./components/DashboardFilters";
 import PerformanceBarChart from "./components/PerformanceBarChart";
@@ -27,6 +30,72 @@ import {
   ExclamationTriangleIcon,
 } from "./components/icons/Icons";
 
+const allowedUsers = [
+  "jswanson@badgerinventory.com",
+  "hkraemer@badgerinventory.com",
+  "jfalck@badgerinventory.com",
+  "spalmer@badgerinventory.com",
+  "nbrock@badgerinventory.com",
+  "lclark@badgerinventory.com",
+  "kgrohall@badgerinventory.com",
+];
+
+const GoogleIcon = () => (
+  <svg
+    className="w-6 h-6"
+    role="img"
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <title>Google</title>
+    <path
+      d="M12.48 10.92v3.28h7.84c-.24 1.84-.85 3.18-1.73 4.1-1.02 1.02-2.6 2.04-4.82 2.04-5.84 0-10.62-4.78-10.62-10.62s4.78-10.62 10.62-10.62c3.32 0 5.62 1.36 6.96 2.62l2.5-2.5C20.45 1.45 17.1.22 12.48.22 5.6.22 0 5.82 0 12.7s5.6 12.48 12.48 12.48c6.68 0 11.42-4.57 11.42-11.42 0-.8-.08-1.6-.2-2.36H12.48z"
+      fill="currentColor"
+    />
+  </svg>
+);
+
+const LoginScreen = ({ authError }: { authError: string | null }) => {
+  const signInWithGoogle = () => {
+    signInWithPopup(auth, googleProvider).catch((err) => {
+      console.error("Google sign-in error:", err.message);
+    });
+  };
+
+  return (
+    <div className="flex items-center justify-center h-screen bg-slate-100 dark:bg-slate-900 font-sans">
+      <div className="w-full max-w-md p-8 space-y-8 bg-white dark:bg-slate-800 rounded-2xl shadow-xl text-center">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-primary tracking-wider">
+            BADGER
+          </h1>
+          <p className="text-lg font-semibold text-slate-700 dark:text-slate-300">
+            INVENTORY SERVICE, INC.
+          </p>
+        </div>
+        <div className="pt-4">
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">
+            Performance Dashboard
+          </h2>
+          <p className="mt-2 text-slate-500 dark:text-slate-400">
+            Please sign in to continue
+          </p>
+        </div>
+        <button
+          onClick={signInWithGoogle}
+          className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-primary text-white font-semibold rounded-lg hover:bg-primary-focus focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors text-lg"
+        >
+          <GoogleIcon />
+          Sign In with Google
+        </button>
+        {authError && (
+          <p className="mt-4 text-center text-red-500 text-sm">{authError}</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
 const initialFilterState: FilterState = {
   office: "all",
   account: "all",
@@ -54,7 +123,7 @@ const Logo = () => (
   </div>
 );
 
-const App: React.FC = () => {
+const Dashboard: React.FC = () => {
   const { data, loading, error, uniqueValues } = usePerformanceData();
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
@@ -303,6 +372,12 @@ const App: React.FC = () => {
             {isDarkMode ? <SunIcon /> : <MoonIcon />}
             <span>{isDarkMode ? "Light Mode" : "Dark Mode"}</span>
           </button>
+          <button
+            onClick={() => signOut(auth)}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2 mt-2 bg-slate-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
+          >
+            Sign Out
+          </button>
         </div>
       </aside>
 
@@ -413,6 +488,41 @@ const App: React.FC = () => {
       </main>
     </div>
   );
+};
+const App: React.FC = () => {
+  const [user, setUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setAuthError(null);
+      if (
+        firebaseUser?.email &&
+        allowedUsers.includes(firebaseUser.email.toLowerCase())
+      ) {
+        setUser(firebaseUser);
+      } else {
+        if (firebaseUser) {
+          setAuthError("Unauthorized access. Please contact an administrator.");
+          auth.signOut();
+        }
+        setUser(null);
+      }
+      setAuthLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center h-screen text-2xl font-semibold bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+        Authenticating...
+      </div>
+    );
+  }
+
+  return user ? <Dashboard /> : <LoginScreen authError={authError} />;
 };
 
 export default App;
