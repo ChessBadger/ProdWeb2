@@ -55,7 +55,7 @@ export const usePerformanceData = () => {
         const rawJsonData: { [key: string]: RawEmployeeRecord[] } =
           await response.json();
 
-        const rawDataArray = Object.values(rawJsonData)[0] || [];
+        const rawDataArray = Object.values(rawJsonData).flat();
 
         if (!Array.isArray(rawDataArray)) {
           throw new Error(
