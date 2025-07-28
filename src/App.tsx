@@ -15,7 +15,7 @@ import AnomalyDetection from "./components/AnomalyDetection";
 import KPI from "./components/KPI";
 import Tabs from "./components/Tabs";
 import ToggleSwitch from "./components/ToggleSwitch";
-import { Metric } from "./types";
+import { Metric, EmployeeRecord } from "./types";
 import { METRIC_OPTIONS, getLinkedAccounts } from "./constants";
 import {
   ChartBarIcon,
@@ -220,6 +220,70 @@ const Dashboard: React.FC = () => {
     return result;
   }, [data, filters]);
 
+  const dataForAnomalyOverall = useMemo(() => {
+    if (!data) return [];
+    let result = data;
+    const now = new Date();
+
+    if (filters.office !== "all")
+      result = result.filter((d) => d.office === filters.office);
+
+    if (filters.account !== "all") {
+      const linkedAccounts = getLinkedAccounts(filters.account);
+      result = result.filter((d) =>
+        linkedAccounts.includes(d.account.toLowerCase())
+      );
+    }
+
+    // Intentionally skip employee filter
+
+    if (filters.store !== "all")
+      result = result.filter((d) => d.store === filters.store);
+    if (filters.supervisor !== "all")
+      result = result.filter((d) => d.supervisor === filters.supervisor);
+
+    switch (filters.timeframe) {
+      case "custom":
+        if (filters.startDate && filters.endDate) {
+          const start = new Date(filters.startDate);
+          const end = new Date(filters.endDate);
+          end.setHours(23, 59, 59, 999);
+          result = result.filter((d) => {
+            const recordDate = new Date(d.date.replace(/-/g, "/"));
+            return recordDate >= start && recordDate <= end;
+          });
+        }
+        break;
+      case "specific":
+        if (filters.specificDate) {
+          result = result.filter((d) => d.date === filters.specificDate);
+        }
+        break;
+      case "last7":
+      case "last30":
+      case "last180":
+      case "last365":
+        const days = parseInt(filters.timeframe.replace("last", ""));
+        const cutoffDate = new Date();
+        cutoffDate.setDate(now.getDate() - days);
+        result = result.filter(
+          (d) => new Date(d.date.replace(/-/g, "/")) >= cutoffDate
+        );
+        break;
+    }
+    return result;
+  }, [
+    data,
+    filters.office,
+    filters.account,
+    filters.store,
+    filters.supervisor,
+    filters.timeframe,
+    filters.startDate,
+    filters.endDate,
+    filters.specificDate,
+  ]);
+
   const kpiValues = useMemo(() => {
     if (!filteredData.length) {
       return {
@@ -297,6 +361,7 @@ const Dashboard: React.FC = () => {
         return (
           <AnomalyDetection
             data={filteredData}
+            overallData={dataForAnomalyOverall}
             metric={selectedMetric}
             account={filters.account}
             isDarkMode={isDarkMode}
