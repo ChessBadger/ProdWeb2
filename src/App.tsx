@@ -149,7 +149,10 @@ const Dashboard: React.FC = () => {
 
   const [filters, setFilters] = useState<FilterState>(initialFilterState);
   const [selectedMetric, setSelectedMetric] = useState<Metric>("pieces");
-  const [groupBy, setGroupBy] = useState<"store" | "supervisor">("store");
+  const [groupBy, setGroupBy] = useState<"store" | "supervisor" | "account">(
+    "store"
+  );
+
   const [activeChart, setActiveChart] = useState<
     "comparison" | "trend" | "dayOfWeek" | "anomaly"
   >("comparison");
@@ -522,19 +525,37 @@ const Dashboard: React.FC = () => {
                 ),
               },
               {
-                label: "Store & Supervisor",
+                label: "Performance by Group",
                 content: (
                   <>
                     <div className="flex justify-end p-4">
-                      <ToggleSwitch
-                        id="group-by-toggle"
-                        checked={groupBy === "supervisor"}
-                        onChange={(checked) =>
-                          setGroupBy(checked ? "supervisor" : "store")
-                        }
-                        labelLeft="Group by Store"
-                        labelRight="Group by Supervisor"
-                      />
+                      <div
+                        role="group"
+                        aria-label="Group by"
+                        className="inline-flex rounded-md shadow-sm"
+                      >
+                        {(["store", "supervisor", "account"] as const).map(
+                          (option) => (
+                            <button
+                              key={option}
+                              type="button"
+                              onClick={() => setGroupBy(option)}
+                              className={`
+          px-4 py-2 text-sm font-medium border
+          ${
+            groupBy === option
+              ? "bg-slate-800 text-white border-slate-800"
+              : "bg-white text-slate-700 dark:bg-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600"
+          }
+          ${option === "store" ? "rounded-l-md" : ""}
+          ${option === "account" ? "rounded-r-md" : ""}
+        `}
+                            >
+                              {option.charAt(0).toUpperCase() + option.slice(1)}
+                            </button>
+                          )
+                        )}
+                      </div>
                     </div>
                     <PerformanceByGroupTable
                       data={filteredData}
