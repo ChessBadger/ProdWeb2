@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { auth, googleProvider } from "./firebase";
-import type { User } from "firebase";
+import type { User } from "firebase/auth";
+import { signInWithPopup, onAuthStateChanged, signOut } from "firebase/auth";
 import { usePerformanceData, FilterState } from "./hooks/usePerformanceData";
 import DashboardFilters from "./components/DashboardFilters";
 import PerformanceBarChart from "./components/PerformanceBarChart";
@@ -56,7 +57,7 @@ const GoogleIcon = () => (
 
 const LoginScreen = ({ authError }: { authError: string | null }) => {
   const signInWithGoogle = () => {
-    auth.signInWithPopup(googleProvider).catch((err) => {
+    signInWithPopup(auth, googleProvider).catch((err) => {
       console.error("Google sign-in error:", err.message);
     });
   };
@@ -440,7 +441,7 @@ const Dashboard: React.FC = () => {
             <span>{isDarkMode ? "Light Mode" : "Dark Mode"}</span>
           </button>
           <button
-            onClick={() => auth.signOut()}
+            onClick={() => signOut(auth)}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 mt-2 bg-slate-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
           >
             Sign Out
@@ -465,7 +466,7 @@ const Dashboard: React.FC = () => {
         >
           <KPI
             title={`Avg. ${metricLabel}`}
-            value={kpiValues.avgMetric.toFixed(3)}
+            value={kpiValues.avgMetric.toFixed(2)}
             icon={<TrendingUpIcon className="h-6 w-6 text-primary" />}
           />
           {filters.employee === "all" && (
@@ -478,7 +479,7 @@ const Dashboard: React.FC = () => {
           <KPI
             title={`Top Performer (${metricLabel})`}
             value={kpiValues.bestPerformer.name}
-            subtitle={`Avg: ${kpiValues.bestPerformer.value.toFixed(3)}`}
+            subtitle={`Avg: ${kpiValues.bestPerformer.value.toFixed(2)}`}
             icon={<CheckBadgeIcon className="h-6 w-6 text-primary" />}
           />
         </div>
@@ -580,7 +581,7 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
       setAuthError(null);
       if (
         firebaseUser?.email &&
