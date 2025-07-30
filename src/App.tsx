@@ -513,7 +513,7 @@ const Dashboard: React.FC = () => {
               />
             </div>
           </div>
-          <div className="h-[350px]">{renderActiveChart()}</div>
+          <div className="h-[450px]">{renderActiveChart()}</div>
         </div>
 
         <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm">
