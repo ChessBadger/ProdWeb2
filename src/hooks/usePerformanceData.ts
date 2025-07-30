@@ -11,6 +11,7 @@ export interface FilterState {
     | "all"
     | "last7"
     | "last30"
+    | "last90"
     | "last180"
     | "last365"
     | "custom"

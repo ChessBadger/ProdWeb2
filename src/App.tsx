@@ -210,6 +210,7 @@ const Dashboard: React.FC = () => {
         break;
       case "last7":
       case "last30":
+      case "last90":
       case "last180":
       case "last365":
         const days = parseInt(filters.timeframe.replace("last", ""));
@@ -264,6 +265,7 @@ const Dashboard: React.FC = () => {
         break;
       case "last7":
       case "last30":
+      case "last90":
       case "last180":
       case "last365":
         const days = parseInt(filters.timeframe.replace("last", ""));
