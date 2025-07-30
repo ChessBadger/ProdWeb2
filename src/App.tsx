@@ -347,6 +347,7 @@ const Dashboard: React.FC = () => {
         return (
           <PerformanceTrendChart
             data={filteredData}
+            overallData={dataForAnomalyOverall}
             metric={selectedMetric}
             employee={filters.employee}
             isDarkMode={isDarkMode}

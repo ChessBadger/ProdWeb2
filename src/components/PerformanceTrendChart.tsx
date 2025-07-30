@@ -17,6 +17,7 @@ import ToggleSwitch from "./ToggleSwitch";
 
 interface PerformanceTrendChartProps {
   data: EmployeeRecord[];
+  overallData: EmployeeRecord[];
   metric: Metric;
   employee: string;
   isDarkMode: boolean;
@@ -26,11 +27,13 @@ const STDEV_THRESHOLD = 1.5;
 
 const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
   data,
+  overallData,
   metric,
   employee,
   isDarkMode,
 }) => {
   const [trendView, setTrendView] = useState<"monthly" | "store">("monthly");
+  const [showOverallAvg, setShowOverallAvg] = useState(true);
 
   const { chartData, peak, lowest, spikes, dips } = useMemo(() => {
     if (!data) {
@@ -38,7 +41,6 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
     }
 
     const isOverallView = employee === "all";
-    // Use all data for overall view, or filter for a specific employee
     const sourceData = isOverallView
       ? data
       : data.filter((d) => d.employee === employee);
@@ -50,12 +52,11 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
 
     let finalChartData: any[] = [];
 
-    // For overall view or single-employee monthly view, aggregate data by month
     if (viewMode === "monthly" || viewMode === "overall") {
       const monthlyData = new Map<string, { total: number; count: number }>();
 
       sourceData.forEach((record) => {
-        const month = record.date.substring(0, 7); // 'YYYY-MM'
+        const month = record.date.substring(0, 7);
         if (!monthlyData.has(month)) {
           monthlyData.set(month, { total: 0, count: 0 });
         }
@@ -67,26 +68,71 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
       finalChartData = Array.from(monthlyData.entries())
         .map(([month, values]) => ({
           date: month,
-          [metric]: parseFloat((values.total / values.count).toFixed(3)),
+          [metric]: values.total / values.count,
         }))
         .sort((a, b) => a.date.localeCompare(b.date));
+
+      // build overall-employees monthly average map
+      const overallMonthly = new Map<
+        string,
+        { total: number; count: number }
+      >();
+      overallData.forEach((r) => {
+        const month = r.date.substring(0, 7);
+        if (!overallMonthly.has(month)) {
+          overallMonthly.set(month, { total: 0, count: 0 });
+        }
+        const cur = overallMonthly.get(month)!;
+        cur.total += r[metric];
+        cur.count += 1;
+      });
+      const overallMap = new Map(
+        Array.from(overallMonthly.entries()).map(([m, v]) => [
+          m,
+          v.total / v.count,
+        ])
+      );
+
+      // merge into each point
+      finalChartData = finalChartData.map((pt) => ({
+        ...pt,
+        overallAvg: overallMap.get(pt.date) ?? null,
+      }));
     } else {
-      // For single-employee store view, use individual records sorted by date
       finalChartData = [...sourceData].sort(
         (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
       );
     }
 
-    if (finalChartData.length === 0) {
-      return { chartData: [], peak: null, lowest: null, spikes: [], dips: [] };
+    // Anomaly detection logic
+    if (finalChartData.length < 3) {
+      return {
+        chartData: finalChartData,
+        peak: null,
+        lowest: null,
+        spikes: [],
+        dips: [],
+      };
     }
 
-    // --- Peak and Lowest detection (for axis scaling) ---
     let peak: any = null;
     let lowest: any = null;
+    const spikes: any[] = [];
+    const dips: any[] = [];
+
+    const metricValues = finalChartData.map((d) => d[metric]);
+    const mean =
+      metricValues.reduce((sum, val) => sum + val, 0) / metricValues.length;
+    const stdDev = Math.sqrt(
+      metricValues
+        .map((x) => Math.pow(x - mean, 2))
+        .reduce((a, b) => a + b, 0) / metricValues.length
+    );
+    const upperThreshold = mean + STDEV_THRESHOLD * stdDev;
+    const lowerThreshold = mean - STDEV_THRESHOLD * stdDev;
+
     let maxVal = -Infinity;
     let minVal = Infinity;
-
     finalChartData.forEach((point) => {
       const value = point[metric];
       if (value > maxVal) {
@@ -98,73 +144,24 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
         lowest = point;
       }
     });
-
-    // --- Anomaly detection logic (requires at least 3 data points) ---
-    const spikes: any[] = [];
-    const dips: any[] = [];
-
-    if (finalChartData.length >= 3) {
-      const metricValues = finalChartData.map((d) => d[metric]);
-      const mean =
-        metricValues.reduce((sum, val) => sum + val, 0) / metricValues.length;
-      const stdDev = Math.sqrt(
-        metricValues.map((x) => Math.pow(x - mean, 2)).reduce((a, b) => a + b) /
-          metricValues.length
-      );
-
-      const upperThreshold = mean + STDEV_THRESHOLD * stdDev;
-      const lowerThreshold = mean - STDEV_THRESHOLD * stdDev;
-
-      finalChartData.forEach((point) => {
-        const value = point[metric];
-        if (value > upperThreshold && point !== peak) {
-          spikes.push(point);
-        }
-        if (value < lowerThreshold && point !== lowest) {
-          dips.push(point);
-        }
-      });
-    }
+    finalChartData.forEach((point) => {
+      const value = point[metric];
+      if (value > upperThreshold && point !== peak) spikes.push(point);
+      if (value < lowerThreshold && point !== lowest) dips.push(point);
+    });
 
     return { chartData: finalChartData, peak, lowest, spikes, dips };
-  }, [data, metric, employee, trendView]);
+  }, [data, overallData, metric, employee, trendView]);
 
-  const yAxisConfig = useMemo(() => {
-    const defaultConfig = {
-      domain: [0, 1000],
-      ticks: [0, 500, 1000],
-    };
-
-    if (!peak || !chartData || chartData.length === 0) {
-      return defaultConfig;
-    }
-
-    const dataMax = peak[metric] as number;
-    if (typeof dataMax !== "number" || !isFinite(dataMax)) {
-      return defaultConfig;
-    }
-
-    const step = dataMax < 1000 ? 500 : 1000;
-
-    const yAxisMax = Math.ceil((dataMax + 1000) / step) * step;
-
-    const ticks: number[] = [];
-    for (let i = 0; i <= yAxisMax; i += step) {
-      ticks.push(i);
-    }
-
-    if (ticks.length < 2) {
-      return {
-        domain: [0, step],
-        ticks: [0, step],
-      };
-    }
-
-    return {
-      domain: [0, yAxisMax],
-      ticks: ticks,
-    };
-  }, [peak, metric, chartData]);
+  // Calculate Y-axis ticks and max value
+  const maxDataValue = chartData.length
+    ? Math.max(...chartData.map((d) => Math.max(d[metric], d.overallAvg || 0)))
+    : 0;
+  const yAxisMax = Math.ceil(maxDataValue / 1000) * 1000;
+  const yAxisTicks = Array.from(
+    { length: yAxisMax / 1000 + 1 },
+    (_, i) => i * 1000
+  );
 
   const metricLabel =
     METRIC_OPTIONS.find((m) => m.value === metric)?.label || metric;
@@ -180,11 +177,10 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
   const tooltipFormatter = (value: any, name: string, props: any) => {
     if (typeof value !== "number") return null;
     const { payload } = props;
-    // For single employee, store view, show the store name as the label
     if (employee !== "all" && trendView === "store" && payload.store) {
-      return [value.toFixed(3), payload.store];
+      return [value.toFixed(2), payload.store];
     }
-    return [value.toFixed(3), name];
+    return [value.toFixed(2), name];
   };
 
   const renderAnnotationDot = (point: any, label: string, color: string) => {
@@ -215,24 +211,27 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
   const gridColor = isDarkMode ? "#334155" : "#e2e8f0";
 
   const getLineName = () => {
-    if (employee === "all") {
-      return `Overall Avg. ${metricLabel}`;
-    }
-    if (trendView === "monthly") {
-      return `${metricLabel} (Monthly Avg)`;
-    }
+    if (employee === "all") return `Overall Avg. ${metricLabel}`;
+    if (trendView === "monthly") return `${metricLabel} (Monthly Avg)`;
     return `${metricLabel} (by Store)`;
   };
 
   return (
     <div className="h-full flex flex-col">
       {employee !== "all" && (
-        <div className="flex justify-end mb-4 flex-shrink-0">
+        <div className="flex justify-end mb-4 flex-shrink-0 space-x-4">
+          <ToggleSwitch
+            id="show-overall-avg"
+            checked={showOverallAvg}
+            onChange={(ch) => setShowOverallAvg(ch)}
+            labelLeft="Show Overall Avg"
+            labelRight=""
+          />
           <ToggleSwitch
             id="trend-view-toggle"
             checked={trendView === "store"}
-            onChange={(checked) => setTrendView(checked ? "store" : "monthly")}
-            labelLeft="Monthly Average"
+            onChange={(ch) => setTrendView(ch ? "store" : "monthly")}
+            labelLeft="Monthly Avg"
             labelRight="By Store"
           />
         </div>
@@ -247,14 +246,12 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
             <XAxis dataKey="date" tick={{ fontSize: 12, fill: tickColor }} />
             <YAxis
               tick={{ fontSize: 12, fill: tickColor }}
-              domain={yAxisConfig.domain}
-              ticks={yAxisConfig.ticks}
-              allowDataOverflow={true}
+              domain={[0, yAxisMax]}
+              ticks={yAxisTicks}
             />
             <Tooltip
               formatter={tooltipFormatter}
               labelFormatter={(label, payload) => {
-                // For store view, the X-axis is a full date. Clarify this in the tooltip title.
                 if (
                   payload &&
                   payload.length > 0 &&
@@ -278,6 +275,8 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
               }}
             />
             <Legend wrapperStyle={{ fontSize: "14px", color: tickColor }} />
+
+            {/* main metric line */}
             <Line
               type="monotone"
               dataKey={metric}
@@ -287,6 +286,22 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
               dot={{ r: 4, fill: "#b91c1c" }}
               activeDot={{ r: 8 }}
             />
+
+            {/* dashed overall‑avg line */}
+            {employee !== "all" &&
+              trendView === "monthly" &&
+              showOverallAvg && (
+                <Line
+                  type="monotone"
+                  dataKey="overallAvg"
+                  name="Overall Avg"
+                  stroke="#2563eb"
+                  strokeWidth={2}
+                  dot={false}
+                  strokeDasharray="5 5"
+                />
+              )}
+
             {renderAnnotationDot(peak, "Peak", "#22c55e")}
             {renderAnnotationDot(lowest, "Lowest", "#ef4444")}
             {spikes.map((p, i) => (
