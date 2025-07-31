@@ -24,6 +24,8 @@ interface EmployeeSummary {
   spikes: number;
   dips: number;
   total: number;
+  spikesPercent: number;
+  dipsPercent: number;
 }
 type SummarySortKey = keyof EmployeeSummary;
 
@@ -131,6 +133,15 @@ const AnomalyDetection: React.FC<AnomalyDetectionProps> = ({
     return foundAnomalies;
   }, [data, overallData, metric, account, deviationThreshold, comparisonMode]);
 
+  const employeeRecordCount = useMemo(() => {
+    if (account === "all") return new Map<string, number>();
+    const counts = new Map<string, number>();
+    data.forEach((record) => {
+      counts.set(record.employee, (counts.get(record.employee) || 0) + 1);
+    });
+    return counts;
+  }, [data, account]);
+
   const employeeSummary = useMemo((): EmployeeSummary[] => {
     if (account === "all") return [];
     const summary: { [key: string]: { spikes: number; dips: number } } = {};
@@ -144,13 +155,23 @@ const AnomalyDetection: React.FC<AnomalyDetectionProps> = ({
         summary[anomaly.employee].dips++;
       }
     });
-    return Object.entries(summary).map(([employee, counts]) => ({
-      employee,
-      spikes: counts.spikes,
-      dips: counts.dips,
-      total: counts.spikes + counts.dips,
-    }));
-  }, [anomalies, account]);
+    return Object.entries(summary).map(([employee, counts]) => {
+      const totalRecords = employeeRecordCount.get(employee) || 0;
+      const spikesPercent =
+        totalRecords > 0 ? (counts.spikes / totalRecords) * 100 : 0;
+      const dipsPercent =
+        totalRecords > 0 ? (counts.dips / totalRecords) * 100 : 0;
+
+      return {
+        employee,
+        spikes: counts.spikes,
+        dips: counts.dips,
+        total: counts.spikes + counts.dips,
+        spikesPercent,
+        dipsPercent,
+      };
+    });
+  }, [anomalies, account, employeeRecordCount]);
 
   const sortedAnomalies = useMemo(() => {
     return [...anomalies].sort((a, b) => {
@@ -329,9 +350,19 @@ const AnomalyDetection: React.FC<AnomalyDetectionProps> = ({
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-green-500">
                 {summary.spikes}
+                {summary.spikes > 0 && (
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-normal ml-1">
+                    ({summary.spikesPercent.toFixed(2)}%)
+                  </span>
+                )}
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-red-500">
                 {summary.dips}
+                {summary.dips > 0 && (
+                  <span className="text-xs text-slate-500 dark:text-slate-400 font-normal ml-1">
+                    ({summary.dipsPercent.toFixed(2)}%)
+                  </span>
+                )}
               </td>
               <td className="px-4 py-3 whitespace-nowrap text-sm font-bold text-slate-800 dark:text-slate-200">
                 {summary.total}
