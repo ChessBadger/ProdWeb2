@@ -41,6 +41,7 @@ const allowedUsers = [
   "QIANABATTON@gmail.com",
   "QianaBatton@gmail.com",
   "Qianashawntel@gmail.com",
+  "files@badgerinventory.com",
 ];
 
 const GoogleIcon = () => (
