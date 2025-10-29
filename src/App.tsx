@@ -93,9 +93,6 @@ const LoginScreen = ({ authError }: { authError: string | null }) => {
           <GoogleIcon />
           Sign In with Google
         </button>
-        {authError && (
-          <p className="mt-4 text-center text-red-500 text-sm">{authError}</p>
-        )}
       </div>
     </div>
   );
@@ -598,7 +595,7 @@ const App: React.FC = () => {
         setAuthError(null); // clear only on success
       } else if (firebaseUser) {
         setAuthError("Unauthorized access. Please contact an administrator.");
-        auth.signOut();
+        signOut(auth).catch(() => {}); // <-- correct API
         setUser(null);
       } else {
         setUser(null); // keep existing authError after signOut
