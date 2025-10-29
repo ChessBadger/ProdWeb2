@@ -40,7 +40,6 @@ const allowedUsers = [
   "kgrohall@badgerinventory.com",
   "files@badgerinventory.com",
   "qianabatton@gmail.com",
-  "clarklas831@gmail.com",
 ];
 
 const GoogleIcon = () => (
@@ -83,6 +82,9 @@ const LoginScreen = ({ authError }: { authError: string | null }) => {
           <p className="mt-2 text-slate-500 dark:text-slate-400">
             Please sign in to continue
           </p>
+          {authError && (
+            <p className="mt-2 text-red-500 font-medium">{authError}</p>
+          )}
         </div>
         <button
           onClick={signInWithGoogle}
