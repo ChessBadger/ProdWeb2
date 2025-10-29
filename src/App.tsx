@@ -590,18 +590,18 @@ const App: React.FC = () => {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setAuthError(null);
       if (
         firebaseUser?.email &&
         allowedUsers.includes(firebaseUser.email.toLowerCase())
       ) {
         setUser(firebaseUser);
-      } else {
-        if (firebaseUser) {
-          setAuthError("Unauthorized access. Please contact an administrator.");
-          auth.signOut();
-        }
+        setAuthError(null); // clear only on success
+      } else if (firebaseUser) {
+        setAuthError("Unauthorized access. Please contact an administrator.");
+        auth.signOut();
         setUser(null);
+      } else {
+        setUser(null); // keep existing authError after signOut
       }
       setAuthLoading(false);
     });
