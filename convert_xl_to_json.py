@@ -77,14 +77,14 @@ def main():
         "excel",
         type=Path,
         nargs="?",
-        default=Path(r"C:\Users\Laptop 122\Desktop\Store Prep\06 Employee Reports\Website\EmployeeProductionExport.xlsx"),
+        default=Path(r"C:\Users\Laptop 122\Desktop\Store Prep\05 Employee Reports\Website\EmployeeProductionExport.xlsx"),
         help="Path to input Excel file (default: hard‑coded)"
     )
     parser.add_argument(
         "repo",
         type=Path,
         nargs="?",
-        default=Path(r"C:\Users\Laptop 122\Desktop\Store Prep\06 Employee Reports\Website"),
+        default=Path(r"C:\Users\Laptop 122\Desktop\Store Prep\05 Employee Reports\Website"),
         help="Local Git repo root (default: hard‑coded)"
     )
     parser.add_argument(
