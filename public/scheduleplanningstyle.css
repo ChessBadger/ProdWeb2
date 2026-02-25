@@ -636,6 +636,43 @@ th {
   font-weight: 600;
 }
 
+.wait-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(23, 34, 50, 0.42);
+  backdrop-filter: blur(2px);
+}
+
+.wait-overlay.is-hidden {
+  display: none;
+}
+
+.wait-overlay-card {
+  width: min(640px, 100%);
+  border-radius: 16px;
+  border: 1px solid #d5deea;
+  background: #ffffff;
+  padding: 1.1rem 1.2rem;
+  box-shadow: 0 18px 44px rgba(18, 29, 45, 0.26);
+}
+
+.wait-overlay-card h2 {
+  font-size: 1.15rem;
+  color: #162333;
+}
+
+.wait-overlay-card p {
+  margin-top: 0.55rem;
+  color: #415671;
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
 @media (max-width: 1080px) {
   .layout {
     grid-template-columns: 1fr;

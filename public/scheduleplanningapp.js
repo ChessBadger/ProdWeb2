@@ -245,7 +245,7 @@ const state = {
 
 const STORAGE_KEY = "crew_predictor_v2";
 const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
-const DATA_JSON_PATH = "data/EmployeeProductionExport.json";
+const DATA_JSON_PATH = "EmployeeProductionExport.json";
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
 const DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT = 120;
 
@@ -308,6 +308,8 @@ const dom = {
   compareMeta: document.getElementById("compareMeta"),
   compareResultCard: document.getElementById("compareResultCard"),
   compareResult: document.getElementById("compareResult"),
+  computeWaitOverlay: document.getElementById("computeWaitOverlay"),
+  computeWaitOverlayText: document.getElementById("computeWaitOverlayText"),
 };
 
 initialize();
@@ -320,6 +322,18 @@ function initialize() {
   renderEmployeeList();
   updateResults();
   loadJsonData();
+}
+
+function showComputeWaitOverlay(message) {
+  if (!dom.computeWaitOverlay) return;
+  if (dom.computeWaitOverlayText && message) {
+    dom.computeWaitOverlayText.textContent = message;
+  }
+  dom.computeWaitOverlay.classList.remove("is-hidden");
+}
+
+function hideComputeWaitOverlay() {
+  dom.computeWaitOverlay?.classList.add("is-hidden");
 }
 
 function disableInputAutofill() {
@@ -391,6 +405,7 @@ async function loadJsonData() {
   } catch (error) {
     const message = error?.message || "Unknown error";
     setPredictionMeta(`Data load failed: ${message}`, "warning");
+    hideComputeWaitOverlay();
   }
 }
 
@@ -450,6 +465,7 @@ function loadRows(rawRows, dataFingerprint = "") {
     }
     renderAccuracyReport();
     updateResults();
+    hideComputeWaitOverlay();
     return;
   }
   scheduleDeferredAnalytics();
@@ -1021,10 +1037,14 @@ function createUiYieldController(maxSliceMs = 12) {
 
 async function scheduleDeferredAnalytics() {
   if (state.analyticsReady || state.analyticsScheduled || !state.jobs.length) {
+    hideComputeWaitOverlay();
     renderAccuracyReport();
     return;
   }
   state.analyticsScheduled = true;
+  showComputeWaitOverlay(
+    "Please wait while we compute the initial accuracy snapshot. This first run may take a few minutes.",
+  );
   if (dom.computeAccuracyBtn) {
     dom.computeAccuracyBtn.disabled = true;
     dom.computeAccuracyBtn.textContent = "Computing...";
@@ -1055,6 +1075,7 @@ async function scheduleDeferredAnalytics() {
       "Accuracy details are unavailable right now.";
   } finally {
     state.analyticsScheduled = false;
+    hideComputeWaitOverlay();
   }
 }
 
