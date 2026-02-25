@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Shift Crew Planner</title>
+  <link rel="stylesheet" href="scheduleplanningstyle.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>BADGER</h1>
+      <p class="subtitle">INVENTORY SERVICE, INC.</p>
+      <p class="tagline">"Where Quality Counts"</p>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel inputs">
+      <h2>Plan Setup</h2>
+
+      <section class="setup-step">
+        <div class="step-head">
+          <span class="step-num">1</span>
+          <label class="label" for="storeSearch">Select Store</label>
+        </div>
+        <div class="store-search-row">
+          <input id="storeSearch" type="text" placeholder="Search account or store name" />
+          <button id="clearStoreSearchBtn" type="button" class="btn subtle">Clear</button>
+        </div>
+        <select id="storeSelect" size="8"></select>
+        <div id="storeSelectMeta" class="help muted">Showing 0 stores.</div>
+        <div id="storeStats" class="stats muted">Select a store to view historical context.</div>
+      </section>
+
+      <section class="setup-step">
+        <div class="step-head">
+          <span class="step-num">2</span>
+          <label class="label" for="targetValue">Goal</label>
+        </div>
+        <div>
+          <label class="field-label" for="targetValue">Goal Value</label>
+          <input id="targetValue" type="number" min="0" step="0.25" placeholder="Optional" />
+        </div>
+
+        <label class="field-label" for="planningMode">Goal Type</label>
+        <select id="planningMode">
+          <option value="duration">In-Store Time</option>
+          <option value="manhours">Man-Hours</option>
+        </select>
+      </section>
+
+      <section class="setup-step">
+        <div class="step-head">
+          <span class="step-num">3</span>
+          <label class="label" for="employeeFilter">Choose Crew</label>
+        </div>
+        <p class="help">Select people assigned to this store.</p>
+        <input id="employeeFilter" type="text" placeholder="Search crew member" />
+        <div class="actions">
+          <button id="lastCrewBtn" type="button" class="btn subtle">Use Last Crew</button>
+          <button id="clearEmployeesBtn" type="button" class="btn subtle">Clear</button>
+        </div>
+        <div id="employeeList" class="employee-list"></div>
+      </section>
+
+      <section class="setup-step">
+        <div class="step-head">
+          <span class="step-num">4</span>
+          <label class="label">Assign Roles</label>
+        </div>
+        <p class="help">Supervisor is required and must be one selected crew member. Other roles are optional.</p>
+
+        <div class="role-card">
+          <label class="field-label" for="supervisorEmployee">Supervisor</label>
+          <select id="supervisorEmployee"></select>
+          <select id="supervisorMode">
+            <option value="full">Full Contribution</option>
+            <option value="p70">70% Contribution</option>
+            <option value="p50">50% Contribution</option>
+            <option value="p30">30% Contribution</option>
+            <option value="none">None (0%)</option>
+          </select>
+        </div>
+
+        <div class="role-card">
+          <label class="field-label" for="rxEmployee">RX (optional)</label>
+          <div id="rxEmployee" class="role-checklist"></div>
+          <select id="rxMode">
+            <option value="p70">70% Contribution</option>
+            <option value="p50">50% Contribution</option>
+            <option value="p30">30% Contribution</option>
+          </select>
+        </div>
+
+        <div class="role-card">
+          <label class="field-label" for="trainingEmployee">Training (optional)</label>
+          <div id="trainingEmployee" class="role-checklist"></div>
+          <select id="trainingMode">
+            <option value="p70">70% Contribution</option>
+            <option value="p50">50% Contribution</option>
+            <option value="p30">30% Contribution</option>
+          </select>
+        </div>
+
+        <div class="role-card">
+          <label class="field-label" for="earlyLateEmployee">Leaving Early / Arriving Late (optional)</label>
+          <div id="earlyLateEmployee" class="role-checklist"></div>
+          <select id="earlyLateMode">
+            <option value="p70">70% Contribution</option>
+            <option value="p50">50% Contribution</option>
+            <option value="p30">30% Contribution</option>
+          </select>
+        </div>
+      </section>
+    </aside>
+
+    <section class="panel results">
+      <h2>Plan Preview</h2>
+
+      <div class="cards">
+        <article class="card">
+          <h3>Estimated In-Store Time</h3>
+          <p id="predDuration" class="value">-</p>
+        </article>
+        <article class="card">
+          <h3>Estimated Man-Hours</h3>
+          <p id="predManHours" class="value">-</p>
+        </article>
+        <article class="card">
+          <h3>Likely On-Site Range</h3>
+          <p id="predBand" class="value">-</p>
+        </article>
+        <article class="card">
+          <h3>Difference From Goal</h3>
+          <p id="predDelta" class="value">-</p>
+        </article>
+      </div>
+
+      <div id="predictionMeta" class="meta muted">Load data, choose a store, select your crew, and assign a supervisor.</div>
+
+      <section class="surface">
+        <h3>Selected Store Accuracy</h3>
+        <div id="storeAccuracySummary" class="summary-lines">Choose a store to view its historical prediction error.</div>
+      </section>
+
+      <section class="surface">
+        <h3>Staffing Options</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Employee</th>
+              <th>Predicted Production (pieces/hr)</th>
+            </tr>
+          </thead>
+          <tbody id="scenarioBody"></tbody>
+        </table>
+      </section>
+
+      <section class="surface">
+        <h3>Accuracy Snapshot</h3>
+        <div class="accuracy-controls">
+          <label class="field-label" for="accuracyAccountFilter">Account View</label>
+          <select id="accuracyAccountFilter">
+            <option value="__all__">All Accounts</option>
+          </select>
+        </div>
+        <div id="accuracySummary" class="summary-lines">Load data to view model accuracy.</div>
+        <table>
+          <thead>
+            <tr>
+              <th>Scope</th>
+              <th>MAE (hrs)</th>
+              <th>MAPE</th>
+              <th>Jobs</th>
+            </tr>
+          </thead>
+          <tbody id="accuracyWorstBody"></tbody>
+        </table>
+      </section>
+
+      <section id="compareSection" class="surface compare-surface is-collapsed">
+        <div class="surface-head">
+          <h3>Two-Store Suggested Assignment</h3>
+          <button id="compareToggleBtn" type="button" class="btn subtle">Expand</button>
+        </div>
+        <div id="compareSectionBody">
+        <p class="help">Pick two stores, set goals, choose supervisors, select available crew, then get a suggested split.</p>
+        <div class="input-grid two">
+          <div>
+            <label class="field-label" for="compareStoreA">Store A</label>
+            <input id="compareStoreA" type="text" list="compareStoreOptions" placeholder="Type account or store name" />
+          </div>
+          <div>
+            <label class="field-label" for="compareStoreB">Store B</label>
+            <input id="compareStoreB" type="text" list="compareStoreOptions" placeholder="Type account or store name" />
+          </div>
+        </div>
+        <datalist id="compareStoreOptions"></datalist>
+        <div class="input-grid three">
+          <div>
+            <label class="field-label" for="compareGoalMode">Goal Type</label>
+            <select id="compareGoalMode">
+              <option value="manhours">Man-Hours</option>
+              <option value="duration">In-Store Time</option>
+            </select>
+          </div>
+          <div>
+            <label id="compareGoalALabel" class="field-label" for="compareGoalA">Goal A</label>
+            <input id="compareGoalA" type="number" min="0" step="0.25" placeholder="Required" />
+          </div>
+          <div>
+            <label id="compareGoalBLabel" class="field-label" for="compareGoalB">Goal B</label>
+            <input id="compareGoalB" type="number" min="0" step="0.25" placeholder="Required" />
+          </div>
+        </div>
+        <label class="field-label" for="compareEmployeeFilter">Available Employees</label>
+        <input id="compareEmployeeFilter" type="text" placeholder="Search crew member" />
+        <div id="compareEmployeeList" class="employee-list compact"></div>
+        <div class="input-grid two">
+          <div>
+            <label class="field-label" for="compareSupervisorA">Supervisor A</label>
+            <select id="compareSupervisorA"></select>
+            <label class="field-label" for="compareSupervisorModeA">Supervisor Contribution A</label>
+            <select id="compareSupervisorModeA">
+              <option value="full">Full Contribution</option>
+              <option value="p70">70% Contribution</option>
+              <option value="p50" selected>50% Contribution</option>
+              <option value="p30">30% Contribution</option>
+              <option value="none">None (0%)</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label" for="compareSupervisorB">Supervisor B</label>
+            <select id="compareSupervisorB"></select>
+            <label class="field-label" for="compareSupervisorModeB">Supervisor Contribution B</label>
+            <select id="compareSupervisorModeB">
+              <option value="full">Full Contribution</option>
+              <option value="p70">70% Contribution</option>
+              <option value="p50" selected>50% Contribution</option>
+              <option value="p30">30% Contribution</option>
+              <option value="none">None (0%)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="role-card">
+          <label class="field-label" for="compareRxEmployee">RX Role (shared)</label>
+          <div id="compareRxEmployee" class="role-checklist"></div>
+          <select id="compareRxMode">
+            <option value="p70">70% Contribution</option>
+            <option value="p50" selected>50% Contribution</option>
+            <option value="p30">30% Contribution</option>
+          </select>
+
+          <label class="field-label" for="compareTrainingEmployee">Training Role (shared)</label>
+          <div id="compareTrainingEmployee" class="role-checklist"></div>
+          <select id="compareTrainingMode">
+            <option value="p70" selected>70% Contribution</option>
+            <option value="p50">50% Contribution</option>
+            <option value="p30">30% Contribution</option>
+          </select>
+
+          <label class="field-label" for="compareEarlyLateEmployee">Early/Late Role (shared)</label>
+          <div id="compareEarlyLateEmployee" class="role-checklist"></div>
+          <select id="compareEarlyLateMode">
+            <option value="p70">70% Contribution</option>
+            <option value="p50" selected>50% Contribution</option>
+            <option value="p30">30% Contribution</option>
+          </select>
+        </div>
+        <div id="compareMeta" class="meta muted">Choose two stores to begin.</div>
+        <div class="actions">
+          <button id="compareClearEmployeesBtn" type="button" class="btn subtle">Clear Available Employees</button>
+          <button id="compareSuggestBtn" type="button" class="btn">Suggest Assignment</button>
+        </div>
+        </div>
+      </section>
+      <section id="compareResultCard" class="surface compare-result-surface is-hidden">
+        <h3>Suggested Assignment Result</h3>
+        <div id="compareResult" class="summary-lines"></div>
+      </section>
+
+    </section>
+  </main>
+
+  <script src="scheduleplanningapp.js"></script>
+</body>
+</html>
