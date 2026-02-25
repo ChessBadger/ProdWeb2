@@ -245,7 +245,7 @@ const state = {
 
 const STORAGE_KEY = "crew_predictor_v2";
 const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
-const DATA_JSON_PATH = "EmployeeProductionExport.json";
+const DATA_JSON_PATH = "data/EmployeeProductionExport.json";
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
 const DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT = 120;
 
