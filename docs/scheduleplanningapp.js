@@ -146,6 +146,7 @@ const state = {
     jobs: 0,
     splitDate: "",
   },
+  accuracyCache: null,
   residualShrinkageKs: {
     account: 24,
     segment: 14,
@@ -234,13 +235,19 @@ const state = {
     type: 18,
     store: 10,
   },
+  analyticsReady: false,
+  analyticsScheduled: false,
+  dataFingerprint: "",
   lastDurationResidualByStore: new Map(),
   lastCrewAppliedStoreKey: null,
   isLoaded: false,
 };
 
 const STORAGE_KEY = "crew_predictor_v2";
-const DATA_JSON_RELATIVE_PATH = "data/EmployeeProductionExport.json";
+const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
+const DATA_JSON_PATH = "EmployeeProductionExport.json";
+const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
+const DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT = 120;
 
 const dom = {
   storeSearch: document.getElementById("storeSearch"),
@@ -270,6 +277,7 @@ const dom = {
   scenarioBody: document.getElementById("scenarioBody"),
   storeAccuracySummary: document.getElementById("storeAccuracySummary"),
   accuracyAccountFilter: document.getElementById("accuracyAccountFilter"),
+  computeAccuracyBtn: document.getElementById("computeAccuracyBtn"),
   accuracySummary: document.getElementById("accuracySummary"),
   accuracyWorstBody: document.getElementById("accuracyWorstBody"),
   compareStoreA: document.getElementById("compareStoreA"),
@@ -341,7 +349,8 @@ function bindEvents() {
   dom.employeeFilter.addEventListener("keydown", onEmployeeFilterKeyDown);
   dom.lastCrewBtn.addEventListener("click", selectLastCrew);
   dom.clearEmployeesBtn.addEventListener("click", clearEmployees);
-  dom.accuracyAccountFilter.addEventListener("change", renderAccuracyReport);
+  dom.accuracyAccountFilter.addEventListener("change", onAccuracyFilterChange);
+  dom.computeAccuracyBtn?.addEventListener("click", onComputeAccuracyClick);
   dom.compareStoreA.addEventListener("change", onCompareInputChange);
   dom.compareStoreB.addEventListener("change", onCompareInputChange);
   dom.compareToggleBtn.addEventListener("click", toggleCompareSection);
@@ -369,15 +378,16 @@ function bindEvents() {
 
 async function loadJsonData() {
   try {
-    const dataJsonUrl = new URL(DATA_JSON_RELATIVE_PATH, window.location.href).toString();
-    const response = await fetch(dataJsonUrl, { cache: "no-store" });
+    const response = await fetch(DATA_JSON_PATH, { cache: "force-cache" });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
 
-    const payload = await response.json();
+    const rawJsonText = await response.text();
+    const fingerprint = buildDataFingerprintFromJsonText(rawJsonText);
+    const payload = JSON.parse(rawJsonText);
     const rawRows = extractRowsFromJson(payload);
-    loadRows(rawRows);
+    loadRows(rawRows, fingerprint);
   } catch (error) {
     const message = error?.message || "Unknown error";
     setPredictionMeta(`Data load failed: ${message}`, "warning");
@@ -401,7 +411,7 @@ function extractRowsFromJson(payload) {
   return [];
 }
 
-function loadRows(rawRows) {
+function loadRows(rawRows, dataFingerprint = "") {
   const normalizedRows = rawRows.map(normalizeRow).filter((r) => r.valid);
 
   state.rows = normalizedRows;
@@ -423,12 +433,26 @@ function loadRows(rawRows) {
     const right = `${b.account} ${b.storeName}`.toLowerCase();
     return left.localeCompare(right);
   });
-  calibrateModelParameters();
-  buildResidualStats(state.jobs);
+  state.analyticsReady = false;
+  state.analyticsScheduled = false;
+  state.dataFingerprint = dataFingerprint || "";
+  state.accuracyCache = null;
   state.isLoaded = true;
 
   restoreSelectionsFromStorage();
   refreshLoadedUi();
+  const restored = restoreAnalyticsCache(state.dataFingerprint);
+  if (restored) {
+    state.analyticsReady = true;
+    if (dom.computeAccuracyBtn) {
+      dom.computeAccuracyBtn.disabled = true;
+      dom.computeAccuracyBtn.textContent = "Accuracy Ready (Cached)";
+    }
+    renderAccuracyReport();
+    updateResults();
+    return;
+  }
+  scheduleDeferredAnalytics();
 }
 
 function normalizeRow(row) {
@@ -980,6 +1004,68 @@ function refreshLoadedUi() {
   renderAccuracyReport();
 }
 
+function createUiYieldController(maxSliceMs = 12) {
+  const now = () =>
+    typeof performance !== "undefined" && typeof performance.now === "function"
+      ? performance.now()
+      : Date.now();
+  let last = now();
+  return async function maybeYield(force = false) {
+    const current = now();
+    if (force || current - last >= maxSliceMs) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      last = now();
+    }
+  };
+}
+
+async function scheduleDeferredAnalytics() {
+  if (state.analyticsReady || state.analyticsScheduled || !state.jobs.length) {
+    renderAccuracyReport();
+    return;
+  }
+  state.analyticsScheduled = true;
+  if (dom.computeAccuracyBtn) {
+    dom.computeAccuracyBtn.disabled = true;
+    dom.computeAccuracyBtn.textContent = "Computing...";
+  }
+  dom.accuracySummary.textContent = "Computing accuracy snapshot...";
+  dom.storeAccuracySummary.textContent = "Computing selected store accuracy...";
+  try {
+    await calibrateModelParameters();
+    await buildResidualStats(state.jobs);
+    state.accuracyCache = await buildAccuracyCache(state.jobs);
+    persistAnalyticsCache(state.dataFingerprint);
+    state.analyticsReady = true;
+    if (dom.computeAccuracyBtn) {
+      dom.computeAccuracyBtn.disabled = true;
+      dom.computeAccuracyBtn.textContent = "Accuracy Ready";
+    }
+    renderAccuracyReport();
+    updateResults();
+  } catch (_error) {
+    state.analyticsReady = false;
+    if (dom.computeAccuracyBtn) {
+      dom.computeAccuracyBtn.disabled = false;
+      dom.computeAccuracyBtn.textContent = "Retry Accuracy";
+    }
+    dom.accuracySummary.textContent =
+      "Accuracy processing failed. Predictions remain available.";
+    dom.storeAccuracySummary.textContent =
+      "Accuracy details are unavailable right now.";
+  } finally {
+    state.analyticsScheduled = false;
+  }
+}
+
+function onAccuracyFilterChange() {
+  renderAccuracyReport();
+}
+
+function onComputeAccuracyClick() {
+  scheduleDeferredAnalytics();
+}
+
 function renderAccuracyAccountFilter() {
   const previous = dom.accuracyAccountFilter.value || "__all__";
   const accounts = Array.from(
@@ -1059,6 +1145,7 @@ function onStoreChange() {
   persistToStorage();
   renderEmployeeList();
   updateResults();
+  renderAccuracyReport();
 }
 
 function resetPlanInputsForNewStore() {
@@ -1137,6 +1224,7 @@ function clearAllCardsAndPreview() {
 function toggleCompareSection() {
   const collapsed = dom.compareSection.classList.toggle("is-collapsed");
   dom.compareToggleBtn.textContent = collapsed ? "Expand" : "Collapse";
+  renderComparePlanner();
 }
 
 function onCompareInputChange() {
@@ -1259,11 +1347,30 @@ function renderComparePlanner() {
     "No early/late role",
   );
   updateCompareGoalLabels(cfg.goalMode);
-  renderCompareEmployeeList();
+  const compareCollapsed = dom.compareSection?.classList.contains("is-collapsed");
+  const hasActiveCompareState =
+    cfg.availableEmployees.size > 0 ||
+    cleanText(dom.compareEmployeeFilter?.value || "").length > 0;
+  if (compareCollapsed && !hasActiveCompareState) {
+    dom.compareEmployeeList.innerHTML =
+      '<div class="muted">Expand this section to load available employees.</div>';
+  } else {
+    renderCompareEmployeeList();
+  }
   dom.compareResult.textContent = "";
   setCompareResultVisible(false);
 
   const plannerStatus = getComparePlannerStatus(cfg);
+  if (!state.analyticsReady) {
+    dom.compareSuggestBtn.disabled = true;
+    setCompareMeta(
+      state.analyticsScheduled
+        ? "Model calibration is running. Suggested assignment unlocks when it completes."
+        : "Model calibration is not ready. Click Compute Accuracy to retry.",
+      state.analyticsScheduled ? "info" : "warning",
+    );
+    return;
+  }
   dom.compareSuggestBtn.disabled = !plannerStatus.canSuggest;
   if (plannerStatus.canSuggest) {
     setCompareMeta(
@@ -1440,6 +1547,12 @@ function renderCompareEmployeeList() {
       return name.includes(filter) || id.includes(filter);
     });
 
+  const limited =
+    !filter && employees.length > DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT;
+  const renderEmployees = limited
+    ? employees.slice(0, DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT)
+    : employees;
+
   dom.compareEmployeeList.innerHTML = "";
   if (!employees.length) {
     dom.compareEmployeeList.innerHTML =
@@ -1447,7 +1560,15 @@ function renderCompareEmployeeList() {
     return;
   }
 
-  employees.forEach((emp) => {
+  if (limited) {
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.textContent = `Showing top ${DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT} of ${employees.length} employees. Type in search to narrow.`;
+    dom.compareEmployeeList.appendChild(note);
+  }
+
+  const fragment = document.createDocumentFragment();
+  renderEmployees.forEach((emp) => {
     const employeeId = emp.employee;
     const row = document.createElement("div");
     row.className = "employee-item";
@@ -1482,8 +1603,9 @@ function renderCompareEmployeeList() {
     label.appendChild(checkbox);
     label.appendChild(text);
     row.appendChild(label);
-    dom.compareEmployeeList.appendChild(row);
+    fragment.appendChild(row);
   });
+  dom.compareEmployeeList.appendChild(fragment);
 }
 
 function onCompareEmployeeFilterKeyDown(event) {
@@ -1509,6 +1631,17 @@ function onCompareEmployeeFilterKeyDown(event) {
 }
 
 function suggestTwoStoreAssignment() {
+  if (!state.analyticsReady) {
+    setCompareMeta(
+      state.analyticsScheduled
+        ? "Model calibration is still running. Please wait."
+        : "Model calibration is not ready. Click Compute Accuracy to retry.",
+      "warning",
+    );
+    dom.compareSuggestBtn.disabled = true;
+    return;
+  }
+
   const cfg = state.compareAssignment;
   const plannerStatus = getComparePlannerStatus(cfg);
   if (!plannerStatus.canSuggest) {
@@ -2252,6 +2385,10 @@ function renderEmployeeList() {
     });
 
   state.visibleEmployees = employees.map((e) => e.employee);
+  const limited = !filter && employees.length > DEFAULT_EMPLOYEE_RENDER_LIMIT;
+  const renderEmployees = limited
+    ? employees.slice(0, DEFAULT_EMPLOYEE_RENDER_LIMIT)
+    : employees;
 
   dom.employeeList.innerHTML = "";
   if (employees.length === 0) {
@@ -2259,7 +2396,15 @@ function renderEmployeeList() {
     return;
   }
 
-  employees.forEach((emp) => {
+  if (limited) {
+    const note = document.createElement("div");
+    note.className = "muted";
+    note.textContent = `Showing top ${DEFAULT_EMPLOYEE_RENDER_LIMIT} of ${employees.length} employees. Type in search to narrow.`;
+    dom.employeeList.appendChild(note);
+  }
+
+  const fragment = document.createDocumentFragment();
+  renderEmployees.forEach((emp) => {
     const row = document.createElement("div");
     row.className = "employee-item";
 
@@ -2286,8 +2431,9 @@ function renderEmployeeList() {
     label.appendChild(checkbox);
     label.appendChild(text);
     row.appendChild(label);
-    dom.employeeList.appendChild(row);
+    fragment.appendChild(row);
   });
+  dom.employeeList.appendChild(fragment);
 }
 
 function onEmployeeFilterKeyDown(event) {
@@ -2366,6 +2512,8 @@ function selectLastCrew() {
 }
 
 function predict() {
+  if (!state.analyticsReady) return null;
+
   const store = state.stores.get(state.selectedStoreKey);
   const roles = getRoleSelectionForStore(state.selectedStoreKey);
   const rxRequired = isRxRoleRequiredForStore(store);
@@ -2737,7 +2885,6 @@ function computePredictionForJob(job, store, options = {}) {
 }
 
 function updateResults() {
-  const prediction = predict();
   const store = state.stores.get(state.selectedStoreKey);
   const roleSelection = getRoleSelectionForStore(state.selectedStoreKey);
   const missingSupervisor =
@@ -2751,6 +2898,23 @@ function updateResults() {
     !normalizeRoleArray(roleSelection.rx).some((id) =>
       state.selectedEmployees.has(id),
     );
+
+  if (!state.analyticsReady) {
+    dom.predDuration.textContent = "-";
+    dom.predManHours.textContent = "-";
+    dom.predBand.textContent = "-";
+    dom.predDelta.textContent = "-";
+    const waitMessage = !state.isLoaded
+      ? "Loading data..."
+      : state.analyticsScheduled
+        ? "Calibrating model and store accuracy. Predictions will appear automatically when complete."
+        : "Model calibration is not ready. Click Compute Accuracy to retry.";
+    setPredictionMeta(waitMessage, state.analyticsScheduled ? "info" : "warning");
+    renderScenarios(null);
+    return;
+  }
+
+  const prediction = predict();
 
   if (!prediction) {
     dom.predDuration.textContent = "-";
@@ -2792,7 +2956,6 @@ function updateResults() {
     "info",
   );
   renderScenarios(prediction);
-  renderAccuracyReport();
 }
 
 function setPredictionMeta(message, tone = "info") {
@@ -2883,38 +3046,41 @@ function renderScenarios(prediction) {
       `<td>${escapeHtml(getEmployeeDisplayName(item.id))}</td>`,
       `<td>${formatNumber(item.speed, 1)}</td>`,
     ].join("");
-    dom.scenarioBody.appendChild(tr);
+  dom.scenarioBody.appendChild(tr);
   });
 }
 
-function renderAccuracyReport() {
-  if (!state.jobs.length) {
-    dom.accuracySummary.textContent = "Load data to view model accuracy.";
-    dom.storeAccuracySummary.textContent =
-      "Choose a store to view its historical prediction error.";
-    dom.accuracyWorstBody.innerHTML = "";
-    return;
-  }
+async function buildAccuracyCache(jobsSubset) {
+  const maybeYield = createUiYieldController(10);
+  const jobs = jobsSubset || [];
+  if (!jobs.length) return null;
 
   const storeAgg = new Map();
   let totalAbs = 0;
   let totalPct = 0;
   let totalWeight = 0;
   let counted = 0;
-  const maxJobTimestamp = state.jobs
+  const maxJobTimestamp = jobs
     .map((job) => Date.parse(job.date || ""))
     .filter((ts) => Number.isFinite(ts))
     .reduce((max, ts) => Math.max(max, ts), 0);
   const referenceTimestamp = maxJobTimestamp > 0 ? maxJobTimestamp : Date.now();
 
-  state.jobs.forEach((job) => {
+  for (let i = 0; i < jobs.length; i += 1) {
+    const job = jobs[i];
     const store = state.stores.get(job.storeKey);
-    if (!store || !(job.duration > 0)) return;
+    if (!store || !(job.duration > 0)) {
+      if (i % 25 === 0) await maybeYield();
+      continue;
+    }
 
     const predicted = computePredictionForJob(job, store, {
       applyResiduals: true,
     });
-    if (!predicted) return;
+    if (!predicted) {
+      if (i % 25 === 0) await maybeYield();
+      continue;
+    }
 
     const durationPred = predicted.onSiteDuration;
     const manPred = predicted.manHours;
@@ -2936,7 +3102,7 @@ function renderAccuracyReport() {
       storeAgg.set(job.storeKey, {
         storeKey: job.storeKey,
         account: job.account,
-        storeName: job.storeName,
+        label: `${job.account} | ${job.storeName}`,
         absErrWeightedSum: 0,
         pctErrWeightedSum: 0,
         actualDurationWeightedSum: 0,
@@ -2945,7 +3111,6 @@ function renderAccuracyReport() {
         predictedManHoursWeightedSum: 0,
         weightSum: 0,
         count: 0,
-        label: `${job.account} | ${job.storeName}`,
       });
     }
     const bucket = storeAgg.get(job.storeKey);
@@ -2957,20 +3122,10 @@ function renderAccuracyReport() {
     bucket.predictedManHoursWeightedSum += manPred * weight;
     bucket.weightSum += weight;
     bucket.count += 1;
-  });
 
-  if (!counted) {
-    dom.accuracySummary.textContent =
-      "Not enough valid history to compute accuracy.";
-    dom.storeAccuracySummary.textContent =
-      "No valid historical jobs found for store accuracy.";
-    dom.accuracyWorstBody.innerHTML = "";
-    return;
+    if (i % 25 === 0) await maybeYield();
   }
 
-  const mae = totalWeight > 0 ? totalAbs / totalWeight : 0;
-  const mape = totalWeight > 0 ? totalPct / totalWeight : 0;
-  const selectedAccount = dom.accuracyAccountFilter.value || "__all__";
   const allRows = Array.from(storeAgg.values()).map((b) => ({
     storeKey: b.storeKey,
     account: b.account,
@@ -2988,6 +3143,55 @@ function renderAccuracyReport() {
     weightSum: b.weightSum,
     count: b.count,
   }));
+
+  return {
+    mae: totalWeight > 0 ? totalAbs / totalWeight : 0,
+    mape: totalWeight > 0 ? totalPct / totalWeight : 0,
+    totalWeight,
+    counted,
+    allRows,
+  };
+}
+
+function renderAccuracyReport() {
+  if (!state.analyticsReady) {
+    if (state.analyticsScheduled) {
+      dom.accuracySummary.textContent =
+        "Computing accuracy snapshot from historical jobs...";
+      dom.storeAccuracySummary.textContent =
+        "Selected store accuracy will appear when processing completes.";
+    } else {
+      dom.accuracySummary.textContent =
+        "Accuracy is not available yet. Click Compute Accuracy to retry.";
+      dom.storeAccuracySummary.textContent =
+        "Store accuracy is not computed yet.";
+    }
+    dom.accuracyWorstBody.innerHTML = "";
+    return;
+  }
+
+  if (!state.jobs.length) {
+    dom.accuracySummary.textContent = "Load data to view model accuracy.";
+    dom.storeAccuracySummary.textContent =
+      "Choose a store to view its historical prediction error.";
+    dom.accuracyWorstBody.innerHTML = "";
+    return;
+  }
+
+  const accuracy = state.accuracyCache;
+  if (!accuracy || !(accuracy.counted > 0)) {
+    dom.accuracySummary.textContent =
+      "Not enough valid history to compute accuracy.";
+    dom.storeAccuracySummary.textContent =
+      "No valid historical jobs found for store accuracy.";
+    dom.accuracyWorstBody.innerHTML = "";
+    return;
+  }
+
+  const mae = safeNumber(accuracy.mae);
+  const mape = safeNumber(accuracy.mape);
+  const selectedAccount = dom.accuracyAccountFilter.value || "__all__";
+  const allRows = accuracy.allRows || [];
 
   const filteredRows =
     selectedAccount === "__all__"
@@ -3021,7 +3225,7 @@ function renderAccuracyReport() {
     state.backtestMetrics.jobs > 0
       ? ` | Holdout MAE: ${formatNumber(state.backtestMetrics.durationMae, 2)} hrs / ${formatNumber(state.backtestMetrics.manHoursMae, 2)} man-hours (${state.backtestMetrics.jobs} jobs since ${state.backtestMetrics.splitDate || "split"})`
       : "";
-  dom.accuracySummary.textContent = `View: ${selectedAccount === "__all__" ? "All Accounts" : selectedAccount} | Average Store MAE: ${formatNumber(filteredMae || mae, 2)} hrs | Average Store MAPE: ${formatNumber(filteredMape || mape, 1)}% | Stores included: ${filteredStoreCount} | Jobs evaluated: ${filteredJobCount || counted}${backtestText}`;
+  dom.accuracySummary.textContent = `View: ${selectedAccount === "__all__" ? "All Accounts" : selectedAccount} | Average Store MAE: ${formatNumber(filteredMae || mae, 2)} hrs | Average Store MAPE: ${formatNumber(filteredMape || mape, 1)}% | Stores included: ${filteredStoreCount} | Jobs evaluated: ${filteredJobCount || safeNumber(accuracy.counted)}${backtestText}`;
 
   const selectedStoreKey = state.selectedStoreKey;
   const selectedStoreRow = allRows.find((r) => r.storeKey === selectedStoreKey);
@@ -3062,8 +3266,9 @@ function renderAccuracyReport() {
   dom.accuracyWorstBody.appendChild(tr);
 }
 
-function calibrateModelParameters() {
+async function calibrateModelParameters() {
   if (!state.jobs.length) return;
+  const maybeYield = createUiYieldController(10);
 
   state.modelTuningByAccount = new Map();
   state.modelTuningByAccountType = new Map();
@@ -3072,10 +3277,11 @@ function calibrateModelParameters() {
   state.baselineTuningByAccountType = new Map();
   state.baselineTuningByAccountSegment = new Map();
 
-  const globalBundle = calibrateParameterBundleForJobs(
+  const globalBundle = await calibrateParameterBundleForJobs(
     state.jobs,
     state.baseModelTuning,
     state.baseBaselineTuning,
+    maybeYield,
   );
   state.modelTuning = globalBundle.modelTuning;
   state.baselineTuning = globalBundle.baselineTuning;
@@ -3083,7 +3289,8 @@ function calibrateModelParameters() {
   const jobsByAccount = new Map();
   const jobsByAccountType = new Map();
   const jobsByAccountSegment = new Map();
-  state.jobs.forEach((job) => {
+  for (let i = 0; i < state.jobs.length; i += 1) {
+    const job = state.jobs[i];
     if (!jobsByAccount.has(job.account)) jobsByAccount.set(job.account, []);
     jobsByAccount.get(job.account).push(job);
 
@@ -3096,68 +3303,78 @@ function calibrateModelParameters() {
       if (!jobsByAccountSegment.has(segmentKey)) jobsByAccountSegment.set(segmentKey, []);
       jobsByAccountSegment.get(segmentKey).push(job);
     }
-  });
+    if (i % 150 === 0) await maybeYield();
+  }
 
-  jobsByAccount.forEach((jobs, account) => {
-    if (jobs.length < 40) return;
-    const tuned = calibrateParameterBundleForJobs(
+  for (const [account, jobs] of jobsByAccount.entries()) {
+    if (jobs.length < 40) continue;
+    const tuned = await calibrateParameterBundleForJobs(
       jobs,
       state.modelTuning,
       state.baselineTuning,
+      maybeYield,
     );
     state.modelTuningByAccount.set(account, tuned.modelTuning);
     state.baselineTuningByAccount.set(account, tuned.baselineTuning);
-  });
+    await maybeYield();
+  }
 
-  jobsByAccountSegment.forEach((jobs, key) => {
-    if (jobs.length < 28) return;
+  for (const [key, jobs] of jobsByAccountSegment.entries()) {
+    if (jobs.length < 28) continue;
     const account = key.split("||")[0];
     const accountModel = state.modelTuningByAccount.get(account) || state.modelTuning;
     const accountBaseline =
       state.baselineTuningByAccount.get(account) || state.baselineTuning;
-    const tuned = calibrateParameterBundleForJobs(
+    const tuned = await calibrateParameterBundleForJobs(
       jobs,
       accountModel,
       accountBaseline,
+      maybeYield,
     );
     state.modelTuningByAccountSegment.set(key, tuned.modelTuning);
     state.baselineTuningByAccountSegment.set(key, tuned.baselineTuning);
-  });
+    await maybeYield();
+  }
 
-  jobsByAccountType.forEach((jobs, key) => {
-    if (jobs.length < 20) return;
+  for (const [key, jobs] of jobsByAccountType.entries()) {
+    if (jobs.length < 20) continue;
     const account = key.split("||")[0];
     const accountModel = state.modelTuningByAccount.get(account) || state.modelTuning;
     const accountBaseline =
       state.baselineTuningByAccount.get(account) || state.baselineTuning;
-    const tuned = calibrateParameterBundleForJobs(
+    const tuned = await calibrateParameterBundleForJobs(
       jobs,
       accountModel,
       accountBaseline,
+      maybeYield,
     );
     state.modelTuningByAccountType.set(key, tuned.modelTuning);
     state.baselineTuningByAccountType.set(key, tuned.baselineTuning);
-  });
+    await maybeYield();
+  }
 }
 
-function calibrateParameterBundleForJobs(
+async function calibrateParameterBundleForJobs(
   jobsSubset,
   seedModelTuning,
   seedBaselineTuning,
+  maybeYield = async () => {},
 ) {
   const split = splitJobsForBacktest(jobsSubset);
   const evalJobs = split.holdout.length >= 8 ? split.holdout : split.train;
-  const modelTuning = calibrateTuningForJobs(
+  const modelTuning = await calibrateTuningForJobs(
     split.train,
     evalJobs,
     seedModelTuning,
     seedBaselineTuning,
+    maybeYield,
   );
-  const baselineTuning = calibrateBaselineForJobs(
+  const baselineTuning = await calibrateBaselineForJobs(
     split.train,
     evalJobs,
     modelTuning,
     seedBaselineTuning,
+    maybeYield,
   );
   return { modelTuning, baselineTuning };
 }
@@ -3174,11 +3391,12 @@ function splitJobsForBacktest(jobsSubset) {
   };
 }
 
-function calibrateTuningForJobs(
+async function calibrateTuningForJobs(
   _trainJobs,
   evalJobs,
   seedTuning,
   baselineTuning,
+  maybeYield = async () => {},
 ) {
   const overheadCandidates = [0.1, 0.2, 0.25, 0.3, 0.4, 0.5];
   const midCandidates = [0.86, 0.9, 0.92, 0.95, 1.0];
@@ -3191,23 +3409,25 @@ function calibrateTuningForJobs(
     effLarge: seedTuning.effLarge,
   };
 
-  overheadCandidates.forEach((overheadScale) => {
-    midCandidates.forEach((effMid) => {
-      largeCandidates.forEach((effLarge) => {
-        if (effLarge > effMid) return;
+  for (const overheadScale of overheadCandidates) {
+    for (const effMid of midCandidates) {
+      for (const effLarge of largeCandidates) {
+        if (effLarge > effMid) continue;
 
         const tuning = { overheadScale, effSmall: 1.0, effMid, effLarge };
-        const score = replayScoreForParameters(
+        const score = await replayScoreForParameters(
           evalJobs,
           tuning,
           baselineTuning,
+          maybeYield,
         );
         if (score < best.score) {
           best = { score, ...tuning };
         }
-      });
-    });
-  });
+        await maybeYield();
+      }
+    }
+  }
 
   return {
     overheadScale: best.overheadScale,
@@ -3217,11 +3437,12 @@ function calibrateTuningForJobs(
   };
 }
 
-function calibrateBaselineForJobs(
+async function calibrateBaselineForJobs(
   _trainJobs,
   evalJobs,
   modelTuning,
   seedBaselineTuning,
+  maybeYield = async () => {},
 ) {
   const storeModes = ["median", "trimmed", "recent"];
   const contextModes = ["median", "trimmed", "recent"];
@@ -3255,26 +3476,28 @@ function calibrateBaselineForJobs(
     ...seedBaselineTuning,
   };
 
-  storeModes.forEach((storeMode) => {
-    contextModes.forEach((contextMode) => {
-      storeKs.forEach((storeShrinkK) => {
-        contextProfiles.forEach((profile) => {
+  for (const storeMode of storeModes) {
+    for (const contextMode of contextModes) {
+      for (const storeShrinkK of storeKs) {
+        for (const profile of contextProfiles) {
           const candidate = {
             storeMode,
             contextMode,
             storeShrinkK,
             ...profile,
           };
-          const score = replayScoreForParameters(
+          const score = await replayScoreForParameters(
             evalJobs,
             modelTuning,
             candidate,
+            maybeYield,
           );
           if (score < best.score) best = { score, ...candidate };
-        });
-      });
-    });
-  });
+          await maybeYield();
+        }
+      }
+    }
+  }
 
   return {
     storeMode: best.storeMode,
@@ -3289,29 +3512,46 @@ function calibrateBaselineForJobs(
   };
 }
 
-function replayScoreForParameters(jobsSubset, modelTuning, baselineTuning) {
+async function replayScoreForParameters(
+  jobsSubset,
+  modelTuning,
+  baselineTuning,
+  maybeYield = async () => {},
+) {
   let durationAbs = 0;
   let manHoursAbs = 0;
   let count = 0;
 
-  (jobsSubset || []).forEach((job) => {
+  const jobs = jobsSubset || [];
+  for (let i = 0; i < jobs.length; i += 1) {
+    const job = jobs[i];
     const store = state.stores.get(job.storeKey);
-    if (!store || !(job.duration > 0)) return;
+    if (!store || !(job.duration > 0)) {
+      if (i % 25 === 0) await maybeYield();
+      continue;
+    }
 
     const predicted = computePredictionForJob(job, store, {
       tuning: modelTuning,
       baselineTuning,
       applyResiduals: false,
     });
-    if (!predicted) return;
+    if (!predicted) {
+      if (i % 25 === 0) await maybeYield();
+      continue;
+    }
 
     const durationErr = Math.abs(predicted.onSiteDuration - safeNumber(job.duration));
     const manErr = Math.abs(predicted.manHours - safeNumber(job.totalManHours));
-    if (!Number.isFinite(durationErr) || !Number.isFinite(manErr)) return;
+    if (!Number.isFinite(durationErr) || !Number.isFinite(manErr)) {
+      if (i % 25 === 0) await maybeYield();
+      continue;
+    }
     durationAbs += clipOutlierError(durationErr, 12);
     manHoursAbs += clipOutlierError(manErr, 60);
     count += 1;
-  });
+    if (i % 25 === 0) await maybeYield();
+  }
 
   if (!(count > 0)) return Number.POSITIVE_INFINITY;
   const durationMae = durationAbs / count;
@@ -3325,7 +3565,8 @@ function clipOutlierError(value, cap) {
   return Math.min(n, Math.max(1, safeNumber(cap)));
 }
 
-function buildResidualStats(jobsSubset) {
+async function buildResidualStats(jobsSubset) {
+  const maybeYield = createUiYieldController(10);
   const byStore = new Map();
   const byAccountSegment = new Map();
   const byAccountType = new Map();
@@ -3354,17 +3595,28 @@ function buildResidualStats(jobsSubset) {
   const manGlobalResiduals = [];
   const latestByStore = new Map();
 
-  (jobsSubset || []).forEach((job) => {
+  const jobs = jobsSubset || [];
+  for (let i = 0; i < jobs.length; i += 1) {
+    const job = jobs[i];
     const store = state.stores.get(job.storeKey);
-    if (!store || !(job.duration > 0)) return;
+    if (!store || !(job.duration > 0)) {
+      if (i % 25 === 0) await maybeYield();
+      continue;
+    }
 
     const predicted = computePredictionForJob(job, store, {
       applyResiduals: false,
     });
-    if (!predicted) return;
+    if (!predicted) {
+      if (i % 25 === 0) await maybeYield();
+      continue;
+    }
 
     const residual = safeNumber(job.duration) - predicted.onSiteDuration;
-    if (!Number.isFinite(residual)) return;
+    if (!Number.isFinite(residual)) {
+      if (i % 25 === 0) await maybeYield();
+      continue;
+    }
     const manResidual = safeNumber(job.totalManHours) - predicted.manHours;
 
     const segmentKey = state.storeSegmentByStoreKey.get(job.storeKey)?.segmentKey;
@@ -3437,7 +3689,8 @@ function buildResidualStats(jobsSubset) {
         manHoursResidual: manResidual,
       });
     }
-  });
+    if (i % 25 === 0) await maybeYield();
+  }
 
   state.residualByStore = summarizeResidualMap(byStore);
   state.residualByAccountSegment = summarizeResidualMap(byAccountSegment);
@@ -3478,11 +3731,12 @@ function buildResidualStats(jobsSubset) {
   state.manHourResidualGlobalCrewBand = summarizeResidualMap(manGlobalCrewBand);
   state.manHourResidualGlobal = summarizeResiduals(manGlobalResiduals);
   state.lastDurationResidualByStore = latestByStore;
-  state.backtestMetrics = computeHoldoutBacktestMetrics(jobsSubset);
-  const inSampleMae = replayScoreForParameters(
+  state.backtestMetrics = await computeHoldoutBacktestMetrics(jobsSubset, maybeYield);
+  const inSampleMae = await replayScoreForParameters(
     jobsSubset,
     state.modelTuning,
     state.baselineTuning,
+    maybeYield,
   );
   const holdoutDurationMae = safeNumber(state.backtestMetrics.durationMae);
   const ratio = holdoutDurationMae > 0 && inSampleMae > 0
@@ -3796,7 +4050,10 @@ function getCrewBand(crewSize) {
   return "C7P";
 }
 
-function computeHoldoutBacktestMetrics(jobsSubset) {
+async function computeHoldoutBacktestMetrics(
+  jobsSubset,
+  maybeYield = async () => {},
+) {
   const split = splitJobsForBacktest(jobsSubset || []);
   const holdout = split.holdout.length >= 8 ? split.holdout : [];
   if (!holdout.length) {
@@ -3806,15 +4063,23 @@ function computeHoldoutBacktestMetrics(jobsSubset) {
   let durationAbs = 0;
   let manAbs = 0;
   let count = 0;
-  holdout.forEach((job) => {
+  for (let i = 0; i < holdout.length; i += 1) {
+    const job = holdout[i];
     const store = state.stores.get(job.storeKey);
-    if (!store || !(job.duration > 0)) return;
+    if (!store || !(job.duration > 0)) {
+      if (i % 25 === 0) await maybeYield();
+      continue;
+    }
     const predicted = computePredictionForJob(job, store, { applyResiduals: true });
-    if (!predicted) return;
+    if (!predicted) {
+      if (i % 25 === 0) await maybeYield();
+      continue;
+    }
     durationAbs += Math.abs(predicted.onSiteDuration - safeNumber(job.duration));
     manAbs += Math.abs(predicted.manHours - safeNumber(job.totalManHours));
     count += 1;
-  });
+    if (i % 25 === 0) await maybeYield();
+  }
 
   return {
     durationMae: count > 0 ? durationAbs / count : 0,
@@ -4011,6 +4276,172 @@ function readStorage() {
     return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}") || {};
   } catch (_error) {
     return {};
+  }
+}
+
+function buildDataFingerprintFromJsonText(text) {
+  const input = String(text || "");
+  let hash = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    hash ^= input.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const unsigned = hash >>> 0;
+  return `${input.length}:${unsigned.toString(16)}`;
+}
+
+function mapToEntries(map) {
+  return map instanceof Map ? Array.from(map.entries()) : [];
+}
+
+function entriesToMap(entries) {
+  return new Map(Array.isArray(entries) ? entries : []);
+}
+
+function buildAnalyticsSnapshot(fingerprint) {
+  return {
+    version: 1,
+    fingerprint: String(fingerprint || ""),
+    createdAt: new Date().toISOString(),
+    modelTuning: state.modelTuning,
+    baselineTuning: state.baselineTuning,
+    modelTuningByAccount: mapToEntries(state.modelTuningByAccount),
+    modelTuningByAccountType: mapToEntries(state.modelTuningByAccountType),
+    modelTuningByAccountSegment: mapToEntries(state.modelTuningByAccountSegment),
+    baselineTuningByAccount: mapToEntries(state.baselineTuningByAccount),
+    baselineTuningByAccountType: mapToEntries(state.baselineTuningByAccountType),
+    baselineTuningByAccountSegment: mapToEntries(state.baselineTuningByAccountSegment),
+    residualByStore: mapToEntries(state.residualByStore),
+    residualByAccountSegment: mapToEntries(state.residualByAccountSegment),
+    residualByAccountType: mapToEntries(state.residualByAccountType),
+    residualByAccountOffice: mapToEntries(state.residualByAccountOffice),
+    residualByAccount: mapToEntries(state.residualByAccount),
+    residualGlobal: state.residualGlobal,
+    residualByStoreCrewBand: mapToEntries(state.residualByStoreCrewBand),
+    residualByStoreSupervisor: mapToEntries(state.residualByStoreSupervisor),
+    residualByAccountSupervisor: mapToEntries(state.residualByAccountSupervisor),
+    residualByAccountSegmentCrewBand: mapToEntries(
+      state.residualByAccountSegmentCrewBand,
+    ),
+    residualByAccountTypeCrewBand: mapToEntries(state.residualByAccountTypeCrewBand),
+    residualByAccountCrewBand: mapToEntries(state.residualByAccountCrewBand),
+    residualGlobalCrewBand: mapToEntries(state.residualGlobalCrewBand),
+    manHourResidualByStore: mapToEntries(state.manHourResidualByStore),
+    manHourResidualByAccountSegment: mapToEntries(state.manHourResidualByAccountSegment),
+    manHourResidualByAccountType: mapToEntries(state.manHourResidualByAccountType),
+    manHourResidualByAccountOffice: mapToEntries(state.manHourResidualByAccountOffice),
+    manHourResidualByAccount: mapToEntries(state.manHourResidualByAccount),
+    manHourResidualGlobal: state.manHourResidualGlobal,
+    manHourResidualByStoreCrewBand: mapToEntries(state.manHourResidualByStoreCrewBand),
+    manHourResidualByStoreSupervisor: mapToEntries(state.manHourResidualByStoreSupervisor),
+    manHourResidualByAccountSupervisor: mapToEntries(
+      state.manHourResidualByAccountSupervisor,
+    ),
+    manHourResidualByAccountSegmentCrewBand: mapToEntries(
+      state.manHourResidualByAccountSegmentCrewBand,
+    ),
+    manHourResidualByAccountTypeCrewBand: mapToEntries(
+      state.manHourResidualByAccountTypeCrewBand,
+    ),
+    manHourResidualByAccountCrewBand: mapToEntries(
+      state.manHourResidualByAccountCrewBand,
+    ),
+    manHourResidualGlobalCrewBand: mapToEntries(state.manHourResidualGlobalCrewBand),
+    lastDurationResidualByStore: mapToEntries(state.lastDurationResidualByStore),
+    uncertaintyScale: state.uncertaintyScale,
+    backtestMetrics: state.backtestMetrics,
+    accuracyCache: state.accuracyCache,
+  };
+}
+
+function applyAnalyticsSnapshot(snapshot) {
+  state.modelTuning = snapshot.modelTuning || state.modelTuning;
+  state.baselineTuning = snapshot.baselineTuning || state.baselineTuning;
+  state.modelTuningByAccount = entriesToMap(snapshot.modelTuningByAccount);
+  state.modelTuningByAccountType = entriesToMap(snapshot.modelTuningByAccountType);
+  state.modelTuningByAccountSegment = entriesToMap(snapshot.modelTuningByAccountSegment);
+  state.baselineTuningByAccount = entriesToMap(snapshot.baselineTuningByAccount);
+  state.baselineTuningByAccountType = entriesToMap(snapshot.baselineTuningByAccountType);
+  state.baselineTuningByAccountSegment = entriesToMap(
+    snapshot.baselineTuningByAccountSegment,
+  );
+  state.residualByStore = entriesToMap(snapshot.residualByStore);
+  state.residualByAccountSegment = entriesToMap(snapshot.residualByAccountSegment);
+  state.residualByAccountType = entriesToMap(snapshot.residualByAccountType);
+  state.residualByAccountOffice = entriesToMap(snapshot.residualByAccountOffice);
+  state.residualByAccount = entriesToMap(snapshot.residualByAccount);
+  state.residualGlobal = snapshot.residualGlobal || state.residualGlobal;
+  state.residualByStoreCrewBand = entriesToMap(snapshot.residualByStoreCrewBand);
+  state.residualByStoreSupervisor = entriesToMap(snapshot.residualByStoreSupervisor);
+  state.residualByAccountSupervisor = entriesToMap(snapshot.residualByAccountSupervisor);
+  state.residualByAccountSegmentCrewBand = entriesToMap(
+    snapshot.residualByAccountSegmentCrewBand,
+  );
+  state.residualByAccountTypeCrewBand = entriesToMap(
+    snapshot.residualByAccountTypeCrewBand,
+  );
+  state.residualByAccountCrewBand = entriesToMap(snapshot.residualByAccountCrewBand);
+  state.residualGlobalCrewBand = entriesToMap(snapshot.residualGlobalCrewBand);
+  state.manHourResidualByStore = entriesToMap(snapshot.manHourResidualByStore);
+  state.manHourResidualByAccountSegment = entriesToMap(
+    snapshot.manHourResidualByAccountSegment,
+  );
+  state.manHourResidualByAccountType = entriesToMap(snapshot.manHourResidualByAccountType);
+  state.manHourResidualByAccountOffice = entriesToMap(
+    snapshot.manHourResidualByAccountOffice,
+  );
+  state.manHourResidualByAccount = entriesToMap(snapshot.manHourResidualByAccount);
+  state.manHourResidualGlobal =
+    snapshot.manHourResidualGlobal || state.manHourResidualGlobal;
+  state.manHourResidualByStoreCrewBand = entriesToMap(
+    snapshot.manHourResidualByStoreCrewBand,
+  );
+  state.manHourResidualByStoreSupervisor = entriesToMap(
+    snapshot.manHourResidualByStoreSupervisor,
+  );
+  state.manHourResidualByAccountSupervisor = entriesToMap(
+    snapshot.manHourResidualByAccountSupervisor,
+  );
+  state.manHourResidualByAccountSegmentCrewBand = entriesToMap(
+    snapshot.manHourResidualByAccountSegmentCrewBand,
+  );
+  state.manHourResidualByAccountTypeCrewBand = entriesToMap(
+    snapshot.manHourResidualByAccountTypeCrewBand,
+  );
+  state.manHourResidualByAccountCrewBand = entriesToMap(
+    snapshot.manHourResidualByAccountCrewBand,
+  );
+  state.manHourResidualGlobalCrewBand = entriesToMap(
+    snapshot.manHourResidualGlobalCrewBand,
+  );
+  state.lastDurationResidualByStore = entriesToMap(snapshot.lastDurationResidualByStore);
+  state.uncertaintyScale = safeNumber(snapshot.uncertaintyScale) || 1;
+  state.backtestMetrics = snapshot.backtestMetrics || state.backtestMetrics;
+  state.accuracyCache = snapshot.accuracyCache || null;
+}
+
+function persistAnalyticsCache(fingerprint) {
+  if (!fingerprint) return;
+  try {
+    const snapshot = buildAnalyticsSnapshot(fingerprint);
+    localStorage.setItem(ANALYTICS_CACHE_KEY, JSON.stringify(snapshot));
+  } catch (_error) {
+    // Ignore quota/cache write errors; compute will still work without persistence.
+  }
+}
+
+function restoreAnalyticsCache(fingerprint) {
+  if (!fingerprint) return false;
+  try {
+    const raw = localStorage.getItem(ANALYTICS_CACHE_KEY);
+    if (!raw) return false;
+    const snapshot = JSON.parse(raw);
+    if (!snapshot || snapshot.version !== 1) return false;
+    if (String(snapshot.fingerprint || "") !== String(fingerprint)) return false;
+    applyAnalyticsSnapshot(snapshot);
+    return true;
+  } catch (_error) {
+    return false;
   }
 }
 
