@@ -240,7 +240,7 @@ const state = {
 };
 
 const STORAGE_KEY = "crew_predictor_v2";
-const DATA_JSON_PATH = "EmployeeProductionExport.json";
+const DATA_JSON_RELATIVE_PATH = "data/EmployeeProductionExport.json";
 
 const dom = {
   storeSearch: document.getElementById("storeSearch"),
@@ -369,7 +369,8 @@ function bindEvents() {
 
 async function loadJsonData() {
   try {
-    const response = await fetch(DATA_JSON_PATH, { cache: "no-store" });
+    const dataJsonUrl = new URL(DATA_JSON_RELATIVE_PATH, window.location.href).toString();
+    const response = await fetch(dataJsonUrl, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`HTTP ${response.status}`);
     }
