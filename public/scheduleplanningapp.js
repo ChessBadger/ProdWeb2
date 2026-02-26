@@ -3030,11 +3030,6 @@ function updateResults() {
     const needsAttention = missingSupervisor || missingRxRole;
     setPredictionMeta(metaMessage, needsAttention ? "warning" : "info");
     renderScenarios(null);
-    dom.storeAccuracySummary.textContent =
-      "Select a store and configure a crew to view store accuracy.";
-    dom.accuracySummary.textContent =
-      "Select a store and configure a crew to view the accuracy snapshot.";
-    dom.accuracyWorstBody.innerHTML = "";
     return;
   }
 
