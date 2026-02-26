@@ -73,6 +73,12 @@ p {
   margin-left: 0.25rem;
 }
 
+.topbar-auth {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .status {
   padding: 0.55rem 0.85rem;
   border: 1px solid var(--line);
@@ -671,6 +677,69 @@ th {
   color: #415671;
   line-height: 1.5;
   font-size: 0.95rem;
+}
+
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(23, 34, 50, 0.45);
+  backdrop-filter: blur(2px);
+}
+
+.auth-overlay.is-hidden,
+.app-hidden,
+.is-hidden {
+  display: none;
+}
+
+.auth-card {
+  width: min(460px, 100%);
+  border-radius: 18px;
+  border: 1px solid #d5deea;
+  background: #ffffff;
+  padding: 1.5rem;
+  box-shadow: 0 22px 54px rgba(18, 29, 45, 0.25);
+  text-align: center;
+}
+
+.auth-brand {
+  font-size: 2rem;
+  letter-spacing: 0.07em;
+  color: #d61f26;
+  font-weight: 800;
+}
+
+.auth-company {
+  margin-top: 0.2rem;
+  color: #2b3e58;
+  font-weight: 600;
+}
+
+.auth-card h2 {
+  margin-top: 1rem;
+  color: #1a2a3f;
+  font-size: 1.45rem;
+}
+
+.auth-subtitle {
+  margin-top: 0.45rem;
+  color: #5f718a;
+}
+
+.auth-error {
+  margin-top: 0.6rem;
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.auth-signin-btn {
+  margin-top: 1rem;
+  width: 100%;
 }
 
 @media (max-width: 1080px) {

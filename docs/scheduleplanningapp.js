@@ -249,8 +249,35 @@ const DATA_JSON_PATH = "data/EmployeeProductionExport.json";
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
 const DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT = 120;
 const MAX_GREEDY_RX_SEED_CANDIDATES = 12;
+const ALLOWED_USERS = [
+  "jswanson@badgerinventory.com",
+  "hkraemer@badgerinventory.com",
+  "jfalck@badgerinventory.com",
+  "spalmer@badgerinventory.com",
+  "nbrock@badgerinventory.com",
+  "lclark@badgerinventory.com",
+  "kgrohall@badgerinventory.com",
+  "files@badgerinventory.com",
+  "qianabatton@gmail.com",
+];
+const firebaseConfig = {
+  apiKey: "AIzaSyCYuvMZVE9aTX_95nuZrUiv_pFHbZG_5pY",
+  authDomain: "employee-dashboard-aab04.firebaseapp.com",
+  projectId: "employee-dashboard-aab04",
+  storageBucket: "employee-dashboard-aab04.appspot.com",
+  messagingSenderId: "511125736771",
+  appId: "1:511125736771:web:cdb9a3dcadcdd23240b3f6",
+};
+
+let auth = null;
+let googleProvider = null;
+let appInitialized = false;
 
 const dom = {
+  appHeader: document.querySelector("header.topbar"),
+  appLayout: document.querySelector("main.layout"),
+  authStatus: document.getElementById("topbarAuthStatus"),
+  signOutBtn: document.getElementById("topbarSignOutBtn"),
   storeSearch: document.getElementById("storeSearch"),
   clearStoreSearchBtn: document.getElementById("clearStoreSearchBtn"),
   storeSelect: document.getElementById("storeSelect"),
@@ -313,7 +340,113 @@ const dom = {
   computeWaitOverlayText: document.getElementById("computeWaitOverlayText"),
 };
 
-initialize();
+bootstrapAuth();
+
+function bootstrapAuth() {
+  if (typeof firebase === "undefined") {
+    console.error("Firebase SDK was not loaded.");
+    showAuthOverlay("Authentication is unavailable right now. Please refresh.");
+    return;
+  }
+
+  if (!firebase.apps.length) {
+    firebase.initializeApp(firebaseConfig);
+  }
+
+  auth = firebase.auth();
+  googleProvider = new firebase.auth.GoogleAuthProvider();
+
+  dom.signOutBtn?.addEventListener("click", () => {
+    auth?.signOut().catch(() => {});
+  });
+
+  auth.onAuthStateChanged((user) => {
+    if (user?.email && ALLOWED_USERS.includes(user.email.toLowerCase())) {
+      hideAuthOverlay();
+      setAuthStatus(user.email);
+      if (!appInitialized) {
+        initialize();
+        appInitialized = true;
+      }
+      return;
+    }
+
+    setAuthStatus(null);
+
+    if (user) {
+      showAuthOverlay("Unauthorized access. Please contact an administrator.");
+      auth.signOut().catch(() => {});
+      return;
+    }
+
+    showAuthOverlay();
+  });
+}
+
+function ensureAuthOverlay() {
+  let overlay = document.getElementById("authOverlay");
+  if (overlay) return overlay;
+
+  overlay = document.createElement("div");
+  overlay.id = "authOverlay";
+  overlay.className = "auth-overlay";
+  overlay.innerHTML = `
+    <div class="auth-card">
+      <h1 class="auth-brand">BADGER</h1>
+      <p class="auth-company">INVENTORY SERVICE, INC.</p>
+      <h2>Shift Crew Planner</h2>
+      <p class="auth-subtitle">Please sign in to continue</p>
+      <p id="authErrorText" class="auth-error is-hidden"></p>
+      <button id="authSignInBtn" type="button" class="btn auth-signin-btn">Sign In with Google</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+
+  const signInBtn = document.getElementById("authSignInBtn");
+  signInBtn?.addEventListener("click", () => {
+    if (!auth || !googleProvider) return;
+    auth.signInWithPopup(googleProvider).catch((error) => {
+      const authErrorText = document.getElementById("authErrorText");
+      if (authErrorText) {
+        authErrorText.textContent = `Sign-in failed: ${error.message}`;
+        authErrorText.classList.remove("is-hidden");
+      }
+    });
+  });
+
+  return overlay;
+}
+
+function showAuthOverlay(errorMessage = "") {
+  ensureAuthOverlay().classList.remove("is-hidden");
+  dom.appHeader?.classList.add("app-hidden");
+  dom.appLayout?.classList.add("app-hidden");
+  dom.computeWaitOverlay?.classList.add("is-hidden");
+  const authErrorText = document.getElementById("authErrorText");
+  if (!authErrorText) return;
+  if (errorMessage) {
+    authErrorText.textContent = errorMessage;
+    authErrorText.classList.remove("is-hidden");
+    return;
+  }
+  authErrorText.textContent = "";
+  authErrorText.classList.add("is-hidden");
+}
+
+function hideAuthOverlay() {
+  ensureAuthOverlay().classList.add("is-hidden");
+  dom.appHeader?.classList.remove("app-hidden");
+  dom.appLayout?.classList.remove("app-hidden");
+}
+
+function setAuthStatus(email) {
+  if (dom.authStatus) {
+    dom.authStatus.textContent = email ? email : "Signed out";
+  }
+  if (dom.signOutBtn) {
+    dom.signOutBtn.classList.toggle("is-hidden", !email);
+  }
+}
 
 function initialize() {
   disableInputAutofill();

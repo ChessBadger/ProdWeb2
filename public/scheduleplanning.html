@@ -13,6 +13,10 @@
       <p class="subtitle">INVENTORY SERVICE, INC.</p>
       <p class="tagline">"Where Quality Counts"</p>
     </div>
+    <div class="topbar-auth">
+      <p id="topbarAuthStatus" class="status">Signed out</p>
+      <button id="topbarSignOutBtn" type="button" class="btn subtle is-hidden">Sign Out</button>
+    </div>
   </header>
 
   <main class="layout">
@@ -292,6 +296,8 @@
       <p id="computeWaitOverlayText">Please wait while we compute the initial accuracy snapshot. This first run may take a few minutes.</p>
     </div>
   </div>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
   <script src="scheduleplanningapp.js"></script>
 </body>
 </html>
