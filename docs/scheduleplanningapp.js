@@ -248,6 +248,7 @@ const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
 const DATA_JSON_PATH = "data/EmployeeProductionExport.json";
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
 const DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT = 120;
+const MAX_GREEDY_RX_SEED_CANDIDATES = 12;
 
 const dom = {
   storeSearch: document.getElementById("storeSearch"),
@@ -1754,9 +1755,80 @@ function solveTwoStoreByBruteForce(config) {
 }
 
 function solveTwoStoreGreedy(config) {
-  const { free, baseA, baseB } = config;
+  const seedPlans = buildGreedySeedPlans(config);
+  let best = null;
+  seedPlans.forEach((seed) => {
+    const candidate = runGreedySeed(config, seed);
+    if (!candidate) return;
+    if (
+      !best ||
+      candidate.score < best.score ||
+      (candidate.score === best.score && candidate.maxErr < best.maxErr)
+    ) {
+      best = candidate;
+    }
+  });
+  return best;
+}
+
+function buildGreedySeedPlans(config) {
+  const free = Array.isArray(config.free) ? config.free : [];
+  const baseA = new Set(config.baseA || []);
+  const baseB = new Set(config.baseB || []);
+  const rxPool = new Set(config.sharedRoles?.rx || []);
+  const accountA = config.storeA?.account || "";
+  const accountB = config.storeB?.account || accountA;
+  const needsA =
+    isRxRoleRequiredForStore(config.storeA) && !Array.from(baseA).some((id) => rxPool.has(id));
+  const needsB =
+    isRxRoleRequiredForStore(config.storeB) && !Array.from(baseB).some((id) => rxPool.has(id));
+  const rxFree = free.filter((id) => rxPool.has(id));
+  const rankedRxFree = [...rxFree]
+    .sort(
+      (a, b) =>
+        displayEmployeeSpeed(state.employees.get(b), accountA) +
+        displayEmployeeSpeed(state.employees.get(b), accountB) -
+        (displayEmployeeSpeed(state.employees.get(a), accountA) +
+          displayEmployeeSpeed(state.employees.get(a), accountB)),
+    )
+    .slice(0, MAX_GREEDY_RX_SEED_CANDIDATES);
+
+  if (!needsA && !needsB) return [{ assignA: [], assignB: [] }];
+  if (needsA && !needsB) {
+    return rankedRxFree.map((id) => ({ assignA: [id], assignB: [] }));
+  }
+  if (!needsA && needsB) {
+    return rankedRxFree.map((id) => ({ assignA: [], assignB: [id] }));
+  }
+
+  const plans = [];
+  for (let i = 0; i < rankedRxFree.length; i += 1) {
+    for (let j = 0; j < rankedRxFree.length; j += 1) {
+      if (i === j) continue;
+      plans.push({ assignA: [rankedRxFree[i]], assignB: [rankedRxFree[j]] });
+    }
+  }
+  return plans;
+}
+
+function runGreedySeed(config, seed) {
+  const { baseA, baseB } = config;
   const crewA = [...baseA];
   const crewB = [...baseB];
+  const freeSet = new Set(config.free || []);
+
+  (seed.assignA || []).forEach((id) => {
+    if (!freeSet.has(id)) return;
+    crewA.push(id);
+    freeSet.delete(id);
+  });
+  (seed.assignB || []).forEach((id) => {
+    if (!freeSet.has(id)) return;
+    crewB.push(id);
+    freeSet.delete(id);
+  });
+
+  const free = (config.free || []).filter((id) => freeSet.has(id));
   free.forEach((id) => {
     const scoredA = scoreTwoStoreAssignment(config, [...crewA, id], crewB);
     const scoredB = scoreTwoStoreAssignment(config, crewA, [...crewB, id]);
@@ -1764,8 +1836,10 @@ function solveTwoStoreGreedy(config) {
     if (!scoredB || (scoredA && scoredA.score <= scoredB.score)) crewA.push(id);
     else crewB.push(id);
   });
+
   let best = scoreTwoStoreAssignment(config, crewA, crewB);
   if (!best) return null;
+
   let improved = true;
   let guard = 0;
   while (improved && guard < 4) {
