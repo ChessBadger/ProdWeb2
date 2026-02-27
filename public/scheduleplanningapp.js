@@ -45,6 +45,9 @@ const state = {
       training: "",
       earlyLate: "",
     },
+    linkedPairsInput: "",
+    lockedStoreAInput: "",
+    lockedStoreBInput: "",
     sharedRoles: { rx: [], training: [], earlyLate: [] },
     roleModes: {
       supervisorA: "p50",
@@ -248,6 +251,7 @@ const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
 const DATA_JSON_PATH = "data/EmployeeProductionExport.json";
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
 const DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT = 120;
+const BRUTE_FORCE_COMPARE_UNIT_LIMIT = 15;
 const MAX_GREEDY_RX_SEED_CANDIDATES = 12;
 const ALLOWED_USERS = [
   "jswanson@badgerinventory.com",
@@ -328,6 +332,9 @@ const dom = {
   compareSuggestBtn: document.getElementById("compareSuggestBtn"),
   compareEmployeeFilter: document.getElementById("compareEmployeeFilter"),
   compareBulkStatus: document.getElementById("compareBulkStatus"),
+  compareLinkedPairs: document.getElementById("compareLinkedPairs"),
+  compareLockedStoreA: document.getElementById("compareLockedStoreA"),
+  compareLockedStoreB: document.getElementById("compareLockedStoreB"),
   compareEmployeeList: document.getElementById("compareEmployeeList"),
   compareRxEmployee: document.getElementById("compareRxEmployee"),
   compareRxMode: document.getElementById("compareRxMode"),
@@ -472,6 +479,10 @@ function hideComputeWaitOverlay() {
   dom.computeWaitOverlay?.classList.add("is-hidden");
 }
 
+function nextTick() {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -501,6 +512,20 @@ function getEmployeeNameParts(employeeId) {
   const first = (parts[0] || "").toLowerCase();
   const last = (parts[parts.length - 1] || "").toLowerCase();
   return { first, last };
+}
+
+function compareEmployeesByDisplayName(leftEmployeeId, rightEmployeeId) {
+  const leftName = cleanText(getEmployeeDisplayName(leftEmployeeId));
+  const rightName = cleanText(getEmployeeDisplayName(rightEmployeeId));
+  const byName = leftName.localeCompare(rightName, undefined, {
+    sensitivity: "base",
+    numeric: true,
+  });
+  if (byName !== 0) return byName;
+  return cleanText(leftEmployeeId).localeCompare(cleanText(rightEmployeeId), undefined, {
+    sensitivity: "base",
+    numeric: true,
+  });
 }
 
 function summarizeBulkEntryList(items, limit = 4) {
@@ -610,6 +635,204 @@ function formatBulkSelectionMessage(result, label = "employees") {
   return fragments.join(" ");
 }
 
+function splitLinkedGroupLine(rawLine) {
+  return String(rawLine || "")
+    .split(/\s*(?:\+|&|\/|\||\band\b)\s*/i)
+    .map((token) => cleanText(token))
+    .filter(Boolean);
+}
+
+function resolveCompareConstraints(cfg, candidateIds) {
+  const pool = Array.from(candidateIds || []).filter(Boolean);
+  const lockAResult = resolveBulkEmployeeSelection(cfg.lockedStoreAInput || "", pool);
+  const lockBResult = resolveBulkEmployeeSelection(cfg.lockedStoreBInput || "", pool);
+  const lockASet = new Set(lockAResult.matchedIds || []);
+  const lockBSet = new Set(lockBResult.matchedIds || []);
+  const linkedPairGroups = [];
+  const linkedIssues = [];
+  const rawLines = String(cfg.linkedPairsInput || "")
+    .split(/\r?\n/)
+    .map((line) => cleanText(line))
+    .filter(Boolean);
+
+  rawLines.forEach((line, lineIndex) => {
+    const entries = splitLinkedGroupLine(line);
+    if (entries.length < 2) return;
+    const resolvedIds = [];
+    const unresolved = [];
+    const ambiguous = [];
+    entries.forEach((entry) => {
+      const resolved = resolveBulkEmployeeSelection(entry, pool);
+      if (resolved.matchedIds.length === 1) {
+        resolvedIds.push(resolved.matchedIds[0]);
+        return;
+      }
+      if (resolved.ambiguousEntries.length > 0) ambiguous.push(entry);
+      else unresolved.push(entry);
+    });
+    if (ambiguous.length || unresolved.length) {
+      const parts = [];
+      if (ambiguous.length) {
+        parts.push(`ambiguous: ${ambiguous.join(", ")}`);
+      }
+      if (unresolved.length) {
+        parts.push(`no match: ${unresolved.join(", ")}`);
+      }
+      linkedIssues.push(`line ${lineIndex + 1} (${parts.join("; ")})`);
+      return;
+    }
+    const uniqueResolved = Array.from(new Set(resolvedIds));
+    if (uniqueResolved.length >= 2) linkedPairGroups.push(uniqueResolved);
+  });
+
+  const lockedBoth = Array.from(lockASet).filter((id) => lockBSet.has(id));
+  const issues = [];
+  if (lockAResult.ambiguousEntries.length) {
+    issues.push(
+      `Store A locks ambiguous: ${summarizeBulkEntryList(lockAResult.ambiguousEntries)}.`,
+    );
+  }
+  if (lockAResult.unmatchedEntries.length) {
+    issues.push(
+      `Store A locks not found: ${summarizeBulkEntryList(lockAResult.unmatchedEntries)}.`,
+    );
+  }
+  if (lockBResult.ambiguousEntries.length) {
+    issues.push(
+      `Store B locks ambiguous: ${summarizeBulkEntryList(lockBResult.ambiguousEntries)}.`,
+    );
+  }
+  if (lockBResult.unmatchedEntries.length) {
+    issues.push(
+      `Store B locks not found: ${summarizeBulkEntryList(lockBResult.unmatchedEntries)}.`,
+    );
+  }
+  if (linkedIssues.length) {
+    issues.push(`Linked groups unresolved: ${summarizeBulkEntryList(linkedIssues)}.`);
+  }
+  if (lockedBoth.length) {
+    issues.push(
+      `Employees locked to both stores: ${summarizeBulkEntryList(
+        lockedBoth.map((id) => getEmployeeDisplayName(id)),
+      )}.`,
+    );
+  }
+
+  return {
+    issues,
+    constraints: {
+      linkedGroups: linkedPairGroups,
+      lockedStoreA: Array.from(lockASet),
+      lockedStoreB: Array.from(lockBSet),
+    },
+  };
+}
+
+function buildEmployeeLinkedUnits(allIds, baseA, baseB, constraints) {
+  const members = Array.from(new Set(allIds || [])).filter(Boolean);
+  const parent = new Map();
+  members.forEach((id) => parent.set(id, id));
+
+  const find = (id) => {
+    let root = parent.get(id);
+    while (root && root !== parent.get(root)) {
+      root = parent.get(root);
+    }
+    let node = id;
+    while (node && parent.get(node) !== root) {
+      const next = parent.get(node);
+      parent.set(node, root);
+      node = next;
+    }
+    return root || id;
+  };
+
+  const union = (a, b) => {
+    if (!parent.has(a) || !parent.has(b)) return;
+    const rootA = find(a);
+    const rootB = find(b);
+    if (rootA !== rootB) parent.set(rootB, rootA);
+  };
+
+  (constraints?.linkedGroups || []).forEach((group) => {
+    const ids = (group || []).filter((id) => parent.has(id));
+    for (let i = 1; i < ids.length; i += 1) {
+      union(ids[0], ids[i]);
+    }
+  });
+
+  const groupsByRoot = new Map();
+  members.forEach((id) => {
+    const root = find(id);
+    if (!groupsByRoot.has(root)) groupsByRoot.set(root, []);
+    groupsByRoot.get(root).push(id);
+  });
+
+  const baseASet = new Set(baseA || []);
+  const baseBSet = new Set(baseB || []);
+  const lockASet = new Set(constraints?.lockedStoreA || []);
+  const lockBSet = new Set(constraints?.lockedStoreB || []);
+  const forcedA = new Set(baseASet);
+  const forcedB = new Set(baseBSet);
+  const freeUnits = [];
+
+  for (const groupMembers of groupsByRoot.values()) {
+    const hasBaseA = groupMembers.some((id) => baseASet.has(id));
+    const hasBaseB = groupMembers.some((id) => baseBSet.has(id));
+    const hasLockA = groupMembers.some((id) => lockASet.has(id));
+    const hasLockB = groupMembers.some((id) => lockBSet.has(id));
+    if ((hasBaseA || hasLockA) && (hasBaseB || hasLockB)) {
+      return {
+        error: `Conflicting linked/locked constraints for: ${groupMembers
+          .map((id) => getEmployeeDisplayName(id))
+          .join(", ")}.`,
+      };
+    }
+    const targetStore = hasBaseA || hasLockA ? "A" : hasBaseB || hasLockB ? "B" : "";
+    const movableMembers = groupMembers.filter(
+      (id) => !baseASet.has(id) && !baseBSet.has(id),
+    );
+    if (!movableMembers.length) continue;
+    if (targetStore === "A") {
+      movableMembers.forEach((id) => forcedA.add(id));
+      continue;
+    }
+    if (targetStore === "B") {
+      movableMembers.forEach((id) => forcedB.add(id));
+      continue;
+    }
+    freeUnits.push(movableMembers);
+  }
+
+  const overlap = Array.from(forcedA).filter((id) => forcedB.has(id));
+  if (overlap.length) {
+    return {
+      error: `Conflicting assignment constraints for: ${overlap
+        .map((id) => getEmployeeDisplayName(id))
+        .join(", ")}.`,
+    };
+  }
+
+  return {
+    baseA: Array.from(forcedA),
+    baseB: Array.from(forcedB),
+    freeUnits,
+  };
+}
+
+function constraintsSatisfiedForAssignment(constraints, crewA, crewB) {
+  const setA = new Set(crewA || []);
+  const setB = new Set(crewB || []);
+  if ((constraints?.lockedStoreA || []).some((id) => !setA.has(id))) return false;
+  if ((constraints?.lockedStoreB || []).some((id) => !setB.has(id))) return false;
+  for (const group of constraints?.linkedGroups || []) {
+    const inA = group.some((id) => setA.has(id));
+    const inB = group.some((id) => setB.has(id));
+    if (inA && inB) return false;
+  }
+  return true;
+}
+
 function setEmployeeBulkStatus(message, tone = "info") {
   if (!dom.employeeBulkStatus) return;
   dom.employeeBulkStatus.classList.remove("meta-warning", "meta-success");
@@ -682,6 +905,9 @@ function bindEvents() {
     onCompareEmployeeFilterKeyDown,
   );
   dom.compareEmployeeFilter.addEventListener("paste", onCompareEmployeeFilterPaste);
+  dom.compareLinkedPairs.addEventListener("input", onCompareInputChange);
+  dom.compareLockedStoreA.addEventListener("input", onCompareInputChange);
+  dom.compareLockedStoreB.addEventListener("input", onCompareInputChange);
   dom.compareRxEmployee.addEventListener("change", onCompareInputChange);
   dom.compareTrainingEmployee.addEventListener("change", onCompareInputChange);
   dom.compareEarlyLateEmployee.addEventListener("change", onCompareInputChange);
@@ -1586,6 +1812,15 @@ function onCompareInputChange() {
   state.compareAssignment.sharedRoles.earlyLate = getRoleChecklistValues(
     dom.compareEarlyLateEmployee,
   );
+  state.compareAssignment.linkedPairsInput = String(
+    dom.compareLinkedPairs.value || "",
+  );
+  state.compareAssignment.lockedStoreAInput = String(
+    dom.compareLockedStoreA.value || "",
+  );
+  state.compareAssignment.lockedStoreBInput = String(
+    dom.compareLockedStoreB.value || "",
+  );
   renderComparePlanner();
 }
 
@@ -1606,6 +1841,9 @@ function renderComparePlanner() {
   dom.compareStoreB.value = cfg.storeB
     ? getStoreDisplayLabel(state.stores.get(cfg.storeB))
     : cfg.storeBInput || "";
+  dom.compareLinkedPairs.value = cfg.linkedPairsInput || "";
+  dom.compareLockedStoreA.value = cfg.lockedStoreAInput || "";
+  dom.compareLockedStoreB.value = cfg.lockedStoreBInput || "";
 
   const available = getCompareAvailableEmployeeIds(cfg.storeA, cfg.storeB);
   const availableSet = new Set(available);
@@ -1728,6 +1966,8 @@ function getComparePlannerStatus(cfg) {
   const selected = Array.from(cfg.availableEmployees || []);
   const selectedSet = new Set(selected);
   const selectedCount = selected.length;
+  const constraintInfo = resolveCompareConstraints(cfg, selected);
+  const constraintsValid = constraintInfo.issues.length === 0;
   const supA = cleanText(cfg.supervisorA);
   const supB = cleanText(cfg.supervisorB);
   const supervisorsSelected = Boolean(supA && supB);
@@ -1750,7 +1990,8 @@ function getComparePlannerStatus(cfg) {
     selectedCount > 0 &&
     supervisorsDifferent &&
     supervisorsInPool &&
-    rxAssignmentsEnough;
+    rxAssignmentsEnough &&
+    constraintsValid;
 
   let metaMessage = "Choose two stores to begin.";
   let metaTone = "info";
@@ -1780,6 +2021,9 @@ function getComparePlannerStatus(cfg) {
         ? "Both stores require RX. Assign at least two employees to shared RX role."
         : "At least one RX role assignment is required.";
     metaTone = "warning";
+  } else if (!constraintsValid) {
+    metaMessage = constraintInfo.issues.join(" ");
+    metaTone = "warning";
   }
 
   return {
@@ -1806,6 +2050,8 @@ function getComparePlannerStatus(cfg) {
     storeBLabel: getStoreDisplayLabel(storeB),
     supA,
     supB,
+    constraints: constraintInfo.constraints,
+    constraintsValid,
     metaMessage,
     metaTone,
   };
@@ -1862,10 +2108,7 @@ function renderCompareEmployeeList() {
   const employees = available
     .map((id) => state.employees.get(id))
     .filter(Boolean)
-    .sort(
-      (a, b) =>
-        displayEmployeeSpeed(b, speedAccount) - displayEmployeeSpeed(a, speedAccount),
-    )
+    .sort((a, b) => compareEmployeesByDisplayName(a.employee, b.employee))
     .filter((emp) => {
       const name = getEmployeeDisplayName(emp.employee);
       return matchesEmployeeQuery(emp.employee, filter, name);
@@ -1994,7 +2237,7 @@ function onCompareEmployeeFilterPaste(event) {
   );
 }
 
-function suggestTwoStoreAssignment() {
+async function suggestTwoStoreAssignment() {
   if (!state.analyticsReady) {
     setCompareMeta(
       state.analyticsScheduled
@@ -2022,39 +2265,60 @@ function suggestTwoStoreAssignment() {
   const supA = plannerStatus.supA;
   const supB = plannerStatus.supB;
   const sharedRoles = plannerStatus.sharedRoles;
-  const fixedA = new Set([supA]);
-  const fixedB = new Set([supB]);
-  const free = selected.filter((id) => id !== supA && id !== supB);
-  const result =
-    free.length <= 18
-      ? solveTwoStoreByBruteForce({
-        storeA,
-        storeB,
-        baseA: Array.from(fixedA),
-        baseB: Array.from(fixedB),
-        supervisorA: supA,
-        supervisorB: supB,
-        sharedRoles,
-        roleModes: cfg.roleModes,
-        free,
-        goalMode,
-        goalA,
-        goalB,
-      })
-      : solveTwoStoreGreedy({
-        storeA,
-        storeB,
-        baseA: Array.from(fixedA),
-        baseB: Array.from(fixedB),
-        supervisorA: supA,
-        supervisorB: supB,
-        sharedRoles,
-        roleModes: cfg.roleModes,
-        free,
-        goalMode,
-        goalA,
-        goalB,
-      });
+  const fixedA = [supA];
+  const fixedB = [supB];
+  const unitBuild = buildEmployeeLinkedUnits(
+    selected,
+    fixedA,
+    fixedB,
+    plannerStatus.constraints,
+  );
+  if (unitBuild.error) {
+    setCompareMeta(unitBuild.error, "warning");
+    setCompareResultVisible(false);
+    return;
+  }
+  const solveConfig = {
+    storeA,
+    storeB,
+    baseA: unitBuild.baseA,
+    baseB: unitBuild.baseB,
+    supervisorA: supA,
+    supervisorB: supB,
+    sharedRoles,
+    roleModes: cfg.roleModes,
+    freeUnits: unitBuild.freeUnits,
+    goalMode,
+    goalA,
+    goalB,
+    constraints: plannerStatus.constraints,
+  };
+  let result = null;
+  dom.compareSuggestBtn.disabled = true;
+  showComputeWaitOverlay("Building suggested assignment...");
+  await nextTick();
+  try {
+    const useBruteForce =
+      solveConfig.freeUnits.length <= BRUTE_FORCE_COMPARE_UNIT_LIMIT;
+    if (useBruteForce) {
+      result = await solveTwoStoreByBruteForceAsync(
+        solveConfig,
+        (done, total) => {
+          const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+          showComputeWaitOverlay(
+            `Building suggested assignment... ${pct}% (${done.toLocaleString()} of ${total.toLocaleString()} combinations)`,
+          );
+        },
+      );
+    } else {
+      showComputeWaitOverlay("Building suggested assignment (optimized mode)...");
+      await nextTick();
+      result = solveTwoStoreGreedy(solveConfig);
+    }
+  } finally {
+    hideComputeWaitOverlay();
+    renderComparePlanner();
+  }
 
   if (!result) {
     setCompareMeta(
@@ -2070,30 +2334,6 @@ function suggestTwoStoreAssignment() {
   );
   renderCompareResult(result, goalMode, goalA, goalB);
   setCompareResultVisible(true);
-}
-
-function solveTwoStoreByBruteForce(config) {
-  const { free, baseA, baseB } = config;
-  let best = null;
-  const total = 1 << free.length;
-  for (let mask = 0; mask < total; mask += 1) {
-    const crewA = [...baseA];
-    const crewB = [...baseB];
-    for (let i = 0; i < free.length; i += 1) {
-      if (mask & (1 << i)) crewA.push(free[i]);
-      else crewB.push(free[i]);
-    }
-    const scored = scoreTwoStoreAssignment(config, crewA, crewB);
-    if (!scored) continue;
-    if (
-      !best ||
-      scored.score < best.score ||
-      (scored.score === best.score && scored.maxErr < best.maxErr)
-    ) {
-      best = scored;
-    }
-  }
-  return best;
 }
 
 function solveTwoStoreGreedy(config) {
@@ -2113,8 +2353,38 @@ function solveTwoStoreGreedy(config) {
   return best;
 }
 
+async function solveTwoStoreByBruteForceAsync(config, onProgress) {
+  const { freeUnits, baseA, baseB } = config;
+  let best = null;
+  const total = 1 << freeUnits.length;
+  const batchSize = 1024;
+  for (let batchStart = 0; batchStart < total; batchStart += batchSize) {
+    const batchEnd = Math.min(total, batchStart + batchSize);
+    for (let mask = batchStart; mask < batchEnd; mask += 1) {
+      const crewA = [...baseA];
+      const crewB = [...baseB];
+      for (let i = 0; i < freeUnits.length; i += 1) {
+        if (mask & (1 << i)) crewA.push(...freeUnits[i]);
+        else crewB.push(...freeUnits[i]);
+      }
+      const scored = scoreTwoStoreAssignment(config, crewA, crewB);
+      if (!scored) continue;
+      if (
+        !best ||
+        scored.score < best.score ||
+        (scored.score === best.score && scored.maxErr < best.maxErr)
+      ) {
+        best = scored;
+      }
+    }
+    if (typeof onProgress === "function") onProgress(batchEnd, total);
+    await nextTick();
+  }
+  return best;
+}
+
 function buildGreedySeedPlans(config) {
-  const free = Array.isArray(config.free) ? config.free : [];
+  const freeUnits = Array.isArray(config.freeUnits) ? config.freeUnits : [];
   const baseA = new Set(config.baseA || []);
   const baseB = new Set(config.baseB || []);
   const rxPool = new Set(config.sharedRoles?.rx || []);
@@ -2124,30 +2394,39 @@ function buildGreedySeedPlans(config) {
     isRxRoleRequiredForStore(config.storeA) && !Array.from(baseA).some((id) => rxPool.has(id));
   const needsB =
     isRxRoleRequiredForStore(config.storeB) && !Array.from(baseB).some((id) => rxPool.has(id));
-  const rxFree = free.filter((id) => rxPool.has(id));
-  const rankedRxFree = [...rxFree]
-    .sort(
-      (a, b) =>
-        displayEmployeeSpeed(state.employees.get(b), accountA) +
-        displayEmployeeSpeed(state.employees.get(b), accountB) -
-        (displayEmployeeSpeed(state.employees.get(a), accountA) +
-          displayEmployeeSpeed(state.employees.get(a), accountB)),
-    )
+  const rxFreeUnits = freeUnits
+    .map((members, index) => ({ index, members }))
+    .filter((unit) => unit.members.some((id) => rxPool.has(id)));
+  const rankedRxFree = [...rxFreeUnits]
+    .sort((a, b) => {
+      const score = (unit) =>
+        unit.members.reduce(
+          (sum, id) =>
+            sum +
+            displayEmployeeSpeed(state.employees.get(id), accountA) +
+            displayEmployeeSpeed(state.employees.get(id), accountB),
+          0,
+        );
+      return score(b) - score(a);
+    })
     .slice(0, MAX_GREEDY_RX_SEED_CANDIDATES);
 
   if (!needsA && !needsB) return [{ assignA: [], assignB: [] }];
   if (needsA && !needsB) {
-    return rankedRxFree.map((id) => ({ assignA: [id], assignB: [] }));
+    return rankedRxFree.map((unit) => ({ assignA: [unit.index], assignB: [] }));
   }
   if (!needsA && needsB) {
-    return rankedRxFree.map((id) => ({ assignA: [], assignB: [id] }));
+    return rankedRxFree.map((unit) => ({ assignA: [], assignB: [unit.index] }));
   }
 
   const plans = [];
   for (let i = 0; i < rankedRxFree.length; i += 1) {
     for (let j = 0; j < rankedRxFree.length; j += 1) {
       if (i === j) continue;
-      plans.push({ assignA: [rankedRxFree[i]], assignB: [rankedRxFree[j]] });
+      plans.push({
+        assignA: [rankedRxFree[i].index],
+        assignB: [rankedRxFree[j].index],
+      });
     }
   }
   return plans;
@@ -2157,58 +2436,54 @@ function runGreedySeed(config, seed) {
   const { baseA, baseB } = config;
   const crewA = [...baseA];
   const crewB = [...baseB];
-  const freeSet = new Set(config.free || []);
+  const freeUnits = Array.isArray(config.freeUnits) ? config.freeUnits : [];
+  const freeSet = new Set(freeUnits.map((_members, index) => index));
 
-  (seed.assignA || []).forEach((id) => {
-    if (!freeSet.has(id)) return;
-    crewA.push(id);
-    freeSet.delete(id);
+  (seed.assignA || []).forEach((unitIndex) => {
+    if (!freeSet.has(unitIndex)) return;
+    crewA.push(...(freeUnits[unitIndex] || []));
+    freeSet.delete(unitIndex);
   });
-  (seed.assignB || []).forEach((id) => {
-    if (!freeSet.has(id)) return;
-    crewB.push(id);
-    freeSet.delete(id);
+  (seed.assignB || []).forEach((unitIndex) => {
+    if (!freeSet.has(unitIndex)) return;
+    crewB.push(...(freeUnits[unitIndex] || []));
+    freeSet.delete(unitIndex);
   });
 
-  const free = (config.free || []).filter((id) => freeSet.has(id));
-  free.forEach((id) => {
-    const scoredA = scoreTwoStoreAssignment(config, [...crewA, id], crewB);
-    const scoredB = scoreTwoStoreAssignment(config, crewA, [...crewB, id]);
+  const free = freeUnits
+    .map((members, index) => ({ index, members }))
+    .filter((unit) => freeSet.has(unit.index));
+  free.forEach((unit) => {
+    const scoredA = scoreTwoStoreAssignment(
+      config,
+      [...crewA, ...unit.members],
+      crewB,
+      { skipConstraintChecks: true },
+    );
+    const scoredB = scoreTwoStoreAssignment(
+      config,
+      crewA,
+      [...crewB, ...unit.members],
+      { skipConstraintChecks: true },
+    );
     if (!scoredA && !scoredB) return;
-    if (!scoredB || (scoredA && scoredA.score <= scoredB.score)) crewA.push(id);
-    else crewB.push(id);
+    if (!scoredB || (scoredA && scoredA.score <= scoredB.score))
+      crewA.push(...unit.members);
+    else crewB.push(...unit.members);
   });
 
   let best = scoreTwoStoreAssignment(config, crewA, crewB);
   if (!best) return null;
-
-  let improved = true;
-  let guard = 0;
-  while (improved && guard < 4) {
-    improved = false;
-    guard += 1;
-    for (let i = 0; i < crewA.length; i += 1) {
-      for (let j = 0; j < crewB.length; j += 1) {
-        if (baseA.includes(crewA[i]) || baseB.includes(crewB[j])) continue;
-        const nextA = [...crewA];
-        const nextB = [...crewB];
-        const temp = nextA[i];
-        nextA[i] = nextB[j];
-        nextB[j] = temp;
-        const candidate = scoreTwoStoreAssignment(config, nextA, nextB);
-        if (candidate && candidate.score < best.score) {
-          crewA.splice(0, crewA.length, ...nextA);
-          crewB.splice(0, crewB.length, ...nextB);
-          best = candidate;
-          improved = true;
-        }
-      }
-    }
-  }
   return best;
 }
 
-function scoreTwoStoreAssignment(config, crewA, crewB) {
+function scoreTwoStoreAssignment(config, crewA, crewB, options = {}) {
+  if (
+    !options.skipConstraintChecks &&
+    !constraintsSatisfiedForAssignment(config.constraints, crewA, crewB)
+  ) {
+    return null;
+  }
   const setA = new Set(crewA);
   const setB = new Set(crewB);
   const rolesA = {
@@ -2810,11 +3085,7 @@ function renderEmployeeList() {
   const filter = (dom.employeeFilter.value || "").trim().toLowerCase();
   const selectedAccount = getSelectedAccount();
   const employees = Array.from(state.employees.values())
-    .sort(
-      (a, b) =>
-        displayEmployeeSpeed(b, selectedAccount) -
-        displayEmployeeSpeed(a, selectedAccount),
-    )
+    .sort((a, b) => compareEmployeesByDisplayName(a.employee, b.employee))
     .filter((e) => {
       const name = getEmployeeDisplayName(e.employee);
       return matchesEmployeeQuery(e.employee, filter, name);
