@@ -1701,6 +1701,7 @@ function resetPlanInputsForNewStore() {
   state.selectedEmployees.clear();
   state.visibleEmployees = [];
   dom.employeeFilter.value = "";
+  setEmployeeBulkStatus("");
 
   state.planningMode = "duration";
   state.targetValue = 0;
