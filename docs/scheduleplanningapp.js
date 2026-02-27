@@ -294,6 +294,7 @@ const dom = {
   earlyLateEmployee: document.getElementById("earlyLateEmployee"),
   earlyLateMode: document.getElementById("earlyLateMode"),
   employeeFilter: document.getElementById("employeeFilter"),
+  employeeBulkStatus: document.getElementById("employeeBulkStatus"),
   employeeList: document.getElementById("employeeList"),
   lastCrewBtn: document.getElementById("lastCrewBtn"),
   clearEmployeesBtn: document.getElementById("clearEmployeesBtn"),
@@ -326,6 +327,7 @@ const dom = {
   compareClearEmployeesBtn: document.getElementById("compareClearEmployeesBtn"),
   compareSuggestBtn: document.getElementById("compareSuggestBtn"),
   compareEmployeeFilter: document.getElementById("compareEmployeeFilter"),
+  compareBulkStatus: document.getElementById("compareBulkStatus"),
   compareEmployeeList: document.getElementById("compareEmployeeList"),
   compareRxEmployee: document.getElementById("compareRxEmployee"),
   compareRxMode: document.getElementById("compareRxMode"),
@@ -470,6 +472,170 @@ function hideComputeWaitOverlay() {
   dom.computeWaitOverlay?.classList.add("is-hidden");
 }
 
+function escapeRegExp(value) {
+  return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function matchesEmployeeQuery(employeeId, query, displayName) {
+  const normalizedQuery = cleanText(query).toLowerCase();
+  if (!normalizedQuery) return true;
+  const normalizedName = cleanText(displayName).toLowerCase();
+  const normalizedId = cleanText(employeeId).toLowerCase();
+  if (normalizedId.includes(normalizedQuery)) return true;
+  const boundaryMatcher = new RegExp(
+    `(^|[^a-z0-9])${escapeRegExp(normalizedQuery)}`,
+  );
+  return boundaryMatcher.test(normalizedName);
+}
+
+function splitBulkEmployeeEntries(rawText) {
+  return String(rawText || "")
+    .split(/[\r\n,;]+/)
+    .map((part) => cleanText(part))
+    .filter(Boolean);
+}
+
+function getEmployeeNameParts(employeeId) {
+  const displayName = cleanText(getEmployeeDisplayName(employeeId));
+  const parts = displayName.split(/\s+/).filter(Boolean);
+  const first = (parts[0] || "").toLowerCase();
+  const last = (parts[parts.length - 1] || "").toLowerCase();
+  return { first, last };
+}
+
+function summarizeBulkEntryList(items, limit = 4) {
+  const entries = Array.from(items || []).filter(Boolean);
+  if (!entries.length) return "";
+  if (entries.length <= limit) return entries.join(", ");
+  return `${entries.slice(0, limit).join(", ")} +${entries.length - limit} more`;
+}
+
+function resolveBulkEmployeeSelection(rawText, candidateIds) {
+  const entries = splitBulkEmployeeEntries(rawText);
+  const pool = Array.from(candidateIds || [])
+    .map((id) => cleanText(id))
+    .filter(Boolean);
+  const matchedIds = new Set();
+  const ambiguousEntries = [];
+  const unmatchedEntries = [];
+
+  entries.forEach((entry) => {
+    const normalizedEntry = cleanText(entry);
+    const normalizedLower = normalizedEntry.toLowerCase();
+    if (!normalizedLower) return;
+
+    const exactIdMatch = pool.find(
+      (id) => id.toLowerCase() === normalizedLower,
+    );
+    if (exactIdMatch) {
+      matchedIds.add(exactIdMatch);
+      return;
+    }
+
+    const queryMatches = pool.filter((id) =>
+      matchesEmployeeQuery(id, normalizedLower, getEmployeeDisplayName(id)),
+    );
+    if (queryMatches.length === 1) {
+      matchedIds.add(queryMatches[0]);
+      return;
+    }
+
+    const tokens = normalizedLower.split(/\s+/).filter(Boolean);
+    const firstNameToken = tokens[0] || "";
+    const lastToken = (tokens[1] || "").replace(/[^a-z]/g, "");
+    if (!firstNameToken) return;
+
+    const firstNameCandidates = pool.filter((id) => {
+      const parts = getEmployeeNameParts(id);
+      return parts.first === firstNameToken;
+    });
+
+    if (!firstNameCandidates.length) {
+      unmatchedEntries.push(entry);
+      return;
+    }
+
+    if (firstNameCandidates.length === 1) {
+      const single = firstNameCandidates[0];
+      if (lastToken) {
+        const parts = getEmployeeNameParts(single);
+        if (!parts.last.startsWith(lastToken)) {
+          unmatchedEntries.push(entry);
+          return;
+        }
+      }
+      matchedIds.add(single);
+      return;
+    }
+
+    if (!lastToken) {
+      ambiguousEntries.push(entry);
+      return;
+    }
+
+    const narrowed = firstNameCandidates.filter((id) => {
+      const parts = getEmployeeNameParts(id);
+      return parts.last.startsWith(lastToken);
+    });
+
+    if (narrowed.length === 1) {
+      matchedIds.add(narrowed[0]);
+      return;
+    }
+
+    if (!narrowed.length) unmatchedEntries.push(entry);
+    else ambiguousEntries.push(entry);
+  });
+
+  return {
+    entries,
+    matchedIds: Array.from(matchedIds),
+    ambiguousEntries,
+    unmatchedEntries,
+  };
+}
+
+function formatBulkSelectionMessage(result, label = "employees") {
+  const total = result.entries.length;
+  const added = result.matchedIds.length;
+  const fragments = [`Processed ${total} ${label}; added ${added}.`];
+  if (result.ambiguousEntries.length) {
+    fragments.push(
+      `Ambiguous: ${summarizeBulkEntryList(result.ambiguousEntries)} (add last initial).`,
+    );
+  }
+  if (result.unmatchedEntries.length) {
+    fragments.push(`No match: ${summarizeBulkEntryList(result.unmatchedEntries)}.`);
+  }
+  return fragments.join(" ");
+}
+
+function setEmployeeBulkStatus(message, tone = "info") {
+  if (!dom.employeeBulkStatus) return;
+  dom.employeeBulkStatus.classList.remove("meta-warning", "meta-success");
+  if (!message) {
+    dom.employeeBulkStatus.textContent = "";
+    return;
+  }
+  if (tone === "warning") dom.employeeBulkStatus.classList.add("meta-warning");
+  else if (tone === "success")
+    dom.employeeBulkStatus.classList.add("meta-success");
+  dom.employeeBulkStatus.textContent = message;
+}
+
+function setCompareBulkStatus(message, tone = "info") {
+  if (!dom.compareBulkStatus) return;
+  dom.compareBulkStatus.classList.remove("meta-warning", "meta-success");
+  if (!message) {
+    dom.compareBulkStatus.textContent = "";
+    return;
+  }
+  if (tone === "warning") dom.compareBulkStatus.classList.add("meta-warning");
+  else if (tone === "success")
+    dom.compareBulkStatus.classList.add("meta-success");
+  dom.compareBulkStatus.textContent = message;
+}
+
 function disableInputAutofill() {
   document.querySelectorAll("input").forEach((input) => {
     input.setAttribute("autocomplete", "off");
@@ -495,6 +661,7 @@ function bindEvents() {
   dom.earlyLateEmployee.addEventListener("change", onRoleConfigChange);
   dom.employeeFilter.addEventListener("input", renderEmployeeList);
   dom.employeeFilter.addEventListener("keydown", onEmployeeFilterKeyDown);
+  dom.employeeFilter.addEventListener("paste", onEmployeeFilterPaste);
   dom.lastCrewBtn.addEventListener("click", selectLastCrew);
   dom.clearEmployeesBtn.addEventListener("click", clearEmployees);
   dom.accuracyAccountFilter.addEventListener("change", onAccuracyFilterChange);
@@ -514,6 +681,7 @@ function bindEvents() {
     "keydown",
     onCompareEmployeeFilterKeyDown,
   );
+  dom.compareEmployeeFilter.addEventListener("paste", onCompareEmployeeFilterPaste);
   dom.compareRxEmployee.addEventListener("change", onCompareInputChange);
   dom.compareTrainingEmployee.addEventListener("change", onCompareInputChange);
   dom.compareEarlyLateEmployee.addEventListener("change", onCompareInputChange);
@@ -1383,6 +1551,7 @@ function toggleCompareSection() {
 }
 
 function onCompareInputChange() {
+  setCompareBulkStatus("");
   state.compareAssignment.storeAInput = cleanText(dom.compareStoreA.value || "");
   state.compareAssignment.storeBInput = cleanText(dom.compareStoreB.value || "");
   state.compareAssignment.storeA = resolveStoreKeyFromInput(
@@ -1679,6 +1848,7 @@ function clearCompareEmployees() {
   if (dom.compareEmployeeFilter) {
     dom.compareEmployeeFilter.value = "";
   }
+  setCompareBulkStatus("");
   renderComparePlanner();
 }
 
@@ -1697,9 +1867,8 @@ function renderCompareEmployeeList() {
         displayEmployeeSpeed(b, speedAccount) - displayEmployeeSpeed(a, speedAccount),
     )
     .filter((emp) => {
-      const name = getEmployeeDisplayName(emp.employee).toLowerCase();
-      const id = emp.employee.toLowerCase();
-      return name.includes(filter) || id.includes(filter);
+      const name = getEmployeeDisplayName(emp.employee);
+      return matchesEmployeeQuery(emp.employee, filter, name);
     });
 
   const limited =
@@ -1768,11 +1937,29 @@ function onCompareEmployeeFilterKeyDown(event) {
   event.preventDefault();
   const query = (dom.compareEmployeeFilter.value || "").trim().toLowerCase();
   if (!query) return;
+  const bulk = resolveBulkEmployeeSelection(
+    query,
+    getCompareAvailableEmployeeIds(
+      state.compareAssignment.storeA,
+      state.compareAssignment.storeB,
+    ),
+  );
+  if (bulk.entries.length > 1) {
+    bulk.matchedIds.forEach((id) => state.compareAssignment.availableEmployees.add(id));
+    dom.compareEmployeeFilter.value = "";
+    renderComparePlanner();
+    setCompareBulkStatus(
+      formatBulkSelectionMessage(bulk, "names"),
+      bulk.ambiguousEntries.length || bulk.unmatchedEntries.length
+        ? "warning"
+        : "success",
+    );
+    return;
+  }
   const cfg = state.compareAssignment;
   const available = getCompareAvailableEmployeeIds(cfg.storeA, cfg.storeB);
   const matches = available.filter((id) => {
-    const name = getEmployeeDisplayName(id).toLowerCase();
-    return name.includes(query) || id.toLowerCase().includes(query);
+    return matchesEmployeeQuery(id, query, getEmployeeDisplayName(id));
   });
   const exact = matches.find((id) => {
     const name = getEmployeeDisplayName(id).toLowerCase();
@@ -1783,6 +1970,28 @@ function onCompareEmployeeFilterKeyDown(event) {
   cfg.availableEmployees.add(chosen);
   dom.compareEmployeeFilter.value = "";
   renderComparePlanner();
+}
+
+function onCompareEmployeeFilterPaste(event) {
+  const rawText = event?.clipboardData?.getData("text") || "";
+  const bulk = resolveBulkEmployeeSelection(
+    rawText,
+    getCompareAvailableEmployeeIds(
+      state.compareAssignment.storeA,
+      state.compareAssignment.storeB,
+    ),
+  );
+  if (bulk.entries.length <= 1) return;
+  event.preventDefault();
+  bulk.matchedIds.forEach((id) => state.compareAssignment.availableEmployees.add(id));
+  dom.compareEmployeeFilter.value = "";
+  renderComparePlanner();
+  setCompareBulkStatus(
+    formatBulkSelectionMessage(bulk, "names"),
+    bulk.ambiguousEntries.length || bulk.unmatchedEntries.length
+      ? "warning"
+      : "success",
+  );
 }
 
 function suggestTwoStoreAssignment() {
@@ -2607,9 +2816,8 @@ function renderEmployeeList() {
         displayEmployeeSpeed(a, selectedAccount),
     )
     .filter((e) => {
-      const name = getEmployeeDisplayName(e.employee).toLowerCase();
-      const id = e.employee.toLowerCase();
-      return name.includes(filter) || id.includes(filter);
+      const name = getEmployeeDisplayName(e.employee);
+      return matchesEmployeeQuery(e.employee, filter, name);
     });
 
   state.visibleEmployees = employees.map((e) => e.employee);
@@ -2667,9 +2875,31 @@ function renderEmployeeList() {
 function onEmployeeFilterKeyDown(event) {
   if (event.key !== "Enter") return;
   event.preventDefault();
+  setEmployeeBulkStatus("");
 
   const query = (dom.employeeFilter.value || "").trim().toLowerCase();
-  if (!query || state.visibleEmployees.length === 0) return;
+  if (!query) return;
+  const bulk = resolveBulkEmployeeSelection(
+    query,
+    Array.from(state.employees.keys()),
+  );
+  if (bulk.entries.length > 1) {
+    bulk.matchedIds.forEach((id) => state.selectedEmployees.add(id));
+    syncRoleAssignmentsToSelectedCrew();
+    renderRoleSelectors();
+    persistToStorage();
+    dom.employeeFilter.value = "";
+    renderEmployeeList();
+    updateResults();
+    setEmployeeBulkStatus(
+      formatBulkSelectionMessage(bulk, "names"),
+      bulk.ambiguousEntries.length || bulk.unmatchedEntries.length
+        ? "warning"
+        : "success",
+    );
+    return;
+  }
+  if (state.visibleEmployees.length === 0) return;
 
   const exactMatch = state.visibleEmployees.find((id) => {
     const name = getEmployeeDisplayName(id).toLowerCase();
@@ -2689,6 +2919,26 @@ function onEmployeeFilterKeyDown(event) {
   renderEmployeeList();
 }
 
+function onEmployeeFilterPaste(event) {
+  const rawText = event?.clipboardData?.getData("text") || "";
+  const bulk = resolveBulkEmployeeSelection(rawText, Array.from(state.employees.keys()));
+  if (bulk.entries.length <= 1) return;
+  event.preventDefault();
+  bulk.matchedIds.forEach((id) => state.selectedEmployees.add(id));
+  syncRoleAssignmentsToSelectedCrew();
+  renderRoleSelectors();
+  persistToStorage();
+  dom.employeeFilter.value = "";
+  renderEmployeeList();
+  updateResults();
+  setEmployeeBulkStatus(
+    formatBulkSelectionMessage(bulk, "names"),
+    bulk.ambiguousEntries.length || bulk.unmatchedEntries.length
+      ? "warning"
+      : "success",
+  );
+}
+
 function onPlanningInputChange() {
   state.planningMode =
     dom.planningMode.value === "manhours" ? "manhours" : "duration";
@@ -2702,6 +2952,7 @@ function clearEmployees() {
   syncRoleAssignmentsToSelectedCrew();
   renderRoleSelectors();
   persistToStorage();
+  setEmployeeBulkStatus("");
   renderEmployeeList();
   updateResults();
 }
