@@ -192,109 +192,124 @@
           <button id="compareToggleBtn" type="button" class="btn subtle">Expand</button>
         </div>
         <div id="compareSectionBody">
-        <p class="help">Pick two stores, set goals, choose supervisors, select available crew, then get a suggested split.</p>
-        <div class="input-grid two">
-          <div>
-            <label class="field-label" for="compareStoreA">Store A</label>
-            <input id="compareStoreA" type="text" list="compareStoreOptions" placeholder="Type account or store name" />
-          </div>
-          <div>
-            <label class="field-label" for="compareStoreB">Store B</label>
-            <input id="compareStoreB" type="text" list="compareStoreOptions" placeholder="Type account or store name" />
-          </div>
-        </div>
-        <datalist id="compareStoreOptions"></datalist>
-        <div class="input-grid three">
-          <div>
-            <label class="field-label" for="compareGoalMode">Goal Type</label>
-            <select id="compareGoalMode">
-              <option value="manhours">Man-Hours</option>
-              <option value="duration">In-Store Time</option>
-            </select>
-          </div>
-          <div>
-            <label id="compareGoalALabel" class="field-label" for="compareGoalA">Goal A</label>
-            <input id="compareGoalA" type="number" min="0" step="0.25" placeholder="Required" />
-          </div>
-          <div>
-            <label id="compareGoalBLabel" class="field-label" for="compareGoalB">Goal B</label>
-            <input id="compareGoalB" type="number" min="0" step="0.25" placeholder="Required" />
-          </div>
-        </div>
-        <label class="field-label" for="compareEmployeeFilter">Available Employees</label>
-        <input id="compareEmployeeFilter" type="text" placeholder="Search crew member" />
-        <div id="compareBulkStatus" class="meta muted"></div>
-        <div id="compareEmployeeList" class="employee-list compact"></div>
-        <div class="input-grid two">
-          <div>
-            <label class="field-label" for="compareLinkedPairs">Linked Employees (stay together)</label>
-            <textarea id="compareLinkedPairs" rows="4" placeholder="One pair/group per line, e.g.&#10;Jerry + Celina&#10;Andrew + Leyna"></textarea>
-          </div>
-          <div>
-            <label class="field-label" for="compareLockedStoreA">Locked To Store A</label>
-            <textarea id="compareLockedStoreA" rows="2" placeholder="One per line, e.g.&#10;Jeremiah&#10;Daniel M"></textarea>
-            <p class="help">Format: one name per line. Use first name, and add last initial if needed (e.g., <code>Daniel M</code>).</p>
-            <label class="field-label" for="compareLockedStoreB">Locked To Store B</label>
-            <textarea id="compareLockedStoreB" rows="2" placeholder="One per line, e.g.&#10;Jerry&#10;Trevor"></textarea>
-            <p class="help">Format: one name per line. Use first name, and add last initial if needed (e.g., <code>Daniel M</code>).</p>
-          </div>
-        </div>
-        <div class="input-grid two">
-          <div>
-            <label class="field-label" for="compareSupervisorA">Supervisor A</label>
-            <select id="compareSupervisorA"></select>
-            <label class="field-label" for="compareSupervisorModeA">Supervisor Contribution A</label>
-            <select id="compareSupervisorModeA">
-              <option value="full">Full Contribution</option>
-              <option value="p70">70% Contribution</option>
-              <option value="p50" selected>50% Contribution</option>
-              <option value="p30">30% Contribution</option>
-              <option value="none">None (0%)</option>
-            </select>
-          </div>
-          <div>
-            <label class="field-label" for="compareSupervisorB">Supervisor B</label>
-            <select id="compareSupervisorB"></select>
-            <label class="field-label" for="compareSupervisorModeB">Supervisor Contribution B</label>
-            <select id="compareSupervisorModeB">
-              <option value="full">Full Contribution</option>
-              <option value="p70">70% Contribution</option>
-              <option value="p50" selected>50% Contribution</option>
-              <option value="p30">30% Contribution</option>
-              <option value="none">None (0%)</option>
-            </select>
-          </div>
-        </div>
+        <p class="help compare-intro">Pick two stores, set goals, choose supervisors, select available crew, then get a suggested split.</p>
+        <div class="compare-flow">
+          <section class="compare-step">
+            <h4><span class="step-num">1</span>Pick Stores and Goals</h4>
+            <div class="input-grid two">
+              <div>
+                <label class="field-label" for="compareStoreA">Store A</label>
+                <input id="compareStoreA" type="text" list="compareStoreOptions" placeholder="Type account or store name" />
+              </div>
+              <div>
+                <label class="field-label" for="compareStoreB">Store B</label>
+                <input id="compareStoreB" type="text" list="compareStoreOptions" placeholder="Type account or store name" />
+              </div>
+            </div>
+            <datalist id="compareStoreOptions"></datalist>
+            <div class="input-grid three">
+              <div>
+                <label class="field-label" for="compareGoalMode">Goal Type</label>
+                <select id="compareGoalMode">
+                  <option value="manhours">Man-Hours</option>
+                  <option value="duration">In-Store Time</option>
+                </select>
+              </div>
+              <div>
+                <label id="compareGoalALabel" class="field-label" for="compareGoalA">Goal A</label>
+                <input id="compareGoalA" type="number" min="0" step="0.25" placeholder="Required" />
+              </div>
+              <div>
+                <label id="compareGoalBLabel" class="field-label" for="compareGoalB">Goal B</label>
+                <input id="compareGoalB" type="number" min="0" step="0.25" placeholder="Required" />
+              </div>
+            </div>
+          </section>
 
-        <div class="role-card">
-          <label class="field-label" for="compareRxEmployee">RX Role (shared)</label>
-          <div id="compareRxEmployee" class="role-checklist"></div>
-          <select id="compareRxMode">
-            <option value="p70">70% Contribution</option>
-            <option value="p50" selected>50% Contribution</option>
-            <option value="p30">30% Contribution</option>
-          </select>
+          <section class="compare-step">
+            <h4><span class="step-num">2</span>Select Available Crew</h4>
+            <label class="field-label" for="compareEmployeeFilter">Available Employees</label>
+            <input id="compareEmployeeFilter" type="text" placeholder="Search crew member" />
+            <div id="compareBulkStatus" class="meta muted"></div>
+            <div id="compareEmployeeList" class="employee-list compact"></div>
+            <div class="input-grid two">
+              <div>
+                <label class="field-label" for="compareLinkedPairs">Linked Employees (stay together)</label>
+                <textarea id="compareLinkedPairs" rows="4" placeholder="One pair/group per line, e.g.&#10;Jerry + Celina&#10;Andrew + Leyna"></textarea>
+              </div>
+              <div>
+                <label class="field-label" for="compareLockedStoreA">Locked To Store A</label>
+                <textarea id="compareLockedStoreA" rows="2" placeholder="One per line, e.g.&#10;Jeremiah&#10;Daniel M"></textarea>
+                <p class="help">Format: one name per line. Use first name, and add last initial if needed (e.g., <code>Daniel M</code>).</p>
+                <label class="field-label" for="compareLockedStoreB">Locked To Store B</label>
+                <textarea id="compareLockedStoreB" rows="2" placeholder="One per line, e.g.&#10;Jerry&#10;Trevor"></textarea>
+                <p class="help">Format: one name per line. Use first name, and add last initial if needed (e.g., <code>Daniel M</code>).</p>
+              </div>
+            </div>
+          </section>
 
-          <label class="field-label" for="compareTrainingEmployee">Training Role (shared)</label>
-          <div id="compareTrainingEmployee" class="role-checklist"></div>
-          <select id="compareTrainingMode">
-            <option value="p70" selected>70% Contribution</option>
-            <option value="p50">50% Contribution</option>
-            <option value="p30">30% Contribution</option>
-          </select>
+          <section class="compare-step">
+            <h4><span class="step-num">3</span>Assign Supervisors and Shared Roles</h4>
+            <div class="input-grid two">
+              <div>
+                <label class="field-label" for="compareSupervisorA">Supervisor A</label>
+                <select id="compareSupervisorA"></select>
+                <label class="field-label" for="compareSupervisorModeA">Supervisor Contribution A</label>
+                <select id="compareSupervisorModeA">
+                  <option value="full">Full Contribution</option>
+                  <option value="p70">70% Contribution</option>
+                  <option value="p50" selected>50% Contribution</option>
+                  <option value="p30">30% Contribution</option>
+                  <option value="none">None (0%)</option>
+                </select>
+              </div>
+              <div>
+                <label class="field-label" for="compareSupervisorB">Supervisor B</label>
+                <select id="compareSupervisorB"></select>
+                <label class="field-label" for="compareSupervisorModeB">Supervisor Contribution B</label>
+                <select id="compareSupervisorModeB">
+                  <option value="full">Full Contribution</option>
+                  <option value="p70">70% Contribution</option>
+                  <option value="p50" selected>50% Contribution</option>
+                  <option value="p30">30% Contribution</option>
+                  <option value="none">None (0%)</option>
+                </select>
+              </div>
+            </div>
 
-          <label class="field-label" for="compareEarlyLateEmployee">Early/Late Role (shared)</label>
-          <div id="compareEarlyLateEmployee" class="role-checklist"></div>
-          <select id="compareEarlyLateMode">
-            <option value="p70">70% Contribution</option>
-            <option value="p50" selected>50% Contribution</option>
-            <option value="p30">30% Contribution</option>
-          </select>
+            <div class="role-card">
+              <label class="field-label" for="compareRxEmployee">RX Role (shared)</label>
+              <div id="compareRxEmployee" class="role-checklist"></div>
+              <select id="compareRxMode">
+                <option value="p70">70% Contribution</option>
+                <option value="p50" selected>50% Contribution</option>
+                <option value="p30">30% Contribution</option>
+              </select>
+
+              <label class="field-label" for="compareTrainingEmployee">Training Role (shared)</label>
+              <div id="compareTrainingEmployee" class="role-checklist"></div>
+              <select id="compareTrainingMode">
+                <option value="p70" selected>70% Contribution</option>
+                <option value="p50">50% Contribution</option>
+                <option value="p30">30% Contribution</option>
+              </select>
+
+              <label class="field-label" for="compareEarlyLateEmployee">Early/Late Role (shared)</label>
+              <div id="compareEarlyLateEmployee" class="role-checklist"></div>
+              <select id="compareEarlyLateMode">
+                <option value="p70">70% Contribution</option>
+                <option value="p50" selected>50% Contribution</option>
+                <option value="p30">30% Contribution</option>
+              </select>
+            </div>
+          </section>
         </div>
-        <div id="compareMeta" class="meta muted">Choose two stores to begin.</div>
-        <div class="actions">
-          <button id="compareClearEmployeesBtn" type="button" class="btn subtle">Clear Available Employees</button>
-          <button id="compareSuggestBtn" type="button" class="btn">Suggest Assignment</button>
+        <div class="compare-footer">
+          <div id="compareMeta" class="meta muted">Choose two stores to begin.</div>
+          <div class="actions">
+            <button id="compareClearEmployeesBtn" type="button" class="btn subtle">Clear Available Employees</button>
+            <button id="compareSuggestBtn" type="button" class="btn">Suggest Assignment</button>
+          </div>
         </div>
         </div>
       </section>

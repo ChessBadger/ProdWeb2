@@ -480,6 +480,61 @@ input[type="checkbox"] {
   display: none;
 }
 
+.compare-intro {
+  margin-top: 0.2rem;
+}
+
+.compare-flow {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+}
+
+.compare-step {
+  border: 1px solid #d5deea;
+  border-radius: 12px;
+  background: #ffffff;
+  padding: 0.78rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.compare-step h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  letter-spacing: 0.01em;
+  color: #203149;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.compare-step .help {
+  line-height: 1.35;
+}
+
+.compare-step .role-card {
+  margin-top: 0.2rem;
+  background: #f9fbff;
+}
+
+.compare-step textarea {
+  min-height: 4.15rem;
+  resize: vertical;
+}
+
+.compare-footer {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.compare-footer .actions {
+  justify-content: flex-end;
+}
+
 .accuracy-controls {
   display: flex;
   align-items: center;
@@ -755,5 +810,17 @@ th {
 
   .compare-result {
     grid-template-columns: 1fr;
+  }
+
+  .compare-step {
+    padding: 0.68rem;
+  }
+
+  .compare-footer .actions {
+    justify-content: stretch;
+  }
+
+  .compare-footer .actions .btn {
+    flex: 1 1 auto;
   }
 }
