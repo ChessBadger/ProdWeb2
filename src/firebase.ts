@@ -1,16 +1,13 @@
-// firebase.ts
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
+import { getFirebaseRuntimeConfig } from "./runtimeConfig";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCYuvMZVE9aTX_95nuZrUiv_pFHbZG_5pY",
-  authDomain: "employee-dashboard-aab04.firebaseapp.com",
-  projectId: "employee-dashboard-aab04",
-  storageBucket: "employee-dashboard-aab04.appspot.com",
-  messagingSenderId: "511125736771",
-  appId: "1:511125736771:web:cdb9a3dcadcdd23240b3f6",
-};
+const firebaseConfig = getFirebaseRuntimeConfig();
+const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
 
-const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
+export const auth: Auth | null = app ? getAuth(app) : null;
+export const googleProvider = app ? new GoogleAuthProvider() : null;
+
+googleProvider?.setCustomParameters({
+  prompt: "select_account",
+});

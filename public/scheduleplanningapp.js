@@ -253,25 +253,63 @@ const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
 const DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT = 120;
 const BRUTE_FORCE_COMPARE_UNIT_LIMIT = 15;
 const MAX_GREEDY_RX_SEED_CANDIDATES = 12;
-const ALLOWED_USERS = [
-  "jswanson@badgerinventory.com",
-  "hkraemer@badgerinventory.com",
-  "jfalck@badgerinventory.com",
-  "spalmer@badgerinventory.com",
-  "nbrock@badgerinventory.com",
-  "lclark@badgerinventory.com",
-  "kgrohall@badgerinventory.com",
-  "files@badgerinventory.com",
-  "qianabatton@gmail.com",
-];
-const firebaseConfig = {
-  apiKey: "AIzaSyCYuvMZVE9aTX_95nuZrUiv_pFHbZG_5pY",
-  authDomain: "employee-dashboard-aab04.firebaseapp.com",
-  projectId: "employee-dashboard-aab04",
-  storageBucket: "employee-dashboard-aab04.appspot.com",
-  messagingSenderId: "511125736771",
-  appId: "1:511125736771:web:cdb9a3dcadcdd23240b3f6",
-};
+
+function getRuntimeConfig() {
+  return window.__BADGER_RUNTIME_CONFIG__ || {};
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeDomain(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/^@+/, "");
+}
+
+function getAllowedUserSet() {
+  const authConfig = getRuntimeConfig().auth || {};
+  return new Set((authConfig.allowedEmails || []).map((value) => normalizeEmail(value)).filter(Boolean));
+}
+
+function isAllowedUser(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return false;
+
+  const allowedUsers = getAllowedUserSet();
+  if (allowedUsers.has(normalizedEmail)) {
+    return true;
+  }
+
+  const allowedDomain = normalizeDomain((getRuntimeConfig().auth || {}).allowedDomain);
+  return Boolean(allowedDomain) && normalizedEmail.endsWith(`@${allowedDomain}`);
+}
+
+function getFirebaseConfig() {
+  const firebase = getRuntimeConfig().firebase;
+  if (!firebase) return null;
+
+  const requiredKeys = [
+    "apiKey",
+    "authDomain",
+    "projectId",
+    "storageBucket",
+    "messagingSenderId",
+    "appId",
+  ];
+
+  for (const key of requiredKeys) {
+    if (!firebase[key] || typeof firebase[key] !== "string") {
+      return null;
+    }
+  }
+
+  return firebase;
+}
+
+const firebaseConfig = getFirebaseConfig();
 
 let auth = null;
 let googleProvider = null;
@@ -358,19 +396,28 @@ function bootstrapAuth() {
     return;
   }
 
+  if (!firebaseConfig) {
+    console.error("Runtime Firebase config is missing.");
+    showAuthOverlay("Authentication is unavailable until runtime-config.js is configured.");
+    return;
+  }
+
   if (!firebase.apps.length) {
     firebase.initializeApp(firebaseConfig);
   }
 
   auth = firebase.auth();
   googleProvider = new firebase.auth.GoogleAuthProvider();
+  googleProvider.setCustomParameters({
+    prompt: "select_account",
+  });
 
   dom.signOutBtn?.addEventListener("click", () => {
     auth?.signOut().catch(() => {});
   });
 
   auth.onAuthStateChanged((user) => {
-    if (user?.email && ALLOWED_USERS.includes(user.email.toLowerCase())) {
+    if (isAllowedUser(user?.email)) {
       hideAuthOverlay();
       setAuthStatus(user.email);
       if (!appInitialized) {
