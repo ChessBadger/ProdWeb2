@@ -2,7 +2,6 @@ import React, { useState, useMemo, useCallback, useEffect } from "react";
 import { auth, googleProvider } from "./firebase";
 import type { User } from "firebase/auth";
 import { signInWithPopup, onAuthStateChanged, signOut } from "firebase/auth";
-import { isAllowedUserEmail } from "./runtimeConfig";
 import { usePerformanceData, FilterState } from "./hooks/usePerformanceData";
 import DashboardFilters from "./components/DashboardFilters";
 import PerformanceBarChart from "./components/PerformanceBarChart";
@@ -31,6 +30,18 @@ import {
   ExclamationTriangleIcon,
 } from "./components/icons/Icons";
 
+const allowedUsers = [
+  "jswanson@badgerinventory.com",
+  "hkraemer@badgerinventory.com",
+  "jfalck@badgerinventory.com",
+  "spalmer@badgerinventory.com",
+  "nbrock@badgerinventory.com",
+  "lclark@badgerinventory.com",
+  "kgrohall@badgerinventory.com",
+  "files@badgerinventory.com",
+  "qianabatton@gmail.com",
+];
+
 const GoogleIcon = () => (
   <svg
     className="w-6 h-6"
@@ -48,10 +59,6 @@ const GoogleIcon = () => (
 
 const LoginScreen = ({ authError }: { authError: string | null }) => {
   const signInWithGoogle = () => {
-    if (!auth || !googleProvider) {
-      return;
-    }
-
     signInWithPopup(auth, googleProvider).catch((err) => {
       console.error("Google sign-in error:", err.message);
     });
@@ -439,11 +446,7 @@ const Dashboard: React.FC = () => {
             <span>{isDarkMode ? "Light Mode" : "Dark Mode"}</span>
           </button>
           <button
-            onClick={() => {
-              if (auth) {
-                signOut(auth).catch(() => {});
-              }
-            }}
+            onClick={() => signOut(auth)}
             className="w-full flex items-center justify-center gap-2 px-4 py-2 mt-2 bg-slate-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
           >
             Sign Out
@@ -583,21 +586,16 @@ const App: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!auth) {
-      setAuthError(
-        "Authentication is unavailable until runtime-config.js is configured.",
-      );
-      setAuthLoading(false);
-      return;
-    }
-
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      if (isAllowedUserEmail(firebaseUser?.email)) {
+      if (
+        firebaseUser?.email &&
+        allowedUsers.includes(firebaseUser.email.toLowerCase())
+      ) {
         setUser(firebaseUser);
         setAuthError(null); // clear only on success
       } else if (firebaseUser) {
         setAuthError("Unauthorized access. Please contact an administrator.");
-        signOut(auth).catch(() => {});
+        signOut(auth).catch(() => {}); // <-- correct API
         setUser(null);
       } else {
         setUser(null); // keep existing authError after signOut
