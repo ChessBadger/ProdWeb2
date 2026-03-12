@@ -33,6 +33,7 @@ export const ACCOUNT_GROUPS: Record<string, string[]> = {
     "pigs ryan o",
     "pigs stinebrinks",
     "pigs stoneridge",
+    "pigs teagan counihan",
     "pigs tietz",
   ],
   "ascension rx": [

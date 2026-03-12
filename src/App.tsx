@@ -14,8 +14,8 @@ import RawDataTable from "./components/RawDataTable";
 import AnomalyDetection from "./components/AnomalyDetection";
 import KPI from "./components/KPI";
 import Tabs from "./components/Tabs";
-import ToggleSwitch from "./components/ToggleSwitch";
-import { Metric, EmployeeRecord } from "./types";
+import ProductionComparisonPage from "./components/ProductionComparisonPage";
+import { Metric } from "./types";
 import { METRIC_OPTIONS, getLinkedAccounts } from "./constants";
 import {
   ChartBarIcon,
@@ -158,6 +158,9 @@ const Dashboard: React.FC = () => {
   const [activeChart, setActiveChart] = useState<
     "comparison" | "trend" | "dayOfWeek" | "anomaly"
   >("comparison");
+  const [activePage, setActivePage] = useState<"dashboard" | "compare">(
+    "dashboard"
+  );
 
   const handleFilterChange = useCallback(
     <K extends keyof FilterState>(key: K, value: FilterState[K]) => {
@@ -424,19 +427,33 @@ const Dashboard: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen font-sans">
+    <div className="flex min-h-screen font-sans">
       <aside className="w-80 flex-shrink-0 bg-white dark:bg-slate-800 shadow-lg p-6 flex flex-col">
         <Logo />
-        <div className="flex-grow overflow-y-auto scrollbar-thin pr-2">
-          <DashboardFilters
-            filters={filters}
-            onFilterChange={handleFilterChange}
-            uniqueValues={uniqueValues}
-            metric={selectedMetric}
-            onMetricChange={setSelectedMetric}
-            onClearFilters={handleClearFilters}
-          />
-        </div>
+        {activePage === "dashboard" ? (
+          <div className="flex-grow pr-2">
+            <DashboardFilters
+              filters={filters}
+              onFilterChange={handleFilterChange}
+              uniqueValues={uniqueValues}
+              metric={selectedMetric}
+              onMetricChange={setSelectedMetric}
+              onClearFilters={handleClearFilters}
+            />
+          </div>
+        ) : (
+          <div className="flex-grow pr-2">
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 text-sm text-slate-600 dark:text-slate-300 space-y-2">
+              <p className="font-semibold text-slate-800 dark:text-slate-100">
+                Compare Production Page
+              </p>
+              <p>
+                This view uses its own filters so you can compare accounts or
+                stores by employee or supervisor group.
+              </p>
+            </div>
+          </div>
+        )}
         <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
           <button
             onClick={() => setIsDarkMode(!isDarkMode)}
@@ -454,128 +471,171 @@ const Dashboard: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 p-6 lg:p-8 overflow-y-auto">
+      <main className="flex-1 p-6 lg:p-8">
         <header className="mb-6">
-          <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100">
-            Employee Production Dashboard
-          </h2>
-          {/* <p className="text-slate-500 dark:text-slate-400 mt-1">
-            Analyze employee performance across various metrics.
-          </p> */}
-        </header>
-
-        <div
-          className={`grid grid-cols-1 sm:grid-cols-2 ${
-            filters.employee === "all" ? "lg:grid-cols-3" : "lg:grid-cols-2"
-          } gap-6 mb-6`}
-        >
-          <KPI
-            title={`Avg. ${metricLabel}`}
-            value={kpiValues.avgMetric.toFixed(2)}
-            icon={<TrendingUpIcon className="h-6 w-6 text-primary" />}
-          />
-          {filters.employee === "all" && (
-            <KPI
-              title="Filtered Employees"
-              value={kpiValues.uniqueEmployees.toLocaleString()}
-              icon={<UsersIcon className="h-6 w-6 text-primary" />}
-            />
-          )}
-          <KPI
-            title={`Top Performer (${metricLabel})`}
-            value={kpiValues.bestPerformer.name}
-            subtitle={`Avg: ${kpiValues.bestPerformer.value.toFixed(2)}`}
-            icon={<CheckBadgeIcon className="h-6 w-6 text-primary" />}
-          />
-        </div>
-
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4 sm:p-6 mb-6">
-          <div className="flex flex-wrap justify-between items-center mb-4 gap-4">
-            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-              Performance Analysis
-            </h3>
-            <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
-              <ChartButton
-                chartType="comparison"
-                label="Comparison"
-                icon={ChartBarIcon}
-              />
-              <ChartButton
-                chartType="trend"
-                label="Trend"
-                icon={ChartPieIcon}
-              />
-              <ChartButton
-                chartType="dayOfWeek"
-                label="Day of Week"
-                icon={CalendarDaysIcon}
-              />
-              <ChartButton
-                chartType="anomaly"
-                label="Anomalies"
-                icon={ExclamationTriangleIcon}
-              />
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100">
+                {activePage === "dashboard"
+                  ? "Employee Production Dashboard"
+                  : "Production Comparison"}
+              </h2>
+              <p className="text-slate-500 dark:text-slate-400 mt-1">
+                {activePage === "dashboard"
+                  ? "Analyze employee performance across production metrics."
+                  : "Compare production between selected accounts or stores by employee or group."}
+              </p>
+            </div>
+            <div
+              role="group"
+              aria-label="Page selector"
+              className="inline-flex rounded-md shadow-sm"
+            >
+              <button
+                type="button"
+                onClick={() => setActivePage("dashboard")}
+                className={`px-4 py-2 text-sm font-medium border rounded-l-md ${
+                  activePage === "dashboard"
+                    ? "bg-slate-800 text-white border-slate-800"
+                    : "bg-white text-slate-700 dark:bg-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600"
+                }`}
+              >
+                Dashboard
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivePage("compare")}
+                className={`px-4 py-2 text-sm font-medium border rounded-r-md ${
+                  activePage === "compare"
+                    ? "bg-slate-800 text-white border-slate-800"
+                    : "bg-white text-slate-700 dark:bg-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600"
+                }`}
+              >
+                Compare Production
+              </button>
             </div>
           </div>
-          <div className="h-[450px]">{renderActiveChart()}</div>
-        </div>
+        </header>
 
-        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm">
-          <Tabs
-            tabs={[
-              {
-                label: "Averages by Employee",
-                content: (
-                  <AveragesTable data={filteredData} metric={selectedMetric} />
-                ),
-              },
-              {
-                label: "Performance by Group",
-                content: (
-                  <>
-                    <div className="flex justify-end p-4">
-                      <div
-                        role="group"
-                        aria-label="Group by"
-                        className="inline-flex rounded-md shadow-sm"
-                      >
-                        {(["store", "supervisor", "account"] as const).map(
-                          (option) => (
-                            <button
-                              key={option}
-                              type="button"
-                              onClick={() => setGroupBy(option)}
-                              className={`
-          px-4 py-2 text-sm font-medium border
-          ${
-            groupBy === option
-              ? "bg-slate-800 text-white border-slate-800"
-              : "bg-white text-slate-700 dark:bg-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600"
-          }
-          ${option === "store" ? "rounded-l-md" : ""}
-          ${option === "account" ? "rounded-r-md" : ""}
-        `}
-                            >
-                              {option.charAt(0).toUpperCase() + option.slice(1)}
-                            </button>
-                          )
-                        )}
-                      </div>
-                    </div>
-                    <PerformanceByGroupTable
-                      data={filteredData}
-                      groupBy={groupBy}
-                    />
-                  </>
-                ),
-              },
-              {
-                label: "All Stores",
-                content: <RawDataTable data={filteredData} />,
-              },
-            ]}
-          />
-        </div>
+        {activePage === "dashboard" ? (
+          <>
+            <div
+              className={`grid grid-cols-1 sm:grid-cols-2 ${
+                filters.employee === "all" ? "lg:grid-cols-3" : "lg:grid-cols-2"
+              } gap-6 mb-6`}
+            >
+              <KPI
+                title={`Avg. ${metricLabel}`}
+                value={kpiValues.avgMetric.toFixed(2)}
+                icon={<TrendingUpIcon className="h-6 w-6 text-primary" />}
+              />
+              {filters.employee === "all" && (
+                <KPI
+                  title="Filtered Employees"
+                  value={kpiValues.uniqueEmployees.toLocaleString()}
+                  icon={<UsersIcon className="h-6 w-6 text-primary" />}
+                />
+              )}
+              <KPI
+                title={`Top Performer (${metricLabel})`}
+                value={kpiValues.bestPerformer.name}
+                subtitle={`Avg: ${kpiValues.bestPerformer.value.toFixed(2)}`}
+                icon={<CheckBadgeIcon className="h-6 w-6 text-primary" />}
+              />
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4 sm:p-6 mb-6">
+              <div className="flex flex-wrap justify-between items-center mb-4 gap-4">
+                <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
+                  Performance Analysis
+                </h3>
+                <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-700 p-1 rounded-lg">
+                  <ChartButton
+                    chartType="comparison"
+                    label="Comparison"
+                    icon={ChartBarIcon}
+                  />
+                  <ChartButton
+                    chartType="trend"
+                    label="Trend"
+                    icon={ChartPieIcon}
+                  />
+                  <ChartButton
+                    chartType="dayOfWeek"
+                    label="Day of Week"
+                    icon={CalendarDaysIcon}
+                  />
+                  <ChartButton
+                    chartType="anomaly"
+                    label="Anomalies"
+                    icon={ExclamationTriangleIcon}
+                  />
+                </div>
+              </div>
+              <div className="h-[450px]">{renderActiveChart()}</div>
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm">
+              <Tabs
+                tabs={[
+                  {
+                    label: "Averages by Employee",
+                    content: (
+                      <AveragesTable data={filteredData} metric={selectedMetric} />
+                    ),
+                  },
+                  {
+                    label: "Performance by Group",
+                    content: (
+                      <>
+                        <div className="flex justify-end p-4">
+                          <div
+                            role="group"
+                            aria-label="Group by"
+                            className="inline-flex rounded-md shadow-sm"
+                          >
+                            {(["store", "supervisor", "account"] as const).map(
+                              (option) => (
+                                <button
+                                  key={option}
+                                  type="button"
+                                  onClick={() => setGroupBy(option)}
+                                  className={`
+            px-4 py-2 text-sm font-medium border
+            ${
+              groupBy === option
+                ? "bg-slate-800 text-white border-slate-800"
+                : "bg-white text-slate-700 dark:bg-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600"
+            }
+            ${option === "store" ? "rounded-l-md" : ""}
+            ${option === "account" ? "rounded-r-md" : ""}
+          `}
+                                >
+                                  {option.charAt(0).toUpperCase() +
+                                    option.slice(1)}
+                                </button>
+                              )
+                            )}
+                          </div>
+                        </div>
+                        <PerformanceByGroupTable
+                          data={filteredData}
+                          groupBy={groupBy}
+                        />
+                      </>
+                    ),
+                  },
+                  {
+                    label: "All Stores",
+                    content: <RawDataTable data={filteredData} />,
+                  },
+                ]}
+              />
+            </div>
+          </>
+        ) : (
+          <ProductionComparisonPage data={data} isDarkMode={isDarkMode} />
+        )}
       </main>
     </div>
   );

@@ -33,6 +33,7 @@ export const ACCOUNT_GROUPS: Record<string, string[]> = {
     "pigs ryan o",
     "pigs stinebrinks",
     "pigs stoneridge",
+    "pigs teagan counihan",
     "pigs tietz",
   ],
   "ascension rx": [
@@ -56,11 +57,13 @@ export const ACCOUNT_GROUPS: Record<string, string[]> = {
 // Create a reverse map for efficient lookup.
 // Key: individual account name (lowercase), Value: array of all linked accounts in the group (lowercase).
 const accountToGroupMap = new Map<string, string[]>();
+const accountToGroupNameMap = new Map<string, string>();
 for (const groupName in ACCOUNT_GROUPS) {
     const accountsInGroup = ACCOUNT_GROUPS[groupName];
     const lowercasedGroup = accountsInGroup.map(a => a.toLowerCase());
     for (const account of accountsInGroup) {
         accountToGroupMap.set(account.toLowerCase(), lowercasedGroup);
+        accountToGroupNameMap.set(account.toLowerCase(), groupName);
     }
 }
 
@@ -74,4 +77,14 @@ export const getLinkedAccounts = (accountName: string): string[] => {
     const lowercasedAccount = accountName.toLowerCase();
     // Return the pre-calculated group, or an array with just the single account if not found.
     return accountToGroupMap.get(lowercasedAccount) || [lowercasedAccount];
+};
+
+/**
+ * Gets the canonical account group label for a given account name.
+ * If the account is not part of a predefined group, it returns the original account name.
+ */
+export const getAccountGroupLabel = (accountName: string): string => {
+    const lowercasedAccount = accountName.toLowerCase();
+    const groupedLabel = accountToGroupNameMap.get(lowercasedAccount);
+    return groupedLabel ? groupedLabel.toUpperCase() : accountName;
 };
