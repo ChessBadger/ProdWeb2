@@ -125,6 +125,7 @@ const ProductionComparisonPage: React.FC<{
   );
   const [metric, setMetric] = useState<Metric>("pieces");
   const [timeframe, setTimeframe] = useState<Timeframe>("last180");
+  const [office, setOffice] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [specificDate, setSpecificDate] = useState("");
@@ -135,6 +136,24 @@ const ProductionComparisonPage: React.FC<{
   const [activeGraphTab, setActiveGraphTab] = useState<GraphTab>("overall");
   const [tableSortKey, setTableSortKey] = useState<TableSortKey>("label");
   const [tableSortOrder, setTableSortOrder] = useState<"asc" | "desc">("asc");
+
+  const handleClearCompareFilters = () => {
+    setCompareBy("account");
+    setBreakdownBy("employee");
+    setMetric("pieces");
+    setTimeframe("last180");
+    setOffice("all");
+    setStartDate("");
+    setEndDate("");
+    setSpecificDate("");
+    setSelectedEntities([]);
+    setEntitySearch("");
+    setSelectedMember("all");
+    setTopN(8);
+    setActiveGraphTab("overall");
+    setTableSortKey("label");
+    setTableSortOrder("asc");
+  };
 
   const metricLabel =
     METRIC_OPTIONS.find((option) => option.value === metric)?.label || "Metric";
@@ -147,6 +166,17 @@ const ProductionComparisonPage: React.FC<{
     [data, timeframe, startDate, endDate, specificDate]
   );
 
+  const availableOffices = useMemo(() => {
+    const offices = new Set<string>();
+    data.forEach((record) => offices.add(record.office));
+    return Array.from(offices).sort((a, b) => a.localeCompare(b));
+  }, [data]);
+
+  const officeFilteredData = useMemo(() => {
+    if (office === "all") return timeframeFilteredData;
+    return timeframeFilteredData.filter((record) => record.office === office);
+  }, [timeframeFilteredData, office]);
+
   const getComparisonEntity = useMemo(
     () => (record: EmployeeRecord) =>
       compareBy === "account"
@@ -157,11 +187,11 @@ const ProductionComparisonPage: React.FC<{
 
   const availableEntities = useMemo(() => {
     const values = new Set<string>();
-    timeframeFilteredData.forEach((record) =>
+    officeFilteredData.forEach((record) =>
       values.add(getComparisonEntity(record))
     );
     return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [timeframeFilteredData, getComparisonEntity]);
+  }, [officeFilteredData, getComparisonEntity]);
 
   useEffect(() => {
     setSelectedEntities((previous) => {
@@ -223,10 +253,10 @@ const ProductionComparisonPage: React.FC<{
 
   const scopedData = useMemo(
     () =>
-      timeframeFilteredData.filter((record) =>
+      officeFilteredData.filter((record) =>
         selectedEntitySet.has(getComparisonEntity(record))
       ),
-    [timeframeFilteredData, selectedEntitySet, getComparisonEntity]
+    [officeFilteredData, selectedEntitySet, getComparisonEntity]
   );
 
   const aggregatesByMember = useMemo(() => {
@@ -532,7 +562,17 @@ const ProductionComparisonPage: React.FC<{
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+        <div className="mb-4 flex justify-end">
+          <button
+            type="button"
+            onClick={handleClearCompareFilters}
+            className="px-4 py-2 bg-slate-600 text-white text-sm font-semibold rounded-lg shadow-sm hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary transition-colors"
+          >
+            Clear Compare Filters
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
             Compare
             <select
@@ -586,6 +626,22 @@ const ProductionComparisonPage: React.FC<{
               {TIMEFRAME_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
                   {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+            Office
+            <select
+              value={office}
+              onChange={(event) => setOffice(event.target.value)}
+              className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm"
+            >
+              <option value="all">All Offices</option>
+              {availableOffices.map((officeName) => (
+                <option key={officeName} value={officeName}>
+                  {officeName}
                 </option>
               ))}
             </select>
