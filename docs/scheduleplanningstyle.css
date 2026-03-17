@@ -73,6 +73,8 @@ p {
   margin-left: 0.25rem;
 }
 
+.topbar-actions,
+.topbar-nav,
 .topbar-auth {
   display: inline-flex;
   align-items: center;

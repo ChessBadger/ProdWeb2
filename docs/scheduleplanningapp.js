@@ -254,6 +254,7 @@ const STORAGE_KEY = "crew_predictor_v2";
 const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
 const DATA_JSON_PATH = "data/EmployeeProductionExport.json";
 const SCHEDULE_JSON_PATH = "data/ScheduleFinalFull.json";
+const BOARD_ALLOWED_USERS = ["lclark@badgerinventory.com"];
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
 const DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT = 120;
 const BRUTE_FORCE_COMPARE_UNIT_LIMIT = 15;
@@ -287,6 +288,7 @@ const dom = {
   appLayout: document.querySelector("main.layout"),
   authStatus: document.getElementById("topbarAuthStatus"),
   signOutBtn: document.getElementById("topbarSignOutBtn"),
+  scheduleBoardLink: document.getElementById("scheduleBoardLink"),
   storeSearch: document.getElementById("storeSearch"),
   clearStoreSearchBtn: document.getElementById("clearStoreSearchBtn"),
   storeScheduleFilter: document.getElementById("storeScheduleFilter"),
@@ -298,6 +300,7 @@ const dom = {
   goalHint: document.getElementById("goalHint"),
   supervisorEmployee: document.getElementById("supervisorEmployee"),
   supervisorMode: document.getElementById("supervisorMode"),
+  rxRoleCard: document.getElementById("rxRoleCard"),
   rxEmployee: document.getElementById("rxEmployee"),
   rxMode: document.getElementById("rxMode"),
   trainingEmployee: document.getElementById("trainingEmployee"),
@@ -344,6 +347,7 @@ const dom = {
   compareLockedStoreA: document.getElementById("compareLockedStoreA"),
   compareLockedStoreB: document.getElementById("compareLockedStoreB"),
   compareEmployeeList: document.getElementById("compareEmployeeList"),
+  compareRxRoleGroup: document.getElementById("compareRxRoleGroup"),
   compareRxEmployee: document.getElementById("compareRxEmployee"),
   compareRxMode: document.getElementById("compareRxMode"),
   compareTrainingEmployee: document.getElementById("compareTrainingEmployee"),
@@ -356,6 +360,8 @@ const dom = {
   computeWaitOverlay: document.getElementById("computeWaitOverlay"),
   computeWaitOverlayText: document.getElementById("computeWaitOverlayText"),
 };
+
+let pendingBoardPrefill = readBoardPrefillFromUrl();
 
 bootstrapAuth();
 
@@ -463,6 +469,13 @@ function setAuthStatus(email) {
   if (dom.signOutBtn) {
     dom.signOutBtn.classList.toggle("is-hidden", !email);
   }
+  if (dom.scheduleBoardLink) {
+    const normalizedEmail = cleanText(email).toLowerCase();
+    dom.scheduleBoardLink.classList.toggle(
+      "is-hidden",
+      !BOARD_ALLOWED_USERS.includes(normalizedEmail),
+    );
+  }
 }
 
 function initialize() {
@@ -491,6 +504,89 @@ function nextTick() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function readBoardPrefillFromUrl() {
+  try {
+    const params = new URLSearchParams(window.location.search || "");
+    const encoded = cleanText(params.get("boardPrefill"));
+    if (!encoded) return null;
+    const jsonText = decodeURIComponent(escape(atob(encoded)));
+    const parsed = JSON.parse(jsonText);
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function clearBoardPrefillFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("boardPrefill");
+    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  } catch (_error) {
+    // Ignore URL cleanup failures.
+  }
+}
+
+function resolveBoardPrefillStoreKey(prefill) {
+  const directKey = cleanText(prefill?.storeKey);
+  if (directKey && state.stores.has(directKey)) return directKey;
+  const targetAccount = cleanText(prefill?.account).toLowerCase();
+  const targetStore = cleanText(prefill?.storeName).toLowerCase();
+  if (!targetStore) return null;
+  const matched = state.storesList.find((store) => {
+    const sameStore = cleanText(store.storeName).toLowerCase() === targetStore;
+    const sameAccount = !targetAccount || cleanText(store.account).toLowerCase() === targetAccount;
+    return sameStore && sameAccount;
+  });
+  return matched?.storeKey || null;
+}
+
+function applyBoardPrefillIfAvailable() {
+  const prefill = pendingBoardPrefill;
+  if (!prefill) return false;
+
+  const storeKey = resolveBoardPrefillStoreKey(prefill);
+  if (!storeKey) {
+    pendingBoardPrefill = null;
+    clearBoardPrefillFromUrl();
+    return false;
+  }
+
+  state.selectedStoreKey = storeKey;
+  state.selectedEmployees = new Set(
+    uniqueStrings(prefill.employeeIds || []).filter((id) => state.employees.has(id)),
+  );
+  const selectedSet = new Set(Array.from(state.selectedEmployees));
+  const supervisorId = cleanText(prefill.supervisorId);
+  const roleIds = prefill.roleIds || {};
+  state.selectedRolesByStore = {
+    [storeKey]: {
+      supervisor: selectedSet.has(supervisorId) ? supervisorId : "",
+      rx: filterToSelected(normalizeRoleArray(roleIds.rx), selectedSet),
+      training: filterToSelected(normalizeRoleArray(roleIds.training), selectedSet),
+      earlyLate: filterToSelected(normalizeRoleArray(roleIds.earlyLate), selectedSet),
+    },
+  };
+  const roleModes = prefill.roleModes || {};
+  state.roleModesByStore = {
+    [storeKey]: {
+      supervisor: parseContributionMode(roleModes.supervisor || "p50"),
+      rx: parseContributionMode(roleModes.rx || "p50"),
+      training: parseContributionMode(roleModes.training || "p70"),
+      earlyLate: parseContributionMode(roleModes.earlyLate || "p50"),
+    },
+  };
+  state.planningMode = "duration";
+  state.targetValue = Math.max(0, toNumber(prefill.plannedDurationHours));
+  if (dom.planningMode) dom.planningMode.value = state.planningMode;
+  if (dom.targetValue) dom.targetValue.value = state.targetValue > 0 ? state.targetValue : "";
+
+  syncRoleAssignmentsToSelectedCrew();
+  pendingBoardPrefill = null;
+  clearBoardPrefillFromUrl();
+  return true;
+}
+
 function escapeRegExp(value) {
   return String(value || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -512,6 +608,75 @@ function splitBulkEmployeeEntries(rawText) {
     .split(/[\r\n,;]+/)
     .map((part) => cleanText(part))
     .filter(Boolean);
+}
+
+function parseClipboardTable(rawText) {
+  const text = String(rawText || "");
+  const rows = [];
+  let row = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let idx = 0; idx < text.length; idx += 1) {
+    const char = text[idx];
+    if (char === '"') {
+      if (inQuotes && text[idx + 1] === '"') {
+        cell += '"';
+        idx += 1;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (char === "\t" && !inQuotes) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+    if ((char === "\n" || char === "\r") && !inQuotes) {
+      if (char === "\r" && text[idx + 1] === "\n") idx += 1;
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+    cell += char;
+  }
+
+  if (cell.length || row.length) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  return rows
+    .map((cells) => cells.map((value) => cleanText(value)))
+    .filter((cells) => cells.some(Boolean));
+}
+
+function extractBulkEmployeeEntries(rawText) {
+  const rows = parseClipboardTable(rawText);
+  const hasMultipleColumns = rows.some((cells) => cells.length > 1);
+  if (hasMultipleColumns) {
+    return rows
+      .map((cells) => ({
+        name: cleanText(cells[0]),
+        note: cleanText(cells.slice(1).join(" ")),
+      }))
+      .filter((entry) => entry.name);
+  }
+  return splitBulkEmployeeEntries(rawText).map((entry) => ({
+    name: entry,
+    note: "",
+  }));
+}
+
+function parseBulkEmployeeNoteFlags(noteText) {
+  const note = cleanText(noteText).toLowerCase();
+  return {
+    rx: /\brx\b/.test(note),
+    earlyLate: /\b(until|after)\b/.test(note),
+  };
 }
 
 function getEmployeeNameParts(employeeId) {
@@ -544,24 +709,34 @@ function summarizeBulkEntryList(items, limit = 4) {
 }
 
 function resolveBulkEmployeeSelection(rawText, candidateIds) {
-  const entries = splitBulkEmployeeEntries(rawText);
+  const structuredEntries = extractBulkEmployeeEntries(rawText);
+  const entries = structuredEntries.map((entry) => entry.name);
   const pool = Array.from(candidateIds || [])
     .map((id) => cleanText(id))
     .filter(Boolean);
   const matchedIds = new Set();
+  const rxIds = new Set();
+  const earlyLateIds = new Set();
   const ambiguousEntries = [];
   const unmatchedEntries = [];
 
-  entries.forEach((entry) => {
+  structuredEntries.forEach((entryObj) => {
+    const entry = entryObj.name;
     const normalizedEntry = cleanText(entry);
     const normalizedLower = normalizedEntry.toLowerCase();
     if (!normalizedLower) return;
+    const noteFlags = parseBulkEmployeeNoteFlags(entryObj.note);
+    const markMatched = (employeeId) => {
+      matchedIds.add(employeeId);
+      if (noteFlags.rx) rxIds.add(employeeId);
+      if (noteFlags.earlyLate) earlyLateIds.add(employeeId);
+    };
 
     const exactIdMatch = pool.find(
       (id) => id.toLowerCase() === normalizedLower,
     );
     if (exactIdMatch) {
-      matchedIds.add(exactIdMatch);
+      markMatched(exactIdMatch);
       return;
     }
 
@@ -569,7 +744,7 @@ function resolveBulkEmployeeSelection(rawText, candidateIds) {
       matchesEmployeeQuery(id, normalizedLower, getEmployeeDisplayName(id)),
     );
     if (queryMatches.length === 1) {
-      matchedIds.add(queryMatches[0]);
+      markMatched(queryMatches[0]);
       return;
     }
 
@@ -597,7 +772,7 @@ function resolveBulkEmployeeSelection(rawText, candidateIds) {
           return;
         }
       }
-      matchedIds.add(single);
+      markMatched(single);
       return;
     }
 
@@ -612,7 +787,7 @@ function resolveBulkEmployeeSelection(rawText, candidateIds) {
     });
 
     if (narrowed.length === 1) {
-      matchedIds.add(narrowed[0]);
+      markMatched(narrowed[0]);
       return;
     }
 
@@ -623,6 +798,8 @@ function resolveBulkEmployeeSelection(rawText, candidateIds) {
   return {
     entries,
     matchedIds: Array.from(matchedIds),
+    rxIds: Array.from(rxIds),
+    earlyLateIds: Array.from(earlyLateIds),
     ambiguousEntries,
     unmatchedEntries,
   };
@@ -632,6 +809,10 @@ function formatBulkSelectionMessage(result, label = "employees") {
   const total = result.entries.length;
   const added = result.matchedIds.length;
   const fragments = [`Processed ${total} ${label}; added ${added}.`];
+  const roleHints = [];
+  if (result.rxIds?.length) roleHints.push(`RX ${result.rxIds.length}`);
+  if (result.earlyLateIds?.length) roleHints.push(`Early/Late ${result.earlyLateIds.length}`);
+  if (roleHints.length) fragments.push(`Auto roles: ${roleHints.join(", ")}.`);
   if (result.ambiguousEntries.length) {
     fragments.push(
       `Ambiguous: ${summarizeBulkEntryList(result.ambiguousEntries)} (add last initial).`,
@@ -1013,6 +1194,7 @@ function loadRows(rawRows, scheduleRawRows = [], dataFingerprint = "") {
   state.isLoaded = true;
 
   restoreSelectionsFromStorage();
+  applyBoardPrefillIfAvailable();
   applyScheduledGoalDefault(false);
   refreshLoadedUi();
   const restored = restoreAnalyticsCache(state.dataFingerprint);
@@ -1264,8 +1446,6 @@ function renderGoalHint() {
   } else {
     parts.push("No duration value was encoded in the schedule run name.");
   }
-  if (schedule.startTimeText) parts.push(`Start: ${schedule.startTimeText}.`);
-  if (schedule.meetTimeText) parts.push(`Meet: ${schedule.meetTimeText}.`);
 
   dom.goalHint.textContent = parts.join(" ");
   dom.goalHint.classList.remove("meta-warning");
@@ -2159,6 +2339,9 @@ function onCompareInputChange() {
   state.compareAssignment.sharedRoles.earlyLate = getRoleChecklistValues(
     dom.compareEarlyLateEmployee,
   );
+  if (!compareNeedsRxRole()) {
+    state.compareAssignment.sharedRoles.rx = [];
+  }
   state.compareAssignment.linkedPairsInput = String(
     dom.compareLinkedPairs.value || "",
   );
@@ -2197,7 +2380,10 @@ function renderComparePlanner() {
   cfg.availableEmployees = new Set(
     Array.from(cfg.availableEmployees || []).filter((id) => availableSet.has(id)),
   );
-  cfg.sharedRoles.rx = filterToSelected(cfg.sharedRoles.rx, cfg.availableEmployees);
+  const showCompareRx = compareNeedsRxRole();
+  cfg.sharedRoles.rx = showCompareRx
+    ? filterToSelected(cfg.sharedRoles.rx, cfg.availableEmployees)
+    : [];
   cfg.sharedRoles.training = filterToSelected(
     cfg.sharedRoles.training,
     cfg.availableEmployees,
@@ -2237,6 +2423,7 @@ function renderComparePlanner() {
   dom.compareRxMode.value = cfg.roleModes.rx;
   dom.compareTrainingMode.value = cfg.roleModes.training;
   dom.compareEarlyLateMode.value = cfg.roleModes.earlyLate;
+  dom.compareRxRoleGroup?.classList.toggle("is-hidden", !showCompareRx);
   renderRoleChecklist(
     dom.compareRxEmployee,
     sortedSelected,
@@ -3181,6 +3368,12 @@ function renderRoleSelectors() {
   const storeKey = state.selectedStoreKey;
   const roles = getRoleSelectionForStore(storeKey);
   const modes = getRoleModesForStore(storeKey);
+  const showRxRole = selectedStoreNeedsRxRole(storeKey);
+
+  if (!showRxRole && roles.rx.length) {
+    roles.rx = [];
+    state.selectedRolesByStore[storeKey] = roles;
+  }
 
   renderRoleEmployeeSelect(
     dom.supervisorEmployee,
@@ -3190,6 +3383,7 @@ function renderRoleSelectors() {
     "Select supervisor",
     false,
   );
+  dom.rxRoleCard?.classList.toggle("is-hidden", !showRxRole);
   renderRoleChecklist(dom.rxEmployee, sortedSelected, roles.rx, "No RX role");
   renderRoleChecklist(
     dom.trainingEmployee,
@@ -3314,10 +3508,22 @@ function getRoleSelectionForStore(storeKey) {
   const current = state.selectedRolesByStore[storeKey] || {};
   return {
     supervisor: current.supervisor || "",
-    rx: normalizeRoleArray(current.rx),
+    rx: selectedStoreNeedsRxRole(storeKey) ? normalizeRoleArray(current.rx) : [],
     training: normalizeRoleArray(current.training),
     earlyLate: normalizeRoleArray(current.earlyLate),
   };
+}
+
+function selectedStoreNeedsRxRole(storeKey) {
+  if (!storeKey) return false;
+  return isRxRoleRequiredForStore(state.stores.get(storeKey));
+}
+
+function compareNeedsRxRole() {
+  const cfg = state.compareAssignment;
+  const storeA = state.stores.get(cfg.storeA);
+  const storeB = state.stores.get(cfg.storeB);
+  return isRxRoleRequiredForStore(storeA) || isRxRoleRequiredForStore(storeB);
 }
 
 function syncRoleAssignmentsToSelectedCrew() {
@@ -3331,7 +3537,9 @@ function syncRoleAssignmentsToSelectedCrew() {
     roles.supervisor = "";
   }
 
-  roles.rx = filterToSelected(roles.rx, selectedSet);
+  roles.rx = selectedStoreNeedsRxRole(storeKey)
+    ? filterToSelected(roles.rx, selectedSet)
+    : [];
   roles.training = filterToSelected(roles.training, selectedSet);
   roles.earlyLate = filterToSelected(roles.earlyLate, selectedSet);
 
@@ -3546,6 +3754,8 @@ function onEmployeeFilterKeyDown(event) {
   );
   if (bulk.entries.length > 1) {
     bulk.matchedIds.forEach((id) => state.selectedEmployees.add(id));
+    const assignedSupervisor = assignFirstBulkSupervisorToSelectedStore(bulk.matchedIds);
+    applyBulkRoleHintsToSelectedStore(bulk);
     syncRoleAssignmentsToSelectedCrew();
     renderRoleSelectors();
     persistToStorage();
@@ -3553,7 +3763,7 @@ function onEmployeeFilterKeyDown(event) {
     renderEmployeeList();
     updateResults();
     setEmployeeBulkStatus(
-      formatBulkSelectionMessage(bulk, "names"),
+      `${formatBulkSelectionMessage(bulk, "names")}${assignedSupervisor ? " First pasted name set as supervisor." : ""}`,
       bulk.ambiguousEntries.length || bulk.unmatchedEntries.length
         ? "warning"
         : "success",
@@ -3586,6 +3796,8 @@ function onEmployeeFilterPaste(event) {
   if (bulk.entries.length <= 1) return;
   event.preventDefault();
   bulk.matchedIds.forEach((id) => state.selectedEmployees.add(id));
+  const assignedSupervisor = assignFirstBulkSupervisorToSelectedStore(bulk.matchedIds);
+  applyBulkRoleHintsToSelectedStore(bulk);
   syncRoleAssignmentsToSelectedCrew();
   renderRoleSelectors();
   persistToStorage();
@@ -3593,11 +3805,32 @@ function onEmployeeFilterPaste(event) {
   renderEmployeeList();
   updateResults();
   setEmployeeBulkStatus(
-    formatBulkSelectionMessage(bulk, "names"),
+    `${formatBulkSelectionMessage(bulk, "names")}${assignedSupervisor ? " First pasted name set as supervisor." : ""}`,
     bulk.ambiguousEntries.length || bulk.unmatchedEntries.length
       ? "warning"
       : "success",
   );
+}
+
+function assignFirstBulkSupervisorToSelectedStore(employeeIds) {
+  const storeKey = state.selectedStoreKey;
+  if (!storeKey) return false;
+  const firstId = cleanText((employeeIds || []).find(Boolean));
+  if (!firstId) return false;
+  const roles = getRoleSelectionForStore(storeKey);
+  roles.supervisor = firstId;
+  state.selectedRolesByStore[storeKey] = roles;
+  return true;
+}
+
+function applyBulkRoleHintsToSelectedStore(bulk) {
+  const storeKey = state.selectedStoreKey;
+  if (!storeKey) return;
+  const roles = getRoleSelectionForStore(storeKey);
+  const selectedSet = new Set(Array.from(state.selectedEmployees));
+  roles.rx = filterToSelected([...roles.rx, ...(bulk?.rxIds || [])], selectedSet);
+  roles.earlyLate = filterToSelected([...roles.earlyLate, ...(bulk?.earlyLateIds || [])], selectedSet);
+  state.selectedRolesByStore[storeKey] = roles;
 }
 
 function onPlanningInputChange() {

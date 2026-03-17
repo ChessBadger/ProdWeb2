@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weekly Schedule Board</title>
+  <link rel="stylesheet" href="scheduleboard.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>BADGER</h1>
+      <p class="subtitle">INVENTORY SERVICE, INC.</p>
+      <p class="tagline">Weekly Schedule Board</p>
+    </div>
+    <div class="topbar-actions">
+      <nav class="topbar-nav">
+        <a class="btn subtle" href="scheduleplanning.html">Planner</a>
+      </nav>
+      <div class="topbar-auth">
+        <p id="topbarAuthStatus" class="status">Signed out</p>
+        <button id="topbarSignOutBtn" type="button" class="btn subtle is-hidden">Sign Out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="board-shell">
+      <div class="board-toolbar">
+        <div class="toolbar-block">
+          <label class="field-label" for="weekSelect">Week</label>
+          <select id="weekSelect"></select>
+        </div>
+        <div class="toolbar-block">
+          <label class="field-label" for="storeSearch">Search Runs</label>
+          <input id="storeSearch" type="text" placeholder="Search store, account, notes, or customer #" />
+        </div>
+        <div class="toolbar-block toolbar-meta">
+          <div id="boardSummary" class="summary-chip">Loading schedule...</div>
+        </div>
+        <div class="toolbar-block toolbar-actions">
+          <label class="toggle-chip" for="showEmptyDays">
+            <input id="showEmptyDays" type="checkbox" />
+            <span>Show Empty Days</span>
+          </label>
+        </div>
+        <div class="toolbar-block toolbar-actions">
+          <button id="toggleDetailBtn" type="button" class="btn subtle">Hide Details</button>
+        </div>
+      </div>
+
+      <div id="boardMeta" class="meta">Load data to view the weekly board.</div>
+      <div id="boardTopScroll" class="board-top-scroll is-hidden" aria-hidden="true">
+        <div id="boardTopScrollInner" class="board-top-scroll-inner"></div>
+      </div>
+
+      <section id="boardGrid" class="board-grid"></section>
+    </section>
+
+    <aside class="detail-shell">
+      <section class="detail-card">
+        <div class="detail-head">
+          <h2>Run Assignment</h2>
+          <div class="detail-head-actions">
+            <button id="collapseDetailBtn" type="button" class="btn subtle">Hide Panel</button>
+            <button id="clearRunBtn" type="button" class="btn subtle">Clear Run</button>
+          </div>
+        </div>
+        <div id="runDetailMeta" class="meta muted">Select a run card to assign a crew.</div>
+        <div id="runPrediction" class="prediction-summary is-hidden">
+          <article class="stat-card">
+            <h3>Predicted Time</h3>
+            <p id="predictedDurationValue" class="value">-</p>
+          </article>
+          <article class="stat-card">
+            <h3>Predicted Man-Hours</h3>
+            <p id="predictedManHoursValue" class="value">-</p>
+          </article>
+          <article class="stat-card">
+            <h3>Goal Delta</h3>
+            <p id="predictedDeltaValue" class="value">-</p>
+          </article>
+        </div>
+
+        <div class="detail-section">
+          <label class="field-label" for="supervisorSelect">Supervisor</label>
+          <select id="supervisorSelect"></select>
+          <select id="supervisorMode">
+            <option value="full">Full Contribution</option>
+            <option value="p70">70% Contribution</option>
+            <option value="p50" selected>50% Contribution</option>
+            <option value="p30">30% Contribution</option>
+            <option value="none">None (0%)</option>
+          </select>
+          <p class="help">Pasting a crew list will use the first pasted match as supervisor.</p>
+        </div>
+
+        <div class="detail-section">
+          <label class="field-label" for="employeeSearch">Find Employee</label>
+          <input id="employeeSearch" type="text" placeholder="Search employee name or paste names" />
+          <div id="employeeBulkStatus" class="meta muted is-hidden"></div>
+          <p class="help">Paste one name per line, or separate names with commas, then press Enter or paste directly.</p>
+        </div>
+
+        <div id="assignedSummary" class="assigned-summary muted">No crew assigned yet.</div>
+
+        <div class="detail-section">
+          <div class="field-label">Roles</div>
+
+          <div id="rxRoleCard" class="role-card">
+            <label class="field-label" for="rxMode">RX (optional)</label>
+            <div id="rxEmployee" class="role-checklist"></div>
+            <select id="rxMode">
+              <option value="p70">70% Contribution</option>
+              <option value="p50" selected>50% Contribution</option>
+              <option value="p30">30% Contribution</option>
+            </select>
+          </div>
+
+          <div class="role-card">
+            <label class="field-label" for="trainingMode">Training (optional)</label>
+            <div id="trainingEmployee" class="role-checklist"></div>
+            <select id="trainingMode">
+              <option value="p70" selected>70% Contribution</option>
+              <option value="p50">50% Contribution</option>
+              <option value="p30">30% Contribution</option>
+            </select>
+          </div>
+
+          <div class="role-card">
+            <label class="field-label" for="earlyLateMode">Leaving Early / Arriving Late (optional)</label>
+            <div id="earlyLateEmployee" class="role-checklist"></div>
+            <select id="earlyLateMode">
+              <option value="p70">70% Contribution</option>
+              <option value="p50" selected>50% Contribution</option>
+              <option value="p30">30% Contribution</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="employeeGroups" class="employee-groups"></div>
+      </section>
+    </aside>
+  </main>
+
+  <div id="loadingOverlay" class="overlay">
+    <div class="overlay-card">
+      <h2>Preparing Weekly Board</h2>
+      <p>Loading schedule, employee history, and prediction data.</p>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
+  <script src="scheduleboardapp.js"></script>
+</body>
+</html>

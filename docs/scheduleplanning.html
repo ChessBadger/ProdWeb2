@@ -13,9 +13,14 @@
       <p class="subtitle">INVENTORY SERVICE, INC.</p>
       <p class="tagline">"Where Quality Counts"</p>
     </div>
-    <div class="topbar-auth">
-      <p id="topbarAuthStatus" class="status">Signed out</p>
-      <button id="topbarSignOutBtn" type="button" class="btn subtle is-hidden">Sign Out</button>
+    <div class="topbar-actions">
+      <nav class="topbar-nav">
+        <a id="scheduleBoardLink" class="btn subtle is-hidden" href="scheduleboard.html">Schedule Board</a>
+      </nav>
+      <div class="topbar-auth">
+        <p id="topbarAuthStatus" class="status">Signed out</p>
+        <button id="topbarSignOutBtn" type="button" class="btn subtle is-hidden">Sign Out</button>
+      </div>
     </div>
   </header>
 
@@ -100,7 +105,7 @@
           </select>
         </div>
 
-        <div class="role-card">
+        <div id="rxRoleCard" class="role-card">
           <label class="field-label" for="rxEmployee">RX (optional)</label>
           <div id="rxEmployee" class="role-checklist"></div>
           <select id="rxMode">
@@ -290,13 +295,15 @@
             </div>
 
             <div class="role-card">
-              <label class="field-label" for="compareRxEmployee">RX Role (shared)</label>
-              <div id="compareRxEmployee" class="role-checklist"></div>
-              <select id="compareRxMode">
-                <option value="p70">70% Contribution</option>
-                <option value="p50" selected>50% Contribution</option>
-                <option value="p30">30% Contribution</option>
-              </select>
+              <div id="compareRxRoleGroup">
+                <label class="field-label" for="compareRxEmployee">RX Role (shared)</label>
+                <div id="compareRxEmployee" class="role-checklist"></div>
+                <select id="compareRxMode">
+                  <option value="p70">70% Contribution</option>
+                  <option value="p50" selected>50% Contribution</option>
+                  <option value="p30">30% Contribution</option>
+                </select>
+              </div>
 
               <label class="field-label" for="compareTrainingEmployee">Training Role (shared)</label>
               <div id="compareTrainingEmployee" class="role-checklist"></div>
