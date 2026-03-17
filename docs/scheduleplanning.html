@@ -32,9 +32,19 @@
           <input id="storeSearch" type="text" placeholder="Search account or store name" />
           <button id="clearStoreSearchBtn" type="button" class="btn subtle">Clear</button>
         </div>
+        <div class="store-filter-row">
+          <label class="field-label" for="storeScheduleFilter">Schedule View</label>
+          <select id="storeScheduleFilter">
+            <option value="scheduled">Scheduled Stores</option>
+            <option value="today">Today</option>
+            <option value="tomorrow">Tomorrow</option>
+            <option value="thisweek">This Week</option>
+            <option value="all">All History</option>
+          </select>
+        </div>
         <select id="storeSelect" size="8"></select>
         <div id="storeSelectMeta" class="help muted">Showing 0 stores.</div>
-        <div id="storeStats" class="stats muted">Select a store to view historical context.</div>
+        <div id="storeStats" class="stats muted">Select a store to view schedule and historical context.</div>
       </section>
 
       <section class="setup-step">
@@ -52,6 +62,7 @@
           <option value="duration">In-Store Time</option>
           <option value="manhours">Man-Hours</option>
         </select>
+        <div id="goalHint" class="meta muted context-hint">Schedule-based duration hints will appear here when available.</div>
       </section>
 
       <section class="setup-step">
@@ -66,6 +77,7 @@
           <button id="lastCrewBtn" type="button" class="btn subtle">Use Last Crew</button>
           <button id="clearEmployeesBtn" type="button" class="btn subtle">Clear</button>
         </div>
+        <div id="crewHint" class="meta muted context-hint is-hidden"></div>
         <div id="employeeList" class="employee-list"></div>
       </section>
 

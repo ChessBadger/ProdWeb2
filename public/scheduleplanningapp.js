@@ -20,6 +20,10 @@ const state = {
     medianEmployeeSpeed: 0,
   },
   storesList: [],
+  scheduleRows: [],
+  scheduleByStoreKey: new Map(),
+  scheduleUnmatchedRows: [],
+  storeScheduleFilter: "scheduled",
   storeLastCrew: new Map(),
   storeLastSupervisor: new Map(),
   selectedStoreKey: null,
@@ -249,6 +253,7 @@ const state = {
 const STORAGE_KEY = "crew_predictor_v2";
 const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
 const DATA_JSON_PATH = "data/EmployeeProductionExport.json";
+const SCHEDULE_JSON_PATH = "data/ScheduleFinalFull.json";
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
 const DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT = 120;
 const BRUTE_FORCE_COMPARE_UNIT_LIMIT = 15;
@@ -284,11 +289,13 @@ const dom = {
   signOutBtn: document.getElementById("topbarSignOutBtn"),
   storeSearch: document.getElementById("storeSearch"),
   clearStoreSearchBtn: document.getElementById("clearStoreSearchBtn"),
+  storeScheduleFilter: document.getElementById("storeScheduleFilter"),
   storeSelect: document.getElementById("storeSelect"),
   storeSelectMeta: document.getElementById("storeSelectMeta"),
   storeStats: document.getElementById("storeStats"),
   planningMode: document.getElementById("planningMode"),
   targetValue: document.getElementById("targetValue"),
+  goalHint: document.getElementById("goalHint"),
   supervisorEmployee: document.getElementById("supervisorEmployee"),
   supervisorMode: document.getElementById("supervisorMode"),
   rxEmployee: document.getElementById("rxEmployee"),
@@ -299,6 +306,7 @@ const dom = {
   earlyLateMode: document.getElementById("earlyLateMode"),
   employeeFilter: document.getElementById("employeeFilter"),
   employeeBulkStatus: document.getElementById("employeeBulkStatus"),
+  crewHint: document.getElementById("crewHint"),
   employeeList: document.getElementById("employeeList"),
   lastCrewBtn: document.getElementById("lastCrewBtn"),
   clearEmployeesBtn: document.getElementById("clearEmployeesBtn"),
@@ -871,6 +879,7 @@ function disableInputAutofill() {
 function bindEvents() {
   dom.storeSearch.addEventListener("input", renderStoreSelect);
   dom.clearStoreSearchBtn.addEventListener("click", clearStoreSearch);
+  dom.storeScheduleFilter?.addEventListener("change", onStoreScheduleFilterChange);
   dom.storeSelect.addEventListener("change", onStoreChange);
   dom.planningMode.addEventListener("change", onPlanningInputChange);
   dom.targetValue.addEventListener("input", onPlanningInputChange);
@@ -920,20 +929,40 @@ function bindEvents() {
 
 async function loadJsonData() {
   try {
-    const response = await fetch(DATA_JSON_PATH, { cache: "force-cache" });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
-
-    const rawJsonText = await response.text();
-    const fingerprint = buildDataFingerprintFromJsonText(rawJsonText);
-    const payload = JSON.parse(rawJsonText);
-    const rawRows = extractRowsFromJson(payload);
-    loadRows(rawRows, fingerprint);
+    const [historyResult, scheduleResult] = await Promise.all([
+      fetchRequiredJson(DATA_JSON_PATH),
+      fetchOptionalJson(SCHEDULE_JSON_PATH),
+    ]);
+    const fingerprint = buildDataFingerprintFromJsonText(historyResult.rawJsonText);
+    const rawRows = extractRowsFromJson(historyResult.payload);
+    const scheduleRows = extractRowsFromJson(scheduleResult?.payload);
+    loadRows(rawRows, scheduleRows, fingerprint);
   } catch (error) {
     const message = error?.message || "Unknown error";
     setPredictionMeta(`Data load failed: ${message}`, "warning");
     hideComputeWaitOverlay();
+  }
+}
+
+async function fetchRequiredJson(path) {
+  const response = await fetch(path, { cache: "force-cache" });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const rawJsonText = await response.text();
+  return {
+    rawJsonText,
+    payload: JSON.parse(rawJsonText),
+  };
+}
+
+async function fetchOptionalJson(path) {
+  try {
+    return await fetchRequiredJson(path);
+  } catch (error) {
+    console.warn(`Optional data load failed for ${path}:`, error);
+    return null;
   }
 }
 
@@ -954,7 +983,7 @@ function extractRowsFromJson(payload) {
   return [];
 }
 
-function loadRows(rawRows, dataFingerprint = "") {
+function loadRows(rawRows, scheduleRawRows = [], dataFingerprint = "") {
   const normalizedRows = rawRows.map(normalizeRow).filter((r) => r.valid);
 
   state.rows = normalizedRows;
@@ -969,6 +998,7 @@ function loadRows(rawRows, dataFingerprint = "") {
   state.employees = buildEmployeeStats(normalizedRows);
   state.suggestedSupervisorByStore = buildStoreSupervisorMap(normalizedRows);
   state.global = buildGlobalStats(state.jobs, state.employees);
+  applyScheduleRows(scheduleRawRows);
   state.storeLastCrew = buildStoreLastCrew(state.jobs);
   state.storeLastSupervisor = buildStoreLastSupervisor(normalizedRows);
   state.storesList = Array.from(state.stores.values()).sort((a, b) => {
@@ -983,6 +1013,7 @@ function loadRows(rawRows, dataFingerprint = "") {
   state.isLoaded = true;
 
   restoreSelectionsFromStorage();
+  applyScheduledGoalDefault(false);
   refreshLoadedUi();
   const restored = restoreAnalyticsCache(state.dataFingerprint);
   if (restored) {
@@ -997,6 +1028,294 @@ function loadRows(rawRows, dataFingerprint = "") {
     return;
   }
   scheduleDeferredAnalytics();
+}
+
+function normalizeScheduleRow(row) {
+  const normalized = {};
+  Object.keys(row || {}).forEach((key) => {
+    normalized[canonicalizeKey(key)] = row[key];
+  });
+
+  const date = normalizeDateString(
+    firstValue(normalized, ["scheduledateofinv", "dateofinv"]),
+  );
+  const storeName = cleanText(firstValue(normalized, ["storename"]));
+  const runName = cleanText(firstValue(normalized, ["runname"]));
+  const startTimeText = cleanScheduleText(firstValue(normalized, ["expr1", "timeofinv"]));
+  const meetTimeText = cleanScheduleText(firstValue(normalized, ["meettime"]));
+  const typeOfInv = normalizeInventoryType(
+    cleanText(firstValue(normalized, ["typeofinv"])) || "Unknown",
+  );
+  const address = cleanText(firstValue(normalized, ["storeaddress"]));
+  const city = cleanText(firstValue(normalized, ["storecity"]));
+  const stateCode = cleanText(firstValue(normalized, ["storestate"]));
+  const zipcode = cleanText(firstValue(normalized, ["storezipcode"]));
+  const mapLink = cleanText(firstValue(normalized, ["maplink"]));
+  const phone = cleanText(firstValue(normalized, ["storephonenumber"]));
+  const storeNotes = cleanScheduleText(firstValue(normalized, ["storenotes"]));
+  const notes = cleanScheduleText(firstValue(normalized, ["notes"]));
+  const rateType = cleanText(firstValue(normalized, ["ratetype"]));
+  const officeNumber = cleanText(firstValue(normalized, ["officenumber"]));
+  const customerNumber = cleanText(firstValue(normalized, ["customernumber1"]));
+  const dateScheduled = normalizeDateTimeText(
+    firstValue(normalized, ["datescheduled"]),
+  );
+  const runHints = parseRunNameHints(runName);
+
+  return {
+    valid: Boolean(date && storeName),
+    date,
+    storeName,
+    canonicalStoreName: canonicalizeStoreName(storeName),
+    runName,
+    startTimeText,
+    meetTimeText,
+    typeOfInv,
+    address,
+    city,
+    stateCode,
+    zipcode,
+    mapLink,
+    phone,
+    storeNotes,
+    notes,
+    rateType,
+    officeNumber,
+    customerNumber,
+    dateScheduled,
+    plannedDurationHours: runHints.plannedDurationHours,
+    plannedCrewSize: runHints.plannedCrewSize,
+  };
+}
+
+function applyScheduleRows(rawRows) {
+  const normalizedRows = (rawRows || [])
+    .map(normalizeScheduleRow)
+    .filter((row) => row.valid)
+    .sort(compareScheduleRows);
+
+  const storeKeyIndex = buildScheduleStoreIndex(state.stores);
+  const byStoreKey = new Map();
+  const unmatchedRows = [];
+
+  state.stores.forEach((store) => {
+    store.scheduleRows = [];
+    store.nextScheduledJob = null;
+  });
+
+  normalizedRows.forEach((row) => {
+    const storeKey = resolveScheduleStoreKey(row, storeKeyIndex);
+    if (!storeKey || !state.stores.has(storeKey)) {
+      unmatchedRows.push(row);
+      return;
+    }
+
+    const store = state.stores.get(storeKey);
+    const enriched = {
+      ...row,
+      storeKey,
+      account: store.account,
+      officeLabel:
+        cleanText(store.officeName) ||
+        formatOfficeNumber(row.officeNumber) ||
+        "Unknown",
+    };
+    if (!byStoreKey.has(storeKey)) byStoreKey.set(storeKey, []);
+    byStoreKey.get(storeKey).push(enriched);
+  });
+
+  byStoreKey.forEach((rows, storeKey) => {
+    rows.sort(compareScheduleRows);
+    const store = state.stores.get(storeKey);
+    if (!store) return;
+    store.scheduleRows = rows;
+    store.nextScheduledJob = getPrimaryScheduleRow(rows);
+  });
+
+  state.scheduleRows = normalizedRows;
+  state.scheduleByStoreKey = byStoreKey;
+  state.scheduleUnmatchedRows = unmatchedRows;
+}
+
+function buildScheduleStoreIndex(stores) {
+  const index = new Map();
+  stores.forEach((store, storeKey) => {
+    const key = canonicalizeStoreName(store.storeName);
+    if (!index.has(key)) index.set(key, []);
+    index.get(key).push(storeKey);
+  });
+  return index;
+}
+
+function resolveScheduleStoreKey(row, storeKeyIndex) {
+  const candidates = storeKeyIndex.get(row.canonicalStoreName) || [];
+  if (candidates.length <= 1) return candidates[0] || "";
+
+  return candidates
+    .map((storeKey) => state.stores.get(storeKey))
+    .filter(Boolean)
+    .sort((left, right) => (right.jobCount || 0) - (left.jobCount || 0))[0]?.storeKey || "";
+}
+
+function compareScheduleRows(left, right) {
+  const byDate = cleanText(left?.date).localeCompare(cleanText(right?.date));
+  if (byDate !== 0) return byDate;
+  const byTime = parseScheduleTimeToMinutes(left?.startTimeText)
+    - parseScheduleTimeToMinutes(right?.startTimeText);
+  if (byTime !== 0) return byTime;
+  return cleanText(left?.storeName).localeCompare(cleanText(right?.storeName));
+}
+
+function parseRunNameHints(runName) {
+  const raw = cleanText(runName);
+  const durationMatch = raw.match(/(\d+(?:\.\d+)?)\s*hrs?/i);
+  const crewMatch = raw.match(/crew size of\s*(\d+)/i);
+  return {
+    plannedDurationHours: durationMatch ? toNumber(durationMatch[1]) : 0,
+    plannedCrewSize: crewMatch ? Math.round(toNumber(crewMatch[1])) : 0,
+  };
+}
+
+function getPrimaryScheduleRow(rows) {
+  const list = Array.isArray(rows) ? rows : [];
+  if (!list.length) return null;
+
+  const today = getLocalDateStamp(0);
+  const upcoming = list.find((row) => cleanText(row.date) >= today);
+  return upcoming || list[0] || null;
+}
+
+function getScheduleRowsForStore(storeKey = state.selectedStoreKey) {
+  return state.scheduleByStoreKey.get(storeKey) || [];
+}
+
+function getPrimaryScheduleForStore(storeKey = state.selectedStoreKey) {
+  const store = state.stores.get(storeKey);
+  if (store?.nextScheduledJob) return store.nextScheduledJob;
+  return getPrimaryScheduleRow(getScheduleRowsForStore(storeKey));
+}
+
+function matchesScheduleFilter(scheduleRows, filterValue = state.storeScheduleFilter) {
+  const rows = Array.isArray(scheduleRows) ? scheduleRows : [];
+  if (filterValue === "all") return true;
+  if (!rows.length) return false;
+  if (filterValue === "scheduled") return rows.length > 0;
+
+  const today = getLocalDateStamp(0);
+  const tomorrow = getLocalDateStamp(1);
+  const weekEnd = getLocalDateStamp(6);
+
+  return rows.some((row) => {
+    const date = cleanText(row.date);
+    if (!date) return false;
+    if (filterValue === "today") return date === today;
+    if (filterValue === "tomorrow") return date === tomorrow;
+    if (filterValue === "thisweek") return date >= today && date <= weekEnd;
+    return true;
+  });
+}
+
+function formatScheduleFilterLabel(value) {
+  if (value === "today") return "Today";
+  if (value === "tomorrow") return "Tomorrow";
+  if (value === "thisweek") return "This Week";
+  if (value === "all") return "All History";
+  return "Scheduled Stores";
+}
+
+function onStoreScheduleFilterChange() {
+  state.storeScheduleFilter = cleanText(dom.storeScheduleFilter?.value) || "scheduled";
+  renderStoreSelect();
+  refreshStoreContextPanels();
+  persistToStorage();
+  renderEmployeeList();
+  updateResults();
+}
+
+function refreshStoreContextPanels() {
+  renderStoreStats();
+  renderGoalHint();
+  renderCrewHint();
+}
+
+function renderGoalHint() {
+  if (!dom.goalHint) return;
+
+  const schedule = getPrimaryScheduleForStore();
+  if (!state.selectedStoreKey) {
+    dom.goalHint.textContent =
+      "Schedule-based duration hints will appear here when available.";
+    dom.goalHint.classList.remove("meta-warning", "meta-success");
+    return;
+  }
+
+  if (!schedule) {
+    dom.goalHint.textContent =
+      "No linked schedule row found for this store. Enter a goal manually if needed.";
+    dom.goalHint.classList.remove("meta-warning", "meta-success");
+    return;
+  }
+
+  const parts = [];
+  if (schedule.plannedDurationHours > 0) {
+    parts.push(
+      `Schedule suggests ${formatNumber(schedule.plannedDurationHours, 2)} hrs from the run name.`,
+    );
+  } else {
+    parts.push("No duration value was encoded in the schedule run name.");
+  }
+  if (schedule.startTimeText) parts.push(`Start: ${schedule.startTimeText}.`);
+  if (schedule.meetTimeText) parts.push(`Meet: ${schedule.meetTimeText}.`);
+
+  dom.goalHint.textContent = parts.join(" ");
+  dom.goalHint.classList.remove("meta-warning");
+  dom.goalHint.classList.toggle("meta-success", schedule.plannedDurationHours > 0);
+}
+
+function renderCrewHint() {
+  if (!dom.crewHint) return;
+
+  const schedule = getPrimaryScheduleForStore();
+  if (!state.selectedStoreKey || !schedule || !(schedule.plannedCrewSize > 0)) {
+    dom.crewHint.textContent = "";
+    dom.crewHint.classList.add("is-hidden");
+    dom.crewHint.classList.remove("meta-warning", "meta-success");
+    return;
+  }
+
+  const selectedCount = state.selectedEmployees.size;
+  let message = `Schedule hint: crew size ${schedule.plannedCrewSize}.`;
+  let tone = "";
+
+  if (selectedCount === 0) {
+    message += " Pick a crew to compare against the schedule plan.";
+  } else if (selectedCount < schedule.plannedCrewSize) {
+    message += ` You currently have ${selectedCount} selected, which is ${schedule.plannedCrewSize - selectedCount} under plan.`;
+    tone = "warning";
+  } else if (selectedCount > schedule.plannedCrewSize) {
+    message += ` You currently have ${selectedCount} selected, which is ${selectedCount - schedule.plannedCrewSize} over plan.`;
+    tone = "warning";
+  } else {
+    message += ` You currently match the planned crew count (${selectedCount}).`;
+    tone = "success";
+  }
+
+  dom.crewHint.textContent = message;
+  dom.crewHint.classList.remove("is-hidden", "meta-warning", "meta-success");
+  if (tone === "warning") dom.crewHint.classList.add("meta-warning");
+  if (tone === "success") dom.crewHint.classList.add("meta-success");
+}
+
+function applyScheduledGoalDefault(force = false) {
+  const schedule = getPrimaryScheduleForStore();
+  if (!schedule || !(schedule.plannedDurationHours > 0)) return false;
+  if (!force && state.targetValue > 0) return false;
+
+  state.planningMode = "duration";
+  state.targetValue = schedule.plannedDurationHours;
+  if (dom.planningMode) dom.planningMode.value = state.planningMode;
+  if (dom.targetValue) dom.targetValue.value = state.targetValue;
+  return true;
 }
 
 function normalizeRow(row) {
@@ -1538,12 +1857,16 @@ function buildStoreLastSupervisor(rows) {
 }
 
 function refreshLoadedUi() {
+  if (dom.storeScheduleFilter) {
+    dom.storeScheduleFilter.value = state.storeScheduleFilter;
+  }
   renderStoreSelect();
   renderRoleSelectors();
   renderAccuracyAccountFilter();
   syncAccuracyFilterToSelectedStore();
   renderEmployeeList();
   renderComparePlanner();
+  refreshStoreContextPanels();
   updateResults();
   renderAccuracyReport();
 }
@@ -1643,9 +1966,25 @@ function renderAccuracyAccountFilter() {
 function renderStoreSelect() {
   const previousStoreKey = state.selectedStoreKey;
   const query = (dom.storeSearch.value || "").trim().toLowerCase();
-  const filtered = state.storesList.filter((s) =>
-    `${s.account} ${s.storeName}`.toLowerCase().includes(query),
-  );
+  const filtered = state.storesList
+    .filter((store) => `${store.account} ${store.storeName}`.toLowerCase().includes(query))
+    .filter((store) => matchesScheduleFilter(store.scheduleRows, state.storeScheduleFilter))
+    .sort((left, right) => {
+      if (state.storeScheduleFilter === "all") {
+        const leftLabel = `${left.account} ${left.storeName}`.toLowerCase();
+        const rightLabel = `${right.account} ${right.storeName}`.toLowerCase();
+        return leftLabel.localeCompare(rightLabel);
+      }
+
+      const leftSchedule = getPrimaryScheduleForStore(left.storeKey);
+      const rightSchedule = getPrimaryScheduleForStore(right.storeKey);
+      const byDate = cleanText(leftSchedule?.date).localeCompare(cleanText(rightSchedule?.date));
+      if (byDate !== 0) return byDate;
+      const byTime = parseScheduleTimeToMinutes(leftSchedule?.startTimeText)
+        - parseScheduleTimeToMinutes(rightSchedule?.startTimeText);
+      if (byTime !== 0) return byTime;
+      return `${left.account} ${left.storeName}`.localeCompare(`${right.account} ${right.storeName}`);
+    });
 
   dom.storeSelect.innerHTML = "";
   const placeholder = document.createElement("option");
@@ -1656,7 +1995,7 @@ function renderStoreSelect() {
   filtered.forEach((store) => {
     const option = document.createElement("option");
     option.value = store.storeKey;
-    option.textContent = `${store.account} | ${store.storeName} | ${store.jobCount} jobs | ${formatNumber(store.medianPieces, 0)} pcs`;
+    option.textContent = `${store.account} | ${store.storeName}`;
     option.title = `${store.account} | ${store.storeName}`;
     option.selected = store.storeKey === state.selectedStoreKey;
     dom.storeSelect.appendChild(option);
@@ -1676,10 +2015,12 @@ function renderStoreSelect() {
 
   dom.storeSelect.value = state.selectedStoreKey || "";
   const selected = state.stores.get(state.selectedStoreKey);
+  const matchedScheduledStores = state.scheduleByStoreKey.size;
+  const filterLabel = formatScheduleFilterLabel(state.storeScheduleFilter);
   dom.storeSelectMeta.textContent = selected
-    ? `Showing ${filtered.length} of ${state.storesList.length} stores. Selected: ${selected.account} | ${selected.storeName}`
-    : `Showing ${filtered.length} of ${state.storesList.length} stores.`;
-  if (!storeChanged) renderStoreStats();
+    ? `${filterLabel}: showing ${filtered.length} of ${state.storesList.length} stores. Scheduled matches: ${matchedScheduledStores}. Selected: ${selected.account} | ${selected.storeName}`
+    : `${filterLabel}: showing ${filtered.length} of ${state.storesList.length} stores. Scheduled matches: ${matchedScheduledStores}.`;
+  if (!storeChanged) refreshStoreContextPanels();
 }
 
 function onStoreChange() {
@@ -1693,6 +2034,7 @@ function onStoreChange() {
   renderRoleSelectors();
   persistToStorage();
   renderEmployeeList();
+  refreshStoreContextPanels();
   updateResults();
   renderAccuracyReport();
 }
@@ -1707,6 +2049,7 @@ function resetPlanInputsForNewStore() {
   state.targetValue = 0;
   dom.planningMode.value = state.planningMode;
   dom.targetValue.value = "";
+  applyScheduledGoalDefault(true);
 
   if (
     dom.accuracyAccountFilter &&
@@ -1745,8 +2088,11 @@ function clearStoreSearch() {
     resetPlanInputsForNewStore();
   }
   renderStoreSelect();
+  refreshStoreContextPanels();
   persistToStorage();
   renderEmployeeList();
+  updateResults();
+  renderAccuracyReport();
 }
 
 function clearAllCardsAndPreview() {
@@ -1768,7 +2114,7 @@ function clearAllCardsAndPreview() {
   dom.accuracyWorstBody.innerHTML = "";
   dom.storeStats.textContent = state.selectedStoreKey
     ? "Store selected. Configure crew and roles to view plan cards."
-    : "Select a store to view historical context.";
+    : "Select a store to view schedule and historical context.";
 }
 
 function toggleCompareSection() {
@@ -3067,19 +3413,62 @@ function getContributionModeLabel(mode) {
 function renderStoreStats() {
   const store = state.stores.get(state.selectedStoreKey);
   if (!store) {
-    dom.storeStats.textContent = "Select a store to see store history.";
+    dom.storeStats.textContent = "Select a store to see schedule and store history.";
     return;
   }
+  const schedule = getPrimaryScheduleForStore(store.storeKey);
+  const noteRows = [];
+  if (schedule?.storeNotes) noteRows.push(renderBriefItem("Store Notes", schedule.storeNotes));
+  if (schedule?.notes) noteRows.push(renderBriefItem("Schedule Notes", schedule.notes));
 
-  dom.storeStats.innerHTML = [
-    `Account: ${store.account}`,
-    `Store: ${store.storeName}`,
-    `Account Segment: ${store.segmentId || "S1"}`,
-    `Past jobs: ${store.jobCount}`,
-    `Typical pieces: ${formatNumber(store.medianPieces, 0)} pieces`,
-    `Average on-site time: ${formatNumber(store.avgDuration, 2)} hrs`,
-    `Average Man-Hours: ${formatNumber(store.avgManHours, 2)} man-hours`,
-  ].join("<br>");
+  dom.storeStats.innerHTML = `
+    <div class="store-brief">
+      <section class="brief-section">
+        <div class="brief-section-title">Scheduled Job</div>
+        ${schedule ? `
+          <div class="brief-grid">
+            ${renderBriefItem("Scheduled Date", formatLongDate(schedule.date))}
+            ${renderBriefItem("Start Time", schedule.startTimeText || "Not listed")}
+            ${renderBriefItem("Meet Time", schedule.meetTimeText || "Not listed")}
+            ${renderBriefItem("Customer Number", formatCustomerNumber(schedule.customerNumber))}
+            ${renderBriefItem("Address", formatScheduleAddress(schedule))}
+            ${renderBriefItem("Phone", schedule.phone || "Not listed")}
+            ${renderBriefItem("Map", schedule.mapLink ? `<a class="brief-link" href="${escapeHtml(schedule.mapLink)}" target="_blank" rel="noopener noreferrer">Open map</a>` : "Not listed", true)}
+            ${renderBriefItem("Scheduled On", schedule.dateScheduled || "Not listed")}
+          </div>
+          ${noteRows.length ? `<div class="brief-grid brief-note">${noteRows.join("")}</div>` : ""}
+        ` : `
+          <div class="brief-value muted">No linked schedule row found for this store.</div>
+        `}
+      </section>
+    </div>
+  `;
+}
+
+function renderBriefItem(label, value, isHtml = false) {
+  const safeValue = isHtml ? value : escapeHtml(String(value || "Not listed"));
+  return `
+    <div class="brief-item">
+      <span class="brief-label">${escapeHtml(label)}</span>
+      <span class="brief-value">${safeValue}</span>
+    </div>
+  `;
+}
+
+function formatScheduleAddress(schedule) {
+  const lineOne = cleanText(schedule?.address);
+  const locality = [cleanText(schedule?.city), cleanText(schedule?.stateCode), cleanText(schedule?.zipcode)]
+    .filter(Boolean)
+    .join(", ")
+    .replace(", ,", ",");
+  return [lineOne, locality].filter(Boolean).join(" | ") || "Not listed";
+}
+
+function formatCustomerNumber(value) {
+  const raw = cleanText(value).replace(/[^A-Za-z0-9]/g, "");
+  if (!raw) return "Not listed";
+  const padded = raw.length >= 8 ? raw : raw.padStart(8, "0");
+  return `${padded.slice(0, 4)}-${padded.slice(-4)}`;
 }
 
 function renderEmployeeList() {
@@ -3636,6 +4025,7 @@ function computePredictionForJob(job, store, options = {}) {
 }
 
 function updateResults() {
+  renderCrewHint();
   const store = state.stores.get(state.selectedStoreKey);
   const roleSelection = getRoleSelectionForStore(state.selectedStoreKey);
   const missingSupervisor =
@@ -4972,6 +5362,7 @@ function persistToStorage() {
   snapshot.settings = {
     planningMode: state.planningMode,
     targetValue: state.targetValue,
+    storeScheduleFilter: state.storeScheduleFilter,
     selectedRolesByStore: state.selectedRolesByStore,
     roleModesByStore: state.roleModesByStore,
   };
@@ -4981,9 +5372,11 @@ function persistToStorage() {
 function restoreSelectionsFromStorage() {
   const snapshot = readStorage();
   const storedStoreKey = snapshot.selectedStoreKey;
+  const firstScheduledStoreKey =
+    state.storesList.find((store) => (store.scheduleRows || []).length > 0)?.storeKey || null;
   state.selectedStoreKey = state.stores.has(storedStoreKey)
     ? storedStoreKey
-    : state.storesList[0]?.storeKey || null;
+    : firstScheduledStoreKey || state.storesList[0]?.storeKey || null;
 
   const savedCrew = readSavedCrew(state.selectedStoreKey);
   state.selectedEmployees = new Set(
@@ -4996,6 +5389,13 @@ function restoreSettingsFromStorage() {
   state.planningMode =
     settings.planningMode === "manhours" ? "manhours" : "duration";
   state.targetValue = Math.max(0, toNumber(settings.targetValue));
+  state.storeScheduleFilter =
+    typeof settings.storeScheduleFilter === "string" &&
+    ["scheduled", "today", "tomorrow", "thisweek", "all"].includes(
+      settings.storeScheduleFilter,
+    )
+      ? settings.storeScheduleFilter
+      : "scheduled";
   state.selectedRolesByStore =
     settings.selectedRolesByStore &&
     typeof settings.selectedRolesByStore === "object"
@@ -5484,11 +5884,77 @@ function toNumber(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function cleanScheduleText(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text === "0") return "";
+  if (/^#error$/i.test(text)) return "";
+  if (/^false$/i.test(text)) return "";
+  return text;
+}
+
+function normalizeDateTimeText(value) {
+  const text = cleanScheduleText(value);
+  if (!text) return "";
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return text;
+  return date.toLocaleString(undefined, {
+    month: "numeric",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
+
+function getLocalDateStamp(offsetDays = 0) {
+  const date = new Date();
+  date.setHours(0, 0, 0, 0);
+  date.setDate(date.getDate() + offsetDays);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function normalizeDateString(value) {
   if (!value) return "";
   const date = new Date(value);
   if (!Number.isNaN(date.getTime())) return date.toISOString().slice(0, 10);
   return String(value).trim();
+}
+
+function formatLongDate(value) {
+  const text = cleanText(value);
+  if (!text) return "";
+  const date = new Date(`${text}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return text;
+  return date.toLocaleDateString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function parseScheduleTimeToMinutes(value) {
+  const text = cleanScheduleText(value);
+  if (!text) return Number.POSITIVE_INFINITY;
+  const match = text.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i);
+  if (!match) return Number.POSITIVE_INFINITY;
+  let hours = Number(match[1]) % 12;
+  const minutes = Number(match[2] || 0);
+  const meridiem = String(match[3] || "").toLowerCase();
+  if (meridiem === "pm") hours += 12;
+  return hours * 60 + minutes;
+}
+
+function canonicalizeStoreName(value) {
+  return canonicalizeKey(cleanText(value));
+}
+
+function formatOfficeNumber(value) {
+  const office = cleanText(value);
+  return office ? `Office ${office}` : "";
 }
 
 function canonicalizeKey(key) {
