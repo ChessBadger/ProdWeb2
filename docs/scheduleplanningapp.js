@@ -6210,7 +6210,7 @@ function cleanText(value) {
 
 function isRxRoleRequiredForStore(store) {
   const name = cleanText(store?.storeName);
-  return /\+\s*rx\b/i.test(name);
+  return /\brx\b/i.test(name);
 }
 
 function normalizeInventoryType(value) {

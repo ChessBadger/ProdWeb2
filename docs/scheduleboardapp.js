@@ -1591,7 +1591,7 @@ function getCrewEfficiencyFactor(crewSize, tuning = state.modelTuning) {
 }
 
 function isRxRoleRequiredForStore(store) {
-  return /\+\s*rx\b/i.test(clean(store?.storeName));
+  return /\brx\b/i.test(clean(store?.storeName));
 }
 
 function runNeedsRxRole(run) {
