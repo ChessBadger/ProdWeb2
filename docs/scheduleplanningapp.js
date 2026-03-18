@@ -23,7 +23,7 @@ const state = {
   scheduleRows: [],
   scheduleByStoreKey: new Map(),
   scheduleUnmatchedRows: [],
-  storeScheduleFilter: "scheduled",
+  storeScheduleFilter: "all",
   storeLastCrew: new Map(),
   storeLastSupervisor: new Map(),
   selectedStoreKey: null,
@@ -1406,7 +1406,7 @@ function formatScheduleFilterLabel(value) {
 }
 
 function onStoreScheduleFilterChange() {
-  state.storeScheduleFilter = cleanText(dom.storeScheduleFilter?.value) || "scheduled";
+  state.storeScheduleFilter = cleanText(dom.storeScheduleFilter?.value) || "all";
   renderStoreSelect();
   refreshStoreContextPanels();
   persistToStorage();
@@ -5595,7 +5595,6 @@ function persistToStorage() {
   snapshot.settings = {
     planningMode: state.planningMode,
     targetValue: state.targetValue,
-    storeScheduleFilter: state.storeScheduleFilter,
     selectedRolesByStore: state.selectedRolesByStore,
     roleModesByStore: state.roleModesByStore,
   };
@@ -5622,13 +5621,7 @@ function restoreSettingsFromStorage() {
   state.planningMode =
     settings.planningMode === "manhours" ? "manhours" : "duration";
   state.targetValue = Math.max(0, toNumber(settings.targetValue));
-  state.storeScheduleFilter =
-    typeof settings.storeScheduleFilter === "string" &&
-    ["scheduled", "today", "tomorrow", "thisweek", "all"].includes(
-      settings.storeScheduleFilter,
-    )
-      ? settings.storeScheduleFilter
-      : "scheduled";
+  state.storeScheduleFilter = "all";
   state.selectedRolesByStore =
     settings.selectedRolesByStore &&
     typeof settings.selectedRolesByStore === "object"
