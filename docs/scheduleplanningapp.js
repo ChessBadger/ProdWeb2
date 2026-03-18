@@ -1464,7 +1464,7 @@ function renderCrewHint() {
   }
 
   const selectedCount = state.selectedEmployees.size;
-  let message = `Schedule hint: crew size ${schedule.plannedCrewSize}.`;
+  let message = `Crew size ${schedule.plannedCrewSize}.`;
   let tone = "";
 
   if (selectedCount === 0) {
