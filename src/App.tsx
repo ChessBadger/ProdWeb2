@@ -112,6 +112,27 @@ const initialFilterState: FilterState = {
   showTop: true,
 };
 
+const normalizeFilterValue = (value: string) => value.trim().toLowerCase();
+
+const hasActiveTextFilter = (value: string) => {
+  const normalizedValue = normalizeFilterValue(value);
+  return normalizedValue !== "" && normalizedValue !== "all";
+};
+
+const matchesTypedFilter = (sourceValue: string, filterValue: string) =>
+  sourceValue.toLowerCase().includes(normalizeFilterValue(filterValue));
+
+const findExactFilterMatch = (filterValue: string, options: string[]) => {
+  const normalizedValue = normalizeFilterValue(filterValue);
+  if (!normalizedValue) {
+    return null;
+  }
+
+  return (
+    options.find((option) => option.toLowerCase() === normalizedValue) || null
+  );
+};
+
 const Logo = () => (
   <div className="text-center mb-8">
     <h1 className="text-4xl font-bold text-primary tracking-wider">BADGER</h1>
@@ -174,27 +195,51 @@ const Dashboard: React.FC = () => {
     setSelectedMetric("pieces");
   }, []);
 
+  const exactEmployeeMatch = useMemo(
+    () => findExactFilterMatch(filters.employee, uniqueValues.employees),
+    [filters.employee, uniqueValues.employees]
+  );
+
   const filteredData = useMemo(() => {
     if (!data) return [];
     let result = data;
     const now = new Date();
 
-    if (filters.office !== "all")
-      result = result.filter((d) => d.office === filters.office);
-
-    if (filters.account !== "all") {
-      const linkedAccounts = getLinkedAccounts(filters.account);
-      result = result.filter((d) =>
-        linkedAccounts.includes(d.account.toLowerCase())
-      );
+    if (hasActiveTextFilter(filters.office)) {
+      result = result.filter((d) => matchesTypedFilter(d.office, filters.office));
     }
 
-    if (filters.employee !== "all")
-      result = result.filter((d) => d.employee === filters.employee);
-    if (filters.store !== "all")
-      result = result.filter((d) => d.store === filters.store);
-    if (filters.supervisor !== "all")
-      result = result.filter((d) => d.supervisor === filters.supervisor);
+    if (hasActiveTextFilter(filters.account)) {
+      const exactAccountMatch = findExactFilterMatch(
+        filters.account,
+        uniqueValues.accounts
+      );
+
+      if (exactAccountMatch) {
+        const linkedAccounts = getLinkedAccounts(exactAccountMatch);
+        result = result.filter((d) =>
+          linkedAccounts.includes(d.account.toLowerCase())
+        );
+      } else {
+        result = result.filter((d) =>
+          matchesTypedFilter(d.account, filters.account)
+        );
+      }
+    }
+
+    if (hasActiveTextFilter(filters.employee)) {
+      result = result.filter((d) =>
+        matchesTypedFilter(d.employee, filters.employee)
+      );
+    }
+    if (hasActiveTextFilter(filters.store)) {
+      result = result.filter((d) => matchesTypedFilter(d.store, filters.store));
+    }
+    if (hasActiveTextFilter(filters.supervisor)) {
+      result = result.filter((d) =>
+        matchesTypedFilter(d.supervisor, filters.supervisor)
+      );
+    }
 
     switch (filters.timeframe) {
       case "custom":
@@ -227,29 +272,45 @@ const Dashboard: React.FC = () => {
         break;
     }
     return result;
-  }, [data, filters]);
+  }, [data, filters, uniqueValues.accounts]);
 
   const dataForAnomalyOverall = useMemo(() => {
     if (!data) return [];
     let result = data;
     const now = new Date();
 
-    if (filters.office !== "all")
-      result = result.filter((d) => d.office === filters.office);
+    if (hasActiveTextFilter(filters.office)) {
+      result = result.filter((d) => matchesTypedFilter(d.office, filters.office));
+    }
 
-    if (filters.account !== "all") {
-      const linkedAccounts = getLinkedAccounts(filters.account);
-      result = result.filter((d) =>
-        linkedAccounts.includes(d.account.toLowerCase())
+    if (hasActiveTextFilter(filters.account)) {
+      const exactAccountMatch = findExactFilterMatch(
+        filters.account,
+        uniqueValues.accounts
       );
+
+      if (exactAccountMatch) {
+        const linkedAccounts = getLinkedAccounts(exactAccountMatch);
+        result = result.filter((d) =>
+          linkedAccounts.includes(d.account.toLowerCase())
+        );
+      } else {
+        result = result.filter((d) =>
+          matchesTypedFilter(d.account, filters.account)
+        );
+      }
     }
 
     // Intentionally skip employee filter
 
-    if (filters.store !== "all")
-      result = result.filter((d) => d.store === filters.store);
-    if (filters.supervisor !== "all")
-      result = result.filter((d) => d.supervisor === filters.supervisor);
+    if (hasActiveTextFilter(filters.store)) {
+      result = result.filter((d) => matchesTypedFilter(d.store, filters.store));
+    }
+    if (hasActiveTextFilter(filters.supervisor)) {
+      result = result.filter((d) =>
+        matchesTypedFilter(d.supervisor, filters.supervisor)
+      );
+    }
 
     switch (filters.timeframe) {
       case "custom":
@@ -284,6 +345,7 @@ const Dashboard: React.FC = () => {
     return result;
   }, [
     data,
+    uniqueValues.accounts,
     filters.office,
     filters.account,
     filters.store,
@@ -352,13 +414,13 @@ const Dashboard: React.FC = () => {
         );
       case "trend":
         return (
-          <PerformanceTrendChart
-            data={filteredData}
-            overallData={dataForAnomalyOverall}
-            metric={selectedMetric}
-            employee={filters.employee}
-            isDarkMode={isDarkMode}
-          />
+            <PerformanceTrendChart
+              data={filteredData}
+              overallData={dataForAnomalyOverall}
+              metric={selectedMetric}
+              employee={exactEmployeeMatch || "all"}
+              isDarkMode={isDarkMode}
+            />
         );
       case "dayOfWeek":
         return (
@@ -521,7 +583,7 @@ const Dashboard: React.FC = () => {
           <>
             <div
               className={`grid grid-cols-1 sm:grid-cols-2 ${
-                filters.employee === "all" ? "lg:grid-cols-3" : "lg:grid-cols-2"
+                exactEmployeeMatch ? "lg:grid-cols-2" : "lg:grid-cols-3"
               } gap-6 mb-6`}
             >
               <KPI
@@ -529,7 +591,7 @@ const Dashboard: React.FC = () => {
                 value={kpiValues.avgMetric.toFixed(2)}
                 icon={<TrendingUpIcon className="h-6 w-6 text-primary" />}
               />
-              {filters.employee === "all" && (
+              {!exactEmployeeMatch && (
                 <KPI
                   title="Filtered Employees"
                   value={kpiValues.uniqueEmployees.toLocaleString()}

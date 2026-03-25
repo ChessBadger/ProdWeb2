@@ -28,13 +28,14 @@ const FilterSection: React.FC<{ title: string; children: React.ReactNode }> = ({
   </div>
 );
 
-const FilterSelect: React.FC<{
+const FilterTextInput: React.FC<{
   id: string;
   label: string;
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  onChange: (value: string) => void;
   options: string[];
-}> = ({ id, label, value, onChange, options }) => (
+  placeholder: string;
+}> = ({ id, label, value, onChange, options, placeholder }) => (
   <div>
     <label
       htmlFor={id}
@@ -42,19 +43,23 @@ const FilterSelect: React.FC<{
     >
       {label}
     </label>
-    <select
+    <input
+      type="text"
       id={id}
-      value={value}
-      onChange={onChange}
+      list={`${id}-options`}
+      value={value === "all" ? "" : value}
+      onChange={(e) =>
+        onChange(e.target.value.trim().length === 0 ? "all" : e.target.value)
+      }
+      placeholder={placeholder}
+      autoComplete="off"
       className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary sm:text-sm transition"
-    >
-      <option value="all">All</option>
+    />
+    <datalist id={`${id}-options`}>
       {options.map((opt) => (
-        <option key={opt} value={opt}>
-          {opt}
-        </option>
+        <option key={opt} value={opt} />
       ))}
-    </select>
+    </datalist>
   </div>
 );
 
@@ -176,40 +181,45 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
         </FilterSection>
 
         <FilterSection title="Data Filters">
-          <FilterSelect
+          <FilterTextInput
             id="employee-filter"
             label="Employee"
             value={filters.employee}
-            onChange={(e) => onFilterChange("employee", e.target.value)}
+            onChange={(value) => onFilterChange("employee", value)}
             options={uniqueValues.employees}
+            placeholder="Type an employee name"
           />
-          <FilterSelect
+          <FilterTextInput
             id="account-filter"
             label="Account Name"
             value={filters.account}
-            onChange={(e) => onFilterChange("account", e.target.value)}
+            onChange={(value) => onFilterChange("account", value)}
             options={uniqueValues.accounts}
+            placeholder="Type an account name"
           />
-          <FilterSelect
+          <FilterTextInput
             id="store-filter"
             label="Store"
             value={filters.store}
-            onChange={(e) => onFilterChange("store", e.target.value)}
+            onChange={(value) => onFilterChange("store", value)}
             options={uniqueValues.stores}
+            placeholder="Type a store"
           />
-          <FilterSelect
+          <FilterTextInput
             id="supervisor-filter"
             label="Supervisor"
             value={filters.supervisor}
-            onChange={(e) => onFilterChange("supervisor", e.target.value)}
+            onChange={(value) => onFilterChange("supervisor", value)}
             options={uniqueValues.supervisors}
+            placeholder="Type a supervisor"
           />
-          <FilterSelect
+          <FilterTextInput
             id="office-filter"
             label="Office"
             value={filters.office}
-            onChange={(e) => onFilterChange("office", e.target.value)}
+            onChange={(value) => onFilterChange("office", value)}
             options={uniqueValues.offices}
+            placeholder="Type an office"
           />
         </FilterSection>
 
