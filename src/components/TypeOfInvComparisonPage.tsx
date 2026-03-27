@@ -225,6 +225,19 @@ const TypeOfInvComparisonPage: React.FC<{
     [aggregatesByMember]
   );
 
+  const memberHasAllCompareBuckets = useMemo(
+    () => (member: string) => {
+      const byType = aggregatesByMember.get(member);
+      if (!byType) return false;
+
+      return compareBuckets.every((bucket) => {
+        const aggregate = byType.get(bucket);
+        return Boolean(aggregate && aggregate.count > 0);
+      });
+    },
+    [aggregatesByMember, compareBuckets]
+  );
+
   useEffect(() => {
     if (selectedMember !== "all" && !availableMembers.includes(selectedMember)) {
       setSelectedMember("all");
@@ -237,6 +250,18 @@ const TypeOfInvComparisonPage: React.FC<{
     const cappedTopN = Math.max(1, Math.min(topN, 25));
     return memberAverages.slice(0, cappedTopN).map((row) => row.member);
   }, [selectedMember, topN, memberAverages]);
+
+  const displayedChartMembers = useMemo(() => {
+    if (selectedMember !== "all") return displayedMembers;
+    if (breakdownBy !== "store") return displayedMembers;
+
+    return displayedMembers.filter(memberHasAllCompareBuckets);
+  }, [
+    selectedMember,
+    breakdownBy,
+    displayedMembers,
+    memberHasAllCompareBuckets,
+  ]);
 
   const buildComparisonRows = (members: string[]) => {
     return members.map((member) => {
@@ -265,8 +290,8 @@ const TypeOfInvComparisonPage: React.FC<{
   };
 
   const chartRows = useMemo(
-    () => buildComparisonRows(displayedMembers),
-    [displayedMembers, aggregatesByMember, compareBuckets]
+    () => buildComparisonRows(displayedChartMembers),
+    [displayedChartMembers, aggregatesByMember, compareBuckets]
   );
 
   const tableRows = useMemo(
