@@ -16,38 +16,43 @@ import { METRIC_OPTIONS, getAccountGroupLabel } from "../constants";
 import { EmployeeRecord, Metric } from "../types";
 import { SortAscIcon, SortDescIcon } from "./icons/Icons";
 import {
+  Aggregate,
   BAR_COLORS,
   ChartRow,
   GraphTab,
   MAX_SELECTED_ENTITIES,
-  TableSortKey,
   TIMEFRAME_OPTIONS,
+  TableSortKey,
   Timeframe,
-  Aggregate,
   areArraysEqual,
   filterByTimeframe,
   getDiffStats,
 } from "./comparisonShared";
 
-type CompareDimension = "account" | "store";
-type BreakdownDimension = "employee" | "supervisor";
+type BreakdownDimension = "store" | "employee" | "supervisor" | "account";
 
-const ProductionComparisonPage: React.FC<{
+const BREAKDOWN_LABELS: Record<BreakdownDimension, string> = {
+  store: "Store",
+  employee: "Employee",
+  supervisor: "Group",
+  account: "Account",
+};
+
+const TypeOfInvComparisonPage: React.FC<{
   data: EmployeeRecord[];
   isDarkMode: boolean;
 }> = ({ data, isDarkMode }) => {
-  const [compareBy, setCompareBy] = useState<CompareDimension>("account");
-  const [breakdownBy, setBreakdownBy] = useState<BreakdownDimension>(
-    "employee"
-  );
+  const [breakdownBy, setBreakdownBy] =
+    useState<BreakdownDimension>("store");
   const [metric, setMetric] = useState<Metric>("pieces");
   const [timeframe, setTimeframe] = useState<Timeframe>("last180");
   const [office, setOffice] = useState("all");
+  const [selectedAccount, setSelectedAccount] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [specificDate, setSpecificDate] = useState("");
-  const [selectedEntities, setSelectedEntities] = useState<string[]>([]);
-  const [entitySearch, setEntitySearch] = useState("");
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [typeSearch, setTypeSearch] = useState("");
   const [selectedMember, setSelectedMember] = useState("all");
   const [topN, setTopN] = useState(8);
   const [activeGraphTab, setActiveGraphTab] = useState<GraphTab>("overall");
@@ -55,16 +60,16 @@ const ProductionComparisonPage: React.FC<{
   const [tableSortOrder, setTableSortOrder] = useState<"asc" | "desc">("asc");
 
   const handleClearCompareFilters = () => {
-    setCompareBy("account");
-    setBreakdownBy("employee");
+    setBreakdownBy("store");
     setMetric("pieces");
     setTimeframe("last180");
     setOffice("all");
+    setSelectedAccount("");
     setStartDate("");
     setEndDate("");
     setSpecificDate("");
-    setSelectedEntities([]);
-    setEntitySearch("");
+    setSelectedTypes([]);
+    setTypeSearch("");
     setSelectedMember("all");
     setTopN(8);
     setActiveGraphTab("overall");
@@ -74,9 +79,7 @@ const ProductionComparisonPage: React.FC<{
 
   const metricLabel =
     METRIC_OPTIONS.find((option) => option.value === metric)?.label || "Metric";
-  const compareLabel = compareBy === "account" ? "Account" : "Store";
-  const breakdownLabel =
-    breakdownBy === "employee" ? "Employee" : "Supervisor Group";
+  const breakdownLabel = BREAKDOWN_LABELS[breakdownBy];
 
   const timeframeFilteredData = useMemo(
     () => filterByTimeframe(data, timeframe, startDate, endDate, specificDate),
@@ -94,118 +97,175 @@ const ProductionComparisonPage: React.FC<{
     return timeframeFilteredData.filter((record) => record.office === office);
   }, [timeframeFilteredData, office]);
 
-  const getComparisonEntity = useMemo(
-    () => (record: EmployeeRecord) =>
-      compareBy === "account"
-        ? getAccountGroupLabel(record.account)
-        : record.store,
-    [compareBy]
+  const accountOptions = useMemo(() => {
+    const accountTypeMap = new Map<string, Set<string>>();
+
+    officeFilteredData.forEach((record) => {
+      const accountLabel = getAccountGroupLabel(record.account);
+      let typeSet = accountTypeMap.get(accountLabel);
+      if (!typeSet) {
+        typeSet = new Set<string>();
+        accountTypeMap.set(accountLabel, typeSet);
+      }
+      typeSet.add(record.typeOfInv);
+    });
+
+    return Array.from(accountTypeMap.entries())
+      .map(([accountLabel, typeSet]) => ({
+        accountLabel,
+        typeCount: typeSet.size,
+      }))
+      .sort(
+        (a, b) =>
+          b.typeCount - a.typeCount ||
+          a.accountLabel.localeCompare(b.accountLabel)
+      );
+  }, [officeFilteredData]);
+
+  const eligibleAccountCount = useMemo(
+    () => accountOptions.filter((option) => option.typeCount > 1).length,
+    [accountOptions]
   );
 
-  const availableEntities = useMemo(() => {
-    const values = new Set<string>();
-    officeFilteredData.forEach((record) =>
-      values.add(getComparisonEntity(record))
-    );
-    return Array.from(values).sort((a, b) => a.localeCompare(b));
-  }, [officeFilteredData, getComparisonEntity]);
+  const selectedAccountOption = useMemo(
+    () =>
+      accountOptions.find((option) => option.accountLabel === selectedAccount) ??
+      null,
+    [accountOptions, selectedAccount]
+  );
 
   useEffect(() => {
-    setSelectedEntities((previous) => {
-      const stillValid = previous.filter((entity) => availableEntities.includes(entity));
+    if (
+      selectedAccount &&
+      !accountOptions.some((option) => option.accountLabel === selectedAccount)
+    ) {
+      setSelectedAccount("");
+    }
+  }, [accountOptions, selectedAccount]);
+
+  const accountScopedData = useMemo(() => {
+    if (!selectedAccount) return [];
+    return officeFilteredData.filter(
+      (record) => getAccountGroupLabel(record.account) === selectedAccount
+    );
+  }, [officeFilteredData, selectedAccount]);
+
+  const availableTypes = useMemo(() => {
+    const values = new Set<string>();
+    accountScopedData.forEach((record) => values.add(record.typeOfInv));
+    return Array.from(values).sort((a, b) => a.localeCompare(b));
+  }, [accountScopedData]);
+
+  useEffect(() => {
+    setSelectedTypes((previous) => {
+      const stillValid = previous.filter((type) => availableTypes.includes(type));
+
+      if (stillValid.length === 0 && availableTypes.length > 0) {
+        return availableTypes.slice(0, MAX_SELECTED_ENTITIES);
+      }
+
       if (areArraysEqual(previous, stillValid)) return previous;
       return stillValid;
     });
-  }, [availableEntities]);
+  }, [availableTypes]);
 
-  const filteredEntitySuggestions = useMemo(() => {
-    const search = entitySearch.trim().toLowerCase();
+  const filteredTypeSuggestions = useMemo(() => {
+    const search = typeSearch.trim().toLowerCase();
 
-    return availableEntities
-      .filter((entity) => !selectedEntities.includes(entity))
-      .filter(
-        (entity) => !search || entity.toLowerCase().includes(search)
-      )
+    return availableTypes
+      .filter((type) => !selectedTypes.includes(type))
+      .filter((type) => !search || type.toLowerCase().includes(search))
       .slice(0, 12);
-  }, [availableEntities, selectedEntities, entitySearch]);
+  }, [availableTypes, selectedTypes, typeSearch]);
 
-  const addEntity = (entity: string) => {
-    setSelectedEntities((previous) => {
-      if (previous.includes(entity)) return previous;
+  const addType = (type: string) => {
+    setSelectedTypes((previous) => {
+      if (previous.includes(type)) return previous;
       if (previous.length >= MAX_SELECTED_ENTITIES) return previous;
-      return [...previous, entity];
+      return [...previous, type];
     });
-    setEntitySearch("");
+    setTypeSearch("");
   };
 
-  const removeEntity = (entity: string) => {
-    setSelectedEntities((previous) =>
-      previous.filter((item) => item !== entity)
-    );
+  const removeType = (type: string) => {
+    setSelectedTypes((previous) => previous.filter((item) => item !== type));
   };
 
   const handleAddFromSearch = () => {
-    if (selectedEntities.length >= MAX_SELECTED_ENTITIES) return;
+    if (selectedTypes.length >= MAX_SELECTED_ENTITIES) return;
 
-    const search = entitySearch.trim().toLowerCase();
+    const search = typeSearch.trim().toLowerCase();
     if (!search) return;
 
-    const exactMatch = availableEntities.find(
-      (entity) =>
-        entity.toLowerCase() === search && !selectedEntities.includes(entity)
+    const exactMatch = availableTypes.find(
+      (type) => type.toLowerCase() === search && !selectedTypes.includes(type)
     );
     if (exactMatch) {
-      addEntity(exactMatch);
+      addType(exactMatch);
       return;
     }
 
-    const firstSuggestion = filteredEntitySuggestions[0];
-    if (firstSuggestion) addEntity(firstSuggestion);
+    const firstSuggestion = filteredTypeSuggestions[0];
+    if (firstSuggestion) addType(firstSuggestion);
   };
 
-  const selectedEntitySet = useMemo(
-    () => new Set(selectedEntities),
-    [selectedEntities]
+  const selectedTypeSet = useMemo(
+    () => new Set(selectedTypes),
+    [selectedTypes]
   );
 
   const scopedData = useMemo(
     () =>
-      officeFilteredData.filter((record) =>
-        selectedEntitySet.has(getComparisonEntity(record))
-      ),
-    [officeFilteredData, selectedEntitySet, getComparisonEntity]
+      accountScopedData.filter((record) => selectedTypeSet.has(record.typeOfInv)),
+    [accountScopedData, selectedTypeSet]
+  );
+
+  const getBreakdownMember = useMemo(
+    () => (record: EmployeeRecord) => {
+      switch (breakdownBy) {
+        case "store":
+          return record.store;
+        case "employee":
+          return record.employee;
+        case "supervisor":
+          return record.supervisor;
+        case "account":
+          return record.account;
+      }
+    },
+    [breakdownBy]
   );
 
   const aggregatesByMember = useMemo(() => {
     const byMember = new Map<string, Map<string, Aggregate>>();
 
     scopedData.forEach((record) => {
-      const memberKey = record[breakdownBy];
-      const entityKey = getComparisonEntity(record);
+      const memberKey = getBreakdownMember(record);
+      const typeKey = record.typeOfInv;
 
-      let byEntity = byMember.get(memberKey);
-      if (!byEntity) {
-        byEntity = new Map<string, Aggregate>();
-        byMember.set(memberKey, byEntity);
+      let byType = byMember.get(memberKey);
+      if (!byType) {
+        byType = new Map<string, Aggregate>();
+        byMember.set(memberKey, byType);
       }
 
-      const current = byEntity.get(entityKey) ?? { total: 0, count: 0 };
-      byEntity.set(entityKey, {
+      const current = byType.get(typeKey) ?? { total: 0, count: 0 };
+      byType.set(typeKey, {
         total: current.total + record[metric],
         count: current.count + 1,
       });
     });
 
     return byMember;
-  }, [scopedData, breakdownBy, getComparisonEntity, metric]);
+  }, [scopedData, getBreakdownMember, metric]);
 
   const memberAverages = useMemo(() => {
     const rows = Array.from(aggregatesByMember.entries()).map(
-      ([member, byEntity]) => {
+      ([member, byType]) => {
         let total = 0;
         let count = 0;
 
-        byEntity.forEach((aggregate) => {
+        byType.forEach((aggregate) => {
           total += aggregate.total;
           count += aggregate.count;
         });
@@ -239,18 +299,18 @@ const ProductionComparisonPage: React.FC<{
   const buildComparisonRows = (members: string[]) => {
     return members.map((member) => {
       const row: ChartRow = { label: member, delta: null, percentDiff: null };
-      const byEntity = aggregatesByMember.get(member);
+      const byType = aggregatesByMember.get(member);
       const numericValues: number[] = [];
 
-      selectedEntities.forEach((entity) => {
-        const aggregate = byEntity?.get(entity);
+      selectedTypes.forEach((type) => {
+        const aggregate = byType?.get(type);
         if (!aggregate || aggregate.count === 0) {
-          row[entity] = null;
+          row[type] = null;
           return;
         }
 
         const average = aggregate.total / aggregate.count;
-        row[entity] = average;
+        row[type] = average;
         numericValues.push(average);
       });
 
@@ -264,38 +324,38 @@ const ProductionComparisonPage: React.FC<{
 
   const chartRows = useMemo(
     () => buildComparisonRows(displayedMembers),
-    [displayedMembers, aggregatesByMember, selectedEntities]
+    [displayedMembers, aggregatesByMember, selectedTypes]
   );
 
   const tableRows = useMemo(
     () => buildComparisonRows(availableMembers),
-    [availableMembers, aggregatesByMember, selectedEntities]
+    [availableMembers, aggregatesByMember, selectedTypes]
   );
 
-  const entitySummary = useMemo(() => {
+  const typeSummary = useMemo(() => {
     const totals = new Map<string, Aggregate>();
 
     scopedData.forEach((record) => {
-      const entityKey = getComparisonEntity(record);
-      const current = totals.get(entityKey) ?? { total: 0, count: 0 };
-      totals.set(entityKey, {
+      const current = totals.get(record.typeOfInv) ?? { total: 0, count: 0 };
+      totals.set(record.typeOfInv, {
         total: current.total + record[metric],
         count: current.count + 1,
       });
     });
 
-    return selectedEntities
-      .map((entity) => {
-        const aggregate = totals.get(entity);
+    return selectedTypes
+      .map((type) => {
+        const aggregate = totals.get(type);
         if (!aggregate || aggregate.count === 0) {
           return {
-            entity,
+            entity: type,
             average: null as number | null,
             count: 0,
           };
         }
+
         return {
-          entity,
+          entity: type,
           average: aggregate.total / aggregate.count,
           count: aggregate.count,
         };
@@ -305,32 +365,34 @@ const ProductionComparisonPage: React.FC<{
         const bValue = b.average ?? Number.NEGATIVE_INFINITY;
         return bValue - aValue;
       });
-  }, [scopedData, getComparisonEntity, metric, selectedEntities]);
+  }, [scopedData, metric, selectedTypes]);
 
-  const bestEntity = entitySummary.find((row) => row.average !== null) ?? null;
-  const hasEnoughEntities = selectedEntities.length >= 2;
-  const hasSelectedEntities = selectedEntities.length > 0;
+  const bestType = typeSummary.find((row) => row.average !== null) ?? null;
+  const hasEnoughTypes = selectedTypes.length >= 2;
+  const hasSelectedTypes = selectedTypes.length > 0;
+  const selectedAccountHasMultipleTypes =
+    (selectedAccountOption?.typeCount ?? 0) >= 2;
 
   const overallComparisonData = useMemo(
     () =>
-      entitySummary.map((row) => ({
+      typeSummary.map((row) => ({
         entity: row.entity,
         average: row.average,
       })),
-    [entitySummary]
+    [typeSummary]
   );
 
   const overallComparisonStats = useMemo(() => {
-    const values = entitySummary
+    const values = typeSummary
       .map((row) => row.average)
       .filter((value): value is number => value !== null);
 
     return getDiffStats(values);
-  }, [entitySummary]);
+  }, [typeSummary]);
 
-  const entitySummaryMap = useMemo(
-    () => new Map(entitySummary.map((row) => [row.entity, row])),
-    [entitySummary]
+  const typeSummaryMap = useMemo(
+    () => new Map(typeSummary.map((row) => [row.entity, row])),
+    [typeSummary]
   );
 
   const totalTableRow = useMemo(() => {
@@ -341,9 +403,9 @@ const ProductionComparisonPage: React.FC<{
     };
     const numericValues: number[] = [];
 
-    selectedEntities.forEach((entity) => {
-      const average = entitySummaryMap.get(entity)?.average ?? null;
-      row[entity] = average;
+    selectedTypes.forEach((type) => {
+      const average = typeSummaryMap.get(type)?.average ?? null;
+      row[type] = average;
 
       if (typeof average === "number") {
         numericValues.push(average);
@@ -355,29 +417,29 @@ const ProductionComparisonPage: React.FC<{
     row.percentDiff = diffStats.percentDiff;
 
     return row;
-  }, [selectedEntities, entitySummaryMap]);
+  }, [selectedTypes, typeSummaryMap]);
 
-  const entityColorMap = useMemo(() => {
+  const typeColorMap = useMemo(() => {
     const colorMap = new Map<string, string>();
-    selectedEntities.forEach((entity, index) => {
-      colorMap.set(entity, BAR_COLORS[index % BAR_COLORS.length]);
+    selectedTypes.forEach((type, index) => {
+      colorMap.set(type, BAR_COLORS[index % BAR_COLORS.length]);
     });
     return colorMap;
-  }, [selectedEntities]);
+  }, [selectedTypes]);
 
   const trendData = useMemo(() => {
     const byMonth = new Map<string, Map<string, Aggregate>>();
 
     scopedData.forEach((record) => {
       const month = record.date.substring(0, 7);
-      const entity = getComparisonEntity(record);
 
       if (!byMonth.has(month)) {
         byMonth.set(month, new Map<string, Aggregate>());
       }
+
       const monthMap = byMonth.get(month)!;
-      const current = monthMap.get(entity) ?? { total: 0, count: 0 };
-      monthMap.set(entity, {
+      const current = monthMap.get(record.typeOfInv) ?? { total: 0, count: 0 };
+      monthMap.set(record.typeOfInv, {
         total: current.total + record[metric],
         count: current.count + 1,
       });
@@ -389,9 +451,9 @@ const ProductionComparisonPage: React.FC<{
         const row: { [key: string]: string | number | null } = { date: month };
         const monthMap = byMonth.get(month);
 
-        selectedEntities.forEach((entity) => {
-          const aggregate = monthMap?.get(entity);
-          row[entity] =
+        selectedTypes.forEach((type) => {
+          const aggregate = monthMap?.get(type);
+          row[type] =
             aggregate && aggregate.count > 0
               ? aggregate.total / aggregate.count
               : null;
@@ -399,14 +461,14 @@ const ProductionComparisonPage: React.FC<{
 
         return row;
       });
-  }, [scopedData, getComparisonEntity, metric, selectedEntities]);
+  }, [scopedData, metric, selectedTypes]);
 
   const hasTrendData = useMemo(
     () =>
       trendData.some((point) =>
-        selectedEntities.some((entity) => typeof point[entity] === "number")
+        selectedTypes.some((type) => typeof point[type] === "number")
       ),
-    [trendData, selectedEntities]
+    [trendData, selectedTypes]
   );
 
   const handleTableSort = (key: TableSortKey) => {
@@ -461,21 +523,33 @@ const ProductionComparisonPage: React.FC<{
   const tickColor = isDarkMode ? "#94a3b8" : "#64748b";
   const gridColor = isDarkMode ? "#334155" : "#e2e8f0";
 
+  const renderSortIndicator = (key: TableSortKey) => {
+    if (tableSortKey !== key) return null;
+    return tableSortOrder === "asc" ? <SortAscIcon /> : <SortDescIcon />;
+  };
+
+  const sortableHeaderClass =
+    "px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 cursor-pointer hover:text-slate-700 dark:hover:text-slate-300";
+  const firstSortableHeaderClass =
+    "px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 cursor-pointer hover:text-slate-700 dark:hover:text-slate-300";
+
   return (
     <div className="space-y-6">
       <section className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4 sm:p-6">
         <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
           <div>
             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-              Compare Production
+              Compare TypeOfInv
             </h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Compare selected accounts or stores by employee or supervisor
-              group averages.
+              Pick one account, then compare its inventory types by store,
+              employee, group, or underlying account.
             </p>
           </div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-            Select 2 to {MAX_SELECTED_ENTITIES} {compareBy}s
+            {selectedAccount
+              ? `${availableTypes.length} types found`
+              : `${eligibleAccountCount} multi-type accounts in scope`}
           </p>
         </div>
 
@@ -491,16 +565,19 @@ const ProductionComparisonPage: React.FC<{
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-4">
           <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-            Compare
+            Account
             <select
-              value={compareBy}
-              onChange={(event) =>
-                setCompareBy(event.target.value as CompareDimension)
-              }
+              value={selectedAccount}
+              onChange={(event) => setSelectedAccount(event.target.value)}
               className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm"
             >
-              <option value="account">Accounts</option>
-              <option value="store">Stores</option>
+              <option value="">Select an account</option>
+              {accountOptions.map((option) => (
+                <option key={option.accountLabel} value={option.accountLabel}>
+                  {option.accountLabel} ({option.typeCount}{" "}
+                  {option.typeCount === 1 ? "type" : "types"})
+                </option>
+              ))}
             </select>
           </label>
 
@@ -513,8 +590,10 @@ const ProductionComparisonPage: React.FC<{
               }
               className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm"
             >
+              <option value="store">Store</option>
               <option value="employee">Employee</option>
-              <option value="supervisor">Supervisor Group</option>
+              <option value="supervisor">Group</option>
+              <option value="account">Account</option>
             </select>
           </label>
 
@@ -641,28 +720,34 @@ const ProductionComparisonPage: React.FC<{
 
         <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
           <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">
-            Search and Add {compareBy === "account" ? "Accounts" : "Stores"}
+            Search and Add TypeOfInv Values
           </p>
           <div className="flex gap-2">
             <input
               type="text"
-              value={entitySearch}
-              onChange={(event) => setEntitySearch(event.target.value)}
+              value={typeSearch}
+              onChange={(event) => setTypeSearch(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === "Enter") {
                   event.preventDefault();
                   handleAddFromSearch();
                 }
               }}
-              placeholder={`Search ${compareBy} name...`}
-              className="flex-1 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm"
+              placeholder={
+                selectedAccount
+                  ? "Search TypeOfInv..."
+                  : "Select an account first..."
+              }
+              disabled={!selectedAccount}
+              className="flex-1 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm disabled:opacity-60"
             />
             <button
               type="button"
               onClick={handleAddFromSearch}
               disabled={
-                selectedEntities.length >= MAX_SELECTED_ENTITIES ||
-                entitySearch.trim().length === 0
+                !selectedAccount ||
+                selectedTypes.length >= MAX_SELECTED_ENTITIES ||
+                typeSearch.trim().length === 0
               }
               className="px-3 py-2 text-sm font-semibold rounded-md bg-primary text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -671,36 +756,55 @@ const ProductionComparisonPage: React.FC<{
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
-            {selectedEntities.map((entity) => (
+            {selectedTypes.map((type) => (
               <button
-                key={`selected-${entity}`}
+                key={`selected-${type}`}
                 type="button"
-                onClick={() => removeEntity(entity)}
+                onClick={() => removeType(type)}
                 className="inline-flex items-center gap-2 rounded-full border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200"
               >
-                {entity}
+                {type}
                 <span aria-hidden="true">x</span>
               </button>
             ))}
           </div>
 
           <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-            Click a selected item to remove it.
+            Click a selected type to remove it.
           </div>
 
           <div className="mt-3 max-h-48 overflow-y-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-            {filteredEntitySuggestions.map((entity) => (
+            {filteredTypeSuggestions.map((type) => (
               <button
-                key={`suggestion-${entity}`}
+                key={`suggestion-${type}`}
                 type="button"
-                onClick={() => addEntity(entity)}
-                disabled={selectedEntities.length >= MAX_SELECTED_ENTITIES}
+                onClick={() => addType(type)}
+                disabled={selectedTypes.length >= MAX_SELECTED_ENTITIES}
                 className="text-left rounded-md border border-slate-200 dark:border-slate-700 px-2 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {entity}
+                {type}
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="mt-4">
+          {!selectedAccount ? (
+            <div className="rounded-md border border-slate-200 dark:border-slate-700 px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
+              Select an account to compare its TypeOfInv history.
+            </div>
+          ) : !selectedAccountHasMultipleTypes ? (
+            <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+              {selectedAccount} currently has only{" "}
+              {selectedAccountOption?.typeCount ?? 0} TypeOfInv value in this
+              scope.
+            </div>
+          ) : (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
+              Comparing {availableTypes.length} TypeOfInv values for{" "}
+              {selectedAccount}.
+            </div>
+          )}
         </div>
       </section>
 
@@ -716,7 +820,7 @@ const ProductionComparisonPage: React.FC<{
 
         <div
           role="group"
-          aria-label="Comparison graph tabs"
+          aria-label="TypeOfInv comparison graph tabs"
           className="inline-flex rounded-md shadow-sm mb-4"
         >
           <button
@@ -756,20 +860,29 @@ const ProductionComparisonPage: React.FC<{
 
         {activeGraphTab === "overall" && (
           <>
-            {bestEntity && (
+            {bestType && (
               <p className="mb-4 text-sm font-medium text-slate-600 dark:text-slate-300">
-                Best overall {compareLabel.toLowerCase()}:{" "}
+                Best overall TypeOfInv:{" "}
                 <span className="text-slate-800 dark:text-slate-100">
-                  {bestEntity.entity}
+                  {bestType.entity}
                 </span>{" "}
-                ({bestEntity.average!.toFixed(2)} avg/hr{" "}
+                ({bestType.average!.toFixed(2)} avg/hr{" "}
                 {metricLabel.toLowerCase()})
               </p>
             )}
 
-            {!hasEnoughEntities ? (
+            {!selectedAccount ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                Select at least two {compareBy}s to run comparisons.
+                Select an account to start comparing TypeOfInv values.
+              </div>
+            ) : !selectedAccountHasMultipleTypes ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                This account does not have enough TypeOfInv history to compare
+                in the current scope.
+              </div>
+            ) : !hasEnoughTypes ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                Select at least two TypeOfInv values to run comparisons.
               </div>
             ) : overallComparisonData.every((row) => row.average === null) ? (
               <div className="rounded-md border border-slate-200 dark:border-slate-700 px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
@@ -790,11 +903,11 @@ const ProductionComparisonPage: React.FC<{
                       dataKey="entity"
                       tick={{ fontSize: 12, fill: tickColor }}
                       interval={0}
-                      angle={overallComparisonData.length > 6 ? -20 : 0}
+                      angle={overallComparisonData.length > 4 ? -20 : 0}
                       textAnchor={
-                        overallComparisonData.length > 6 ? "end" : "middle"
+                        overallComparisonData.length > 4 ? "end" : "middle"
                       }
-                      height={overallComparisonData.length > 6 ? 70 : 50}
+                      height={overallComparisonData.length > 4 ? 70 : 50}
                     />
                     <YAxis tick={{ fontSize: 12, fill: tickColor }} />
                     <Tooltip
@@ -812,15 +925,12 @@ const ProductionComparisonPage: React.FC<{
                     <Legend
                       wrapperStyle={{ fontSize: "14px", color: tickColor }}
                     />
-                    <Bar
-                      dataKey="average"
-                      name={`Avg/HR ${metricLabel}`}
-                    >
+                    <Bar dataKey="average" name={`Avg/HR ${metricLabel}`}>
                       {overallComparisonData.map((row, index) => (
                         <Cell
                           key={`overall-cell-${row.entity}`}
                           fill={
-                            entityColorMap.get(row.entity) ??
+                            typeColorMap.get(row.entity) ??
                             BAR_COLORS[index % BAR_COLORS.length]
                           }
                         />
@@ -833,7 +943,7 @@ const ProductionComparisonPage: React.FC<{
 
             {typeof overallComparisonStats.delta === "number" && (
               <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">
-                Avg/hr delta across selected {compareBy}s:{" "}
+                Avg/hr delta across selected TypeOfInv values:{" "}
                 {overallComparisonStats.delta.toFixed(2)}
                 {typeof overallComparisonStats.percentDiff === "number"
                   ? ` (${overallComparisonStats.percentDiff.toFixed(2)}%)`
@@ -848,9 +958,18 @@ const ProductionComparisonPage: React.FC<{
             <p className="mb-4 text-sm font-medium text-slate-600 dark:text-slate-300">
               {metricLabel} breakdown by {breakdownLabel.toLowerCase()}.
             </p>
-            {!hasEnoughEntities ? (
+            {!selectedAccount ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                Select at least two {compareBy}s to run comparisons.
+                Select an account to start comparing TypeOfInv values.
+              </div>
+            ) : !selectedAccountHasMultipleTypes ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                This account does not have enough TypeOfInv history to compare
+                in the current scope.
+              </div>
+            ) : !hasEnoughTypes ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                Select at least two TypeOfInv values to run comparisons.
               </div>
             ) : chartRows.length === 0 ? (
               <div className="rounded-md border border-slate-200 dark:border-slate-700 px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
@@ -890,11 +1009,11 @@ const ProductionComparisonPage: React.FC<{
                     <Legend
                       wrapperStyle={{ fontSize: "14px", color: tickColor }}
                     />
-                    {selectedEntities.map((entity, index) => (
+                    {selectedTypes.map((type, index) => (
                       <Bar
-                        key={entity}
-                        dataKey={entity}
-                        name={entity}
+                        key={type}
+                        dataKey={type}
+                        name={type}
                         fill={BAR_COLORS[index % BAR_COLORS.length]}
                       />
                     ))}
@@ -908,11 +1027,20 @@ const ProductionComparisonPage: React.FC<{
         {activeGraphTab === "trend" && (
           <>
             <p className="mb-4 text-sm font-medium text-slate-600 dark:text-slate-300">
-              Monthly avg/hr trend with one line per selected {compareBy}.
+              Monthly avg/hr trend with one line per selected TypeOfInv value.
             </p>
-            {!hasSelectedEntities ? (
+            {!selectedAccount ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                Select at least one {compareBy} to view trend data.
+                Select an account to start comparing TypeOfInv values.
+              </div>
+            ) : !selectedAccountHasMultipleTypes ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                This account does not have enough TypeOfInv history to compare
+                in the current scope.
+              </div>
+            ) : !hasSelectedTypes ? (
+              <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
+                Select at least one TypeOfInv value to view trend data.
               </div>
             ) : !hasTrendData ? (
               <div className="rounded-md border border-slate-200 dark:border-slate-700 px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
@@ -926,7 +1054,10 @@ const ProductionComparisonPage: React.FC<{
                     margin={{ top: 5, right: 20, left: -10, bottom: 20 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-                    <XAxis dataKey="date" tick={{ fontSize: 12, fill: tickColor }} />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fontSize: 12, fill: tickColor }}
+                    />
                     <YAxis tick={{ fontSize: 12, fill: tickColor }} />
                     <Tooltip
                       formatter={(value: number | string | null) => [
@@ -942,13 +1073,15 @@ const ProductionComparisonPage: React.FC<{
                         color: isDarkMode ? "#e2e8f0" : "#1e293b",
                       }}
                     />
-                    <Legend wrapperStyle={{ fontSize: "14px", color: tickColor }} />
-                    {selectedEntities.map((entity, index) => (
+                    <Legend
+                      wrapperStyle={{ fontSize: "14px", color: tickColor }}
+                    />
+                    {selectedTypes.map((type, index) => (
                       <Line
-                        key={`trend-${entity}`}
+                        key={`trend-${type}`}
                         type="monotone"
-                        dataKey={entity}
-                        name={entity}
+                        dataKey={type}
+                        name={type}
                         stroke={BAR_COLORS[index % BAR_COLORS.length]}
                         strokeWidth={2}
                         dot={false}
@@ -968,22 +1101,6 @@ const ProductionComparisonPage: React.FC<{
           Side-by-Side Comparison Table
         </h3>
         <div className="overflow-x-auto">
-          {(() => {
-            const renderSortIndicator = (key: TableSortKey) => {
-              if (tableSortKey !== key) return null;
-              return tableSortOrder === "asc" ? (
-                <SortAscIcon />
-              ) : (
-                <SortDescIcon />
-              );
-            };
-
-            const sortableHeaderClass =
-              "px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 cursor-pointer hover:text-slate-700 dark:hover:text-slate-300";
-            const firstSortableHeaderClass =
-              "px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-500 dark:text-slate-400 cursor-pointer hover:text-slate-700 dark:hover:text-slate-300";
-
-            return (
           <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
             <thead className="bg-slate-50 dark:bg-slate-700/50">
               <tr>
@@ -996,15 +1113,15 @@ const ProductionComparisonPage: React.FC<{
                     {renderSortIndicator("label")}
                   </div>
                 </th>
-                {selectedEntities.map((entity) => (
+                {selectedTypes.map((type) => (
                   <th
-                    key={`header-${entity}`}
+                    key={`header-${type}`}
                     className={sortableHeaderClass}
-                    onClick={() => handleTableSort(`entity:${entity}`)}
+                    onClick={() => handleTableSort(`entity:${type}`)}
                   >
                     <div className="flex items-center justify-end gap-1">
-                      {entity}
-                      {renderSortIndicator(`entity:${entity}`)}
+                      {type}
+                      {renderSortIndicator(`entity:${type}`)}
                     </div>
                   </th>
                 ))}
@@ -1029,10 +1146,10 @@ const ProductionComparisonPage: React.FC<{
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-              {selectedEntities.length === 0 ? (
+              {selectedTypes.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={selectedEntities.length + 3}
+                    colSpan={selectedTypes.length + 3}
                     className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400"
                   >
                     No rows to display.
@@ -1044,11 +1161,11 @@ const ProductionComparisonPage: React.FC<{
                     <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
                       {totalTableRow.label}
                     </td>
-                    {selectedEntities.map((entity) => {
-                      const value = totalTableRow[entity];
+                    {selectedTypes.map((type) => {
+                      const value = totalTableRow[type];
                       return (
                         <td
-                          key={`total-${entity}`}
+                          key={`total-${type}`}
                           className="px-4 py-3 text-right text-sm font-semibold text-slate-700 dark:text-slate-200"
                         >
                           {typeof value === "number" ? value.toFixed(2) : "-"}
@@ -1075,11 +1192,11 @@ const ProductionComparisonPage: React.FC<{
                       <td className="px-4 py-3 text-sm font-medium text-slate-800 dark:text-slate-200">
                         {row.label}
                       </td>
-                      {selectedEntities.map((entity) => {
-                        const value = row[entity];
+                      {selectedTypes.map((type) => {
+                        const value = row[type];
                         return (
                           <td
-                            key={`${row.label}-${entity}`}
+                            key={`${row.label}-${type}`}
                             className="px-4 py-3 text-right text-sm text-slate-600 dark:text-slate-300"
                           >
                             {typeof value === "number" ? value.toFixed(2) : "-"}
@@ -1102,17 +1219,14 @@ const ProductionComparisonPage: React.FC<{
               )}
             </tbody>
           </table>
-            );
-          })()}
         </div>
 
-        {entitySummary.length > 0 && (
+        {typeSummary.length > 0 && (
           <div className="mt-4 text-sm text-slate-600 dark:text-slate-300">
-            {entitySummary.map((row) => (
+            {typeSummary.map((row) => (
               <p key={`summary-${row.entity}`}>
-                {row.entity}:{" "}
-                {row.average === null ? "-" : row.average.toFixed(2)} avg/hr{" "}
-                {metricLabel.toLowerCase()} ({row.count.toLocaleString()}{" "}
+                {row.entity}: {row.average === null ? "-" : row.average.toFixed(2)}{" "}
+                avg/hr {metricLabel.toLowerCase()} ({row.count.toLocaleString()}{" "}
                 records)
               </p>
             ))}
@@ -1123,4 +1237,4 @@ const ProductionComparisonPage: React.FC<{
   );
 };
 
-export default ProductionComparisonPage;
+export default TypeOfInvComparisonPage;

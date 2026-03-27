@@ -309,7 +309,6 @@ const dom = {
   earlyLateMode: document.getElementById("earlyLateMode"),
   employeeFilter: document.getElementById("employeeFilter"),
   employeeBulkStatus: document.getElementById("employeeBulkStatus"),
-  crewHint: document.getElementById("crewHint"),
   employeeList: document.getElementById("employeeList"),
   lastCrewBtn: document.getElementById("lastCrewBtn"),
   clearEmployeesBtn: document.getElementById("clearEmployeesBtn"),
@@ -1417,7 +1416,6 @@ function onStoreScheduleFilterChange() {
 function refreshStoreContextPanels() {
   renderStoreStats();
   renderGoalHint();
-  renderCrewHint();
 }
 
 function renderGoalHint() {
@@ -1450,40 +1448,6 @@ function renderGoalHint() {
   dom.goalHint.textContent = parts.join(" ");
   dom.goalHint.classList.remove("meta-warning");
   dom.goalHint.classList.toggle("meta-success", schedule.plannedDurationHours > 0);
-}
-
-function renderCrewHint() {
-  if (!dom.crewHint) return;
-
-  const schedule = getPrimaryScheduleForStore();
-  if (!state.selectedStoreKey || !schedule || !(schedule.plannedCrewSize > 0)) {
-    dom.crewHint.textContent = "";
-    dom.crewHint.classList.add("is-hidden");
-    dom.crewHint.classList.remove("meta-warning", "meta-success");
-    return;
-  }
-
-  const selectedCount = state.selectedEmployees.size;
-  let message = `Crew size ${schedule.plannedCrewSize}.`;
-  let tone = "";
-
-  if (selectedCount === 0) {
-    message += " Pick a crew to compare against the schedule plan.";
-  } else if (selectedCount < schedule.plannedCrewSize) {
-    message += ` You currently have ${selectedCount} selected, which is ${schedule.plannedCrewSize - selectedCount} under plan.`;
-    tone = "warning";
-  } else if (selectedCount > schedule.plannedCrewSize) {
-    message += ` You currently have ${selectedCount} selected, which is ${selectedCount - schedule.plannedCrewSize} over plan.`;
-    tone = "warning";
-  } else {
-    message += ` You currently match the planned crew count (${selectedCount}).`;
-    tone = "success";
-  }
-
-  dom.crewHint.textContent = message;
-  dom.crewHint.classList.remove("is-hidden", "meta-warning", "meta-success");
-  if (tone === "warning") dom.crewHint.classList.add("meta-warning");
-  if (tone === "success") dom.crewHint.classList.add("meta-success");
 }
 
 function applyScheduledGoalDefault(force = false) {
@@ -4258,7 +4222,6 @@ function computePredictionForJob(job, store, options = {}) {
 }
 
 function updateResults() {
-  renderCrewHint();
   const store = state.stores.get(state.selectedStoreKey);
   const roleSelection = getRoleSelectionForStore(state.selectedStoreKey);
   const missingSupervisor =

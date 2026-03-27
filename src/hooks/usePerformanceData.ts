@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { EmployeeRecord, UniqueValues } from "../types";
+import { normalizeTypeOfInv } from "../constants";
 
 export interface FilterState {
   office: string;
@@ -29,6 +30,7 @@ interface RawEmployeeRecord {
   LastName: string;
   OfficeName: string;
   AccountName: string;
+  TypeOfInv: string;
   StoreName: string;
   DateOfInv: string;
   PiecesPerHr: number;
@@ -82,6 +84,7 @@ export const usePerformanceData = () => {
             employee: `${record.FirstName.trim()} ${record.LastName.trim()}`,
             office: record.OfficeName,
             account: record.AccountName,
+            typeOfInv: normalizeTypeOfInv(record.TypeOfInv),
             store: record.StoreName,
             supervisor: supervisorName,
             date: record.DateOfInv.split(" ")[0], // Keep only YYYY-MM-DD

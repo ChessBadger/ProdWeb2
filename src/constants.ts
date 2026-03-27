@@ -10,6 +10,13 @@ export const METRIC_OPTIONS: { value: Metric; label: string }[] = [
     { value: 'gap15_count', label: 'Gap > 15' },
 ];
 
+const TYPE_OF_INV_LABELS: Record<string, string> = {
+  "dc5-financial": "DC5-Financial",
+  "dc5-financial scan": "DC5-FINANCIAL SCAN",
+  "modas-scan": "modas-Scan",
+  "scan-item level": "Scan-Item Level",
+};
+
 /**
  * Defines groupings of related accounts. When a user filters by one
  * account in a group, all accounts in that group are included in the filter.
@@ -87,4 +94,9 @@ export const getAccountGroupLabel = (accountName: string): string => {
     const lowercasedAccount = accountName.toLowerCase();
     const groupedLabel = accountToGroupNameMap.get(lowercasedAccount);
     return groupedLabel ? groupedLabel.toUpperCase() : accountName;
+};
+
+export const normalizeTypeOfInv = (typeOfInv: string): string => {
+    const trimmedType = typeOfInv.trim();
+    return TYPE_OF_INV_LABELS[trimmedType.toLowerCase()] || trimmedType;
 };
