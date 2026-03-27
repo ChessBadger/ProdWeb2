@@ -252,7 +252,7 @@ const state = {
 
 const STORAGE_KEY = "crew_predictor_v2";
 const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
-const DATA_JSON_PATH = "data/EmployeeProductionExport.json";
+const DATA_JSON_PATH = "data/EmployeeProductionExport2.json";
 const SCHEDULE_JSON_PATH = "data/ScheduleFinalFull.json";
 const BOARD_ALLOWED_USERS = ["lclark@badgerinventory.com"];
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;

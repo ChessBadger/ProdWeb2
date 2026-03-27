@@ -4,6 +4,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Legend,
   Line,
   LineChart,
@@ -20,11 +21,9 @@ import {
   BAR_COLORS,
   ChartRow,
   GraphTab,
-  MAX_SELECTED_ENTITIES,
   TIMEFRAME_OPTIONS,
   TableSortKey,
   Timeframe,
-  areArraysEqual,
   filterByTimeframe,
   getDiffStats,
 } from "./comparisonShared";
@@ -37,6 +36,9 @@ const BREAKDOWN_LABELS: Record<BreakdownDimension, string> = {
   supervisor: "Group",
   account: "Account",
 };
+
+const getModasBucket = (record: EmployeeRecord): "Modas" | "Non-Modas" =>
+  Number(record.avg_delta) > 0 ? "Modas" : "Non-Modas";
 
 const TypeOfInvComparisonPage: React.FC<{
   data: EmployeeRecord[];
@@ -51,8 +53,6 @@ const TypeOfInvComparisonPage: React.FC<{
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [specificDate, setSpecificDate] = useState("");
-  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
-  const [typeSearch, setTypeSearch] = useState("");
   const [selectedMember, setSelectedMember] = useState("all");
   const [topN, setTopN] = useState(8);
   const [activeGraphTab, setActiveGraphTab] = useState<GraphTab>("overall");
@@ -68,8 +68,6 @@ const TypeOfInvComparisonPage: React.FC<{
     setStartDate("");
     setEndDate("");
     setSpecificDate("");
-    setSelectedTypes([]);
-    setTypeSearch("");
     setSelectedMember("all");
     setTopN(8);
     setActiveGraphTab("overall");
@@ -107,7 +105,7 @@ const TypeOfInvComparisonPage: React.FC<{
         typeSet = new Set<string>();
         accountTypeMap.set(accountLabel, typeSet);
       }
-      typeSet.add(record.typeOfInv);
+      typeSet.add(getModasBucket(record));
     });
 
     return Array.from(accountTypeMap.entries())
@@ -115,6 +113,7 @@ const TypeOfInvComparisonPage: React.FC<{
         accountLabel,
         typeCount: typeSet.size,
       }))
+      .filter((option) => option.typeCount > 1)
       .sort(
         (a, b) =>
           b.typeCount - a.typeCount ||
@@ -123,7 +122,7 @@ const TypeOfInvComparisonPage: React.FC<{
   }, [officeFilteredData]);
 
   const eligibleAccountCount = useMemo(
-    () => accountOptions.filter((option) => option.typeCount > 1).length,
+    () => accountOptions.length,
     [accountOptions]
   );
 
@@ -152,73 +151,16 @@ const TypeOfInvComparisonPage: React.FC<{
 
   const availableTypes = useMemo(() => {
     const values = new Set<string>();
-    accountScopedData.forEach((record) => values.add(record.typeOfInv));
+    accountScopedData.forEach((record) => values.add(getModasBucket(record)));
     return Array.from(values).sort((a, b) => a.localeCompare(b));
   }, [accountScopedData]);
 
-  useEffect(() => {
-    setSelectedTypes((previous) => {
-      const stillValid = previous.filter((type) => availableTypes.includes(type));
-
-      if (stillValid.length === 0 && availableTypes.length > 0) {
-        return availableTypes.slice(0, MAX_SELECTED_ENTITIES);
-      }
-
-      if (areArraysEqual(previous, stillValid)) return previous;
-      return stillValid;
-    });
-  }, [availableTypes]);
-
-  const filteredTypeSuggestions = useMemo(() => {
-    const search = typeSearch.trim().toLowerCase();
-
-    return availableTypes
-      .filter((type) => !selectedTypes.includes(type))
-      .filter((type) => !search || type.toLowerCase().includes(search))
-      .slice(0, 12);
-  }, [availableTypes, selectedTypes, typeSearch]);
-
-  const addType = (type: string) => {
-    setSelectedTypes((previous) => {
-      if (previous.includes(type)) return previous;
-      if (previous.length >= MAX_SELECTED_ENTITIES) return previous;
-      return [...previous, type];
-    });
-    setTypeSearch("");
-  };
-
-  const removeType = (type: string) => {
-    setSelectedTypes((previous) => previous.filter((item) => item !== type));
-  };
-
-  const handleAddFromSearch = () => {
-    if (selectedTypes.length >= MAX_SELECTED_ENTITIES) return;
-
-    const search = typeSearch.trim().toLowerCase();
-    if (!search) return;
-
-    const exactMatch = availableTypes.find(
-      (type) => type.toLowerCase() === search && !selectedTypes.includes(type)
-    );
-    if (exactMatch) {
-      addType(exactMatch);
-      return;
-    }
-
-    const firstSuggestion = filteredTypeSuggestions[0];
-    if (firstSuggestion) addType(firstSuggestion);
-  };
-
-  const selectedTypeSet = useMemo(
-    () => new Set(selectedTypes),
-    [selectedTypes]
+  const compareBuckets = useMemo(
+    () => ["Modas", "Non-Modas"].filter((bucket) => availableTypes.includes(bucket)),
+    [availableTypes]
   );
 
-  const scopedData = useMemo(
-    () =>
-      accountScopedData.filter((record) => selectedTypeSet.has(record.typeOfInv)),
-    [accountScopedData, selectedTypeSet]
-  );
+  const scopedData = accountScopedData;
 
   const getBreakdownMember = useMemo(
     () => (record: EmployeeRecord) => {
@@ -241,7 +183,7 @@ const TypeOfInvComparisonPage: React.FC<{
 
     scopedData.forEach((record) => {
       const memberKey = getBreakdownMember(record);
-      const typeKey = record.typeOfInv;
+      const typeKey = getModasBucket(record);
 
       let byType = byMember.get(memberKey);
       if (!byType) {
@@ -302,7 +244,7 @@ const TypeOfInvComparisonPage: React.FC<{
       const byType = aggregatesByMember.get(member);
       const numericValues: number[] = [];
 
-      selectedTypes.forEach((type) => {
+      compareBuckets.forEach((type) => {
         const aggregate = byType?.get(type);
         if (!aggregate || aggregate.count === 0) {
           row[type] = null;
@@ -324,26 +266,27 @@ const TypeOfInvComparisonPage: React.FC<{
 
   const chartRows = useMemo(
     () => buildComparisonRows(displayedMembers),
-    [displayedMembers, aggregatesByMember, selectedTypes]
+    [displayedMembers, aggregatesByMember, compareBuckets]
   );
 
   const tableRows = useMemo(
     () => buildComparisonRows(availableMembers),
-    [availableMembers, aggregatesByMember, selectedTypes]
+    [availableMembers, aggregatesByMember, compareBuckets]
   );
 
   const typeSummary = useMemo(() => {
     const totals = new Map<string, Aggregate>();
 
     scopedData.forEach((record) => {
-      const current = totals.get(record.typeOfInv) ?? { total: 0, count: 0 };
-      totals.set(record.typeOfInv, {
+      const bucket = getModasBucket(record);
+      const current = totals.get(bucket) ?? { total: 0, count: 0 };
+      totals.set(bucket, {
         total: current.total + record[metric],
         count: current.count + 1,
       });
     });
 
-    return selectedTypes
+    return compareBuckets
       .map((type) => {
         const aggregate = totals.get(type);
         if (!aggregate || aggregate.count === 0) {
@@ -365,11 +308,9 @@ const TypeOfInvComparisonPage: React.FC<{
         const bValue = b.average ?? Number.NEGATIVE_INFINITY;
         return bValue - aValue;
       });
-  }, [scopedData, metric, selectedTypes]);
+  }, [scopedData, metric, compareBuckets]);
 
   const bestType = typeSummary.find((row) => row.average !== null) ?? null;
-  const hasEnoughTypes = selectedTypes.length >= 2;
-  const hasSelectedTypes = selectedTypes.length > 0;
   const selectedAccountHasMultipleTypes =
     (selectedAccountOption?.typeCount ?? 0) >= 2;
 
@@ -403,7 +344,7 @@ const TypeOfInvComparisonPage: React.FC<{
     };
     const numericValues: number[] = [];
 
-    selectedTypes.forEach((type) => {
+    compareBuckets.forEach((type) => {
       const average = typeSummaryMap.get(type)?.average ?? null;
       row[type] = average;
 
@@ -417,15 +358,15 @@ const TypeOfInvComparisonPage: React.FC<{
     row.percentDiff = diffStats.percentDiff;
 
     return row;
-  }, [selectedTypes, typeSummaryMap]);
+  }, [compareBuckets, typeSummaryMap]);
 
   const typeColorMap = useMemo(() => {
     const colorMap = new Map<string, string>();
-    selectedTypes.forEach((type, index) => {
+    compareBuckets.forEach((type, index) => {
       colorMap.set(type, BAR_COLORS[index % BAR_COLORS.length]);
     });
     return colorMap;
-  }, [selectedTypes]);
+  }, [compareBuckets]);
 
   const trendData = useMemo(() => {
     const byMonth = new Map<string, Map<string, Aggregate>>();
@@ -438,8 +379,9 @@ const TypeOfInvComparisonPage: React.FC<{
       }
 
       const monthMap = byMonth.get(month)!;
-      const current = monthMap.get(record.typeOfInv) ?? { total: 0, count: 0 };
-      monthMap.set(record.typeOfInv, {
+      const bucket = getModasBucket(record);
+      const current = monthMap.get(bucket) ?? { total: 0, count: 0 };
+      monthMap.set(bucket, {
         total: current.total + record[metric],
         count: current.count + 1,
       });
@@ -451,7 +393,7 @@ const TypeOfInvComparisonPage: React.FC<{
         const row: { [key: string]: string | number | null } = { date: month };
         const monthMap = byMonth.get(month);
 
-        selectedTypes.forEach((type) => {
+        compareBuckets.forEach((type) => {
           const aggregate = monthMap?.get(type);
           row[type] =
             aggregate && aggregate.count > 0
@@ -461,14 +403,14 @@ const TypeOfInvComparisonPage: React.FC<{
 
         return row;
       });
-  }, [scopedData, metric, selectedTypes]);
+  }, [scopedData, metric, compareBuckets]);
 
   const hasTrendData = useMemo(
     () =>
       trendData.some((point) =>
-        selectedTypes.some((type) => typeof point[type] === "number")
+        compareBuckets.some((type) => typeof point[type] === "number")
       ),
-    [trendData, selectedTypes]
+    [trendData, compareBuckets]
   );
 
   const handleTableSort = (key: TableSortKey) => {
@@ -539,17 +481,17 @@ const TypeOfInvComparisonPage: React.FC<{
         <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
           <div>
             <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">
-              Compare TypeOfInv
+              Compare Modas vs Non-Modas
             </h3>
             <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Pick one account, then compare its inventory types by store,
-              employee, group, or underlying account.
+              Pick one account, then compare Modas vs Non-Modas production by
+              store, employee, group, or underlying account.
             </p>
           </div>
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
             {selectedAccount
-              ? `${availableTypes.length} types found`
-              : `${eligibleAccountCount} multi-type accounts in scope`}
+              ? `${compareBuckets.length} buckets found`
+              : `${eligibleAccountCount} mixed accounts in scope`}
           </p>
         </div>
 
@@ -574,8 +516,7 @@ const TypeOfInvComparisonPage: React.FC<{
               <option value="">Select an account</option>
               {accountOptions.map((option) => (
                 <option key={option.accountLabel} value={option.accountLabel}>
-                  {option.accountLabel} ({option.typeCount}{" "}
-                  {option.typeCount === 1 ? "type" : "types"})
+                  {option.accountLabel}
                 </option>
               ))}
             </select>
@@ -718,91 +659,20 @@ const TypeOfInvComparisonPage: React.FC<{
           </label>
         )}
 
-        <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
-          <p className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-2">
-            Search and Add TypeOfInv Values
-          </p>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={typeSearch}
-              onChange={(event) => setTypeSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") {
-                  event.preventDefault();
-                  handleAddFromSearch();
-                }
-              }}
-              placeholder={
-                selectedAccount
-                  ? "Search TypeOfInv..."
-                  : "Select an account first..."
-              }
-              disabled={!selectedAccount}
-              className="flex-1 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm disabled:opacity-60"
-            />
-            <button
-              type="button"
-              onClick={handleAddFromSearch}
-              disabled={
-                !selectedAccount ||
-                selectedTypes.length >= MAX_SELECTED_ENTITIES ||
-                typeSearch.trim().length === 0
-              }
-              className="px-3 py-2 text-sm font-semibold rounded-md bg-primary text-white disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Add
-            </button>
-          </div>
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {selectedTypes.map((type) => (
-              <button
-                key={`selected-${type}`}
-                type="button"
-                onClick={() => removeType(type)}
-                className="inline-flex items-center gap-2 rounded-full border border-slate-300 dark:border-slate-600 bg-slate-100 dark:bg-slate-700 px-3 py-1 text-xs font-semibold text-slate-700 dark:text-slate-200"
-              >
-                {type}
-                <span aria-hidden="true">x</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-3 text-xs text-slate-500 dark:text-slate-400">
-            Click a selected type to remove it.
-          </div>
-
-          <div className="mt-3 max-h-48 overflow-y-auto grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-            {filteredTypeSuggestions.map((type) => (
-              <button
-                key={`suggestion-${type}`}
-                type="button"
-                onClick={() => addType(type)}
-                disabled={selectedTypes.length >= MAX_SELECTED_ENTITIES}
-                className="text-left rounded-md border border-slate-200 dark:border-slate-700 px-2 py-2 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {type}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="mt-4">
           {!selectedAccount ? (
             <div className="rounded-md border border-slate-200 dark:border-slate-700 px-4 py-3 text-sm text-slate-600 dark:text-slate-300">
-              Select an account to compare its TypeOfInv history.
+              Select an account to compare Modas vs Non-Modas history.
             </div>
           ) : !selectedAccountHasMultipleTypes ? (
             <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
               {selectedAccount} currently has only{" "}
-              {selectedAccountOption?.typeCount ?? 0} TypeOfInv value in this
+              {selectedAccountOption?.typeCount ?? 0} Modas bucket in this
               scope.
             </div>
           ) : (
             <div className="rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
-              Comparing {availableTypes.length} TypeOfInv values for{" "}
-              {selectedAccount}.
+              Comparing Modas vs Non-Modas for {selectedAccount}.
             </div>
           )}
         </div>
@@ -820,7 +690,7 @@ const TypeOfInvComparisonPage: React.FC<{
 
         <div
           role="group"
-          aria-label="TypeOfInv comparison graph tabs"
+          aria-label="Modas comparison graph tabs"
           className="inline-flex rounded-md shadow-sm mb-4"
         >
           <button
@@ -862,7 +732,7 @@ const TypeOfInvComparisonPage: React.FC<{
           <>
             {bestType && (
               <p className="mb-4 text-sm font-medium text-slate-600 dark:text-slate-300">
-                Best overall TypeOfInv:{" "}
+                Best overall bucket:{" "}
                 <span className="text-slate-800 dark:text-slate-100">
                   {bestType.entity}
                 </span>{" "}
@@ -873,16 +743,12 @@ const TypeOfInvComparisonPage: React.FC<{
 
             {!selectedAccount ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                Select an account to start comparing TypeOfInv values.
+                Select an account to start comparing Modas vs Non-Modas.
               </div>
             ) : !selectedAccountHasMultipleTypes ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                This account does not have enough TypeOfInv history to compare
-                in the current scope.
-              </div>
-            ) : !hasEnoughTypes ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                Select at least two TypeOfInv values to run comparisons.
+                This account only has one bucket in the current scope, so there
+                is nothing to compare yet.
               </div>
             ) : overallComparisonData.every((row) => row.average === null) ? (
               <div className="rounded-md border border-slate-200 dark:border-slate-700 px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
@@ -896,7 +762,7 @@ const TypeOfInvComparisonPage: React.FC<{
                       entity: row.entity,
                       average: row.average ?? 0,
                     }))}
-                    margin={{ top: 5, right: 20, left: -10, bottom: 20 }}
+                    margin={{ top: 28, right: 20, left: -10, bottom: 20 }}
                   >
                     <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
                     <XAxis
@@ -909,7 +775,14 @@ const TypeOfInvComparisonPage: React.FC<{
                       }
                       height={overallComparisonData.length > 4 ? 70 : 50}
                     />
-                    <YAxis tick={{ fontSize: 12, fill: tickColor }} />
+                    <YAxis
+                      tick={{ fontSize: 12, fill: tickColor }}
+                      domain={[
+                        0,
+                        (dataMax: number) =>
+                          dataMax > 0 ? Number((dataMax * 1.12).toFixed(2)) : 1,
+                      ]}
+                    />
                     <Tooltip
                       formatter={(value: number | string) => [
                         typeof value === "number" ? value.toFixed(2) : value,
@@ -926,6 +799,15 @@ const TypeOfInvComparisonPage: React.FC<{
                       wrapperStyle={{ fontSize: "14px", color: tickColor }}
                     />
                     <Bar dataKey="average" name={`Avg/HR ${metricLabel}`}>
+                      <LabelList
+                        dataKey="average"
+                        position="top"
+                        formatter={(value: number | string) =>
+                          typeof value === "number" ? value.toFixed(2) : value
+                        }
+                        fill={tickColor}
+                        fontSize={12}
+                      />
                       {overallComparisonData.map((row, index) => (
                         <Cell
                           key={`overall-cell-${row.entity}`}
@@ -943,7 +825,7 @@ const TypeOfInvComparisonPage: React.FC<{
 
             {typeof overallComparisonStats.delta === "number" && (
               <p className="mt-3 text-sm font-medium text-slate-600 dark:text-slate-300">
-                Avg/hr delta across selected TypeOfInv values:{" "}
+                Avg/hr delta across Modas buckets:{" "}
                 {overallComparisonStats.delta.toFixed(2)}
                 {typeof overallComparisonStats.percentDiff === "number"
                   ? ` (${overallComparisonStats.percentDiff.toFixed(2)}%)`
@@ -960,16 +842,12 @@ const TypeOfInvComparisonPage: React.FC<{
             </p>
             {!selectedAccount ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                Select an account to start comparing TypeOfInv values.
+                Select an account to start comparing Modas vs Non-Modas.
               </div>
             ) : !selectedAccountHasMultipleTypes ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                This account does not have enough TypeOfInv history to compare
-                in the current scope.
-              </div>
-            ) : !hasEnoughTypes ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                Select at least two TypeOfInv values to run comparisons.
+                This account only has one bucket in the current scope, so there
+                is nothing to compare yet.
               </div>
             ) : chartRows.length === 0 ? (
               <div className="rounded-md border border-slate-200 dark:border-slate-700 px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
@@ -1009,7 +887,7 @@ const TypeOfInvComparisonPage: React.FC<{
                     <Legend
                       wrapperStyle={{ fontSize: "14px", color: tickColor }}
                     />
-                    {selectedTypes.map((type, index) => (
+                    {compareBuckets.map((type, index) => (
                       <Bar
                         key={type}
                         dataKey={type}
@@ -1027,20 +905,17 @@ const TypeOfInvComparisonPage: React.FC<{
         {activeGraphTab === "trend" && (
           <>
             <p className="mb-4 text-sm font-medium text-slate-600 dark:text-slate-300">
-              Monthly avg/hr trend with one line per selected TypeOfInv value.
+              Monthly avg/hr trend with one line for Modas and one for
+              Non-Modas.
             </p>
             {!selectedAccount ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                Select an account to start comparing TypeOfInv values.
+                Select an account to start comparing Modas vs Non-Modas.
               </div>
             ) : !selectedAccountHasMultipleTypes ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                This account does not have enough TypeOfInv history to compare
-                in the current scope.
-              </div>
-            ) : !hasSelectedTypes ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 text-amber-800 px-4 py-3 text-sm dark:border-amber-800 dark:bg-amber-900/20 dark:text-amber-300">
-                Select at least one TypeOfInv value to view trend data.
+                This account only has one bucket in the current scope, so there
+                is no trend comparison yet.
               </div>
             ) : !hasTrendData ? (
               <div className="rounded-md border border-slate-200 dark:border-slate-700 px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
@@ -1076,7 +951,7 @@ const TypeOfInvComparisonPage: React.FC<{
                     <Legend
                       wrapperStyle={{ fontSize: "14px", color: tickColor }}
                     />
-                    {selectedTypes.map((type, index) => (
+                    {compareBuckets.map((type, index) => (
                       <Line
                         key={`trend-${type}`}
                         type="monotone"
@@ -1113,7 +988,7 @@ const TypeOfInvComparisonPage: React.FC<{
                     {renderSortIndicator("label")}
                   </div>
                 </th>
-                {selectedTypes.map((type) => (
+                {compareBuckets.map((type) => (
                   <th
                     key={`header-${type}`}
                     className={sortableHeaderClass}
@@ -1146,10 +1021,10 @@ const TypeOfInvComparisonPage: React.FC<{
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
-              {selectedTypes.length === 0 ? (
+              {compareBuckets.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={selectedTypes.length + 3}
+                    colSpan={compareBuckets.length + 3}
                     className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400"
                   >
                     No rows to display.
@@ -1161,7 +1036,7 @@ const TypeOfInvComparisonPage: React.FC<{
                     <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-100">
                       {totalTableRow.label}
                     </td>
-                    {selectedTypes.map((type) => {
+                    {compareBuckets.map((type) => {
                       const value = totalTableRow[type];
                       return (
                         <td
@@ -1192,7 +1067,7 @@ const TypeOfInvComparisonPage: React.FC<{
                       <td className="px-4 py-3 text-sm font-medium text-slate-800 dark:text-slate-200">
                         {row.label}
                       </td>
-                      {selectedTypes.map((type) => {
+                      {compareBuckets.map((type) => {
                         const value = row[type];
                         return (
                           <td

@@ -458,11 +458,11 @@ const Dashboard: React.FC = () => {
           <div className="flex-grow pr-2">
             <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 text-sm text-slate-600 dark:text-slate-300 space-y-2">
               <p className="font-semibold text-slate-800 dark:text-slate-100">
-                Compare TypeOfInv Page
+                Modas vs Non-Modas Page
               </p>
               <p>
-                Pick one account and compare its inventory types by store,
-                employee, group, or underlying account.
+                Pick one account and compare Modas vs Non-Modas production by
+                store, employee, group, or underlying account.
               </p>
             </div>
           </div>
@@ -493,14 +493,14 @@ const Dashboard: React.FC = () => {
                   ? "Employee Production Dashboard"
                   : activePage === "compare"
                     ? "Production Comparison"
-                    : "TypeOfInv Comparison"}
+                    : "Modas vs Non-Modas"}
               </h2>
               <p className="text-slate-500 dark:text-slate-400 mt-1">
                 {activePage === "dashboard"
                   ? "Analyze employee performance across production metrics."
                   : activePage === "compare"
                     ? "Compare production between selected accounts or stores by employee or group."
-                    : "Compare TypeOfInv performance inside one account across stores, employees, groups, and accounts."}
+                    : "Compare Modas vs Non-Modas performance inside one account across stores, employees, groups, and accounts."}
               </p>
             </div>
             <div
@@ -539,7 +539,7 @@ const Dashboard: React.FC = () => {
                     : "bg-white text-slate-700 dark:bg-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600"
                 }`}
               >
-                Compare TypeOfInv
+                Modas vs Non-Modas
               </button>
             </div>
           </div>

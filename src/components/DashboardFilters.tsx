@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { UniqueValues, Metric } from "../types";
 import { FilterState } from "../hooks/usePerformanceData";
 import { METRIC_OPTIONS } from "../constants";
@@ -28,35 +28,155 @@ const FilterSection: React.FC<{ title: string; children: React.ReactNode }> = ({
   </div>
 );
 
-const FilterSelect: React.FC<{
+const FilterSearchInput: React.FC<{
   id: string;
   label: string;
   value: string;
-  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  onChange: (value: string) => void;
   options: string[];
-}> = ({ id, label, value, onChange, options }) => (
-  <div>
-    <label
-      htmlFor={id}
-      className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
-    >
-      {label}
-    </label>
-    <select
-      id={id}
-      value={value}
-      onChange={onChange}
-      className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md py-2 px-3 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary sm:text-sm transition"
-    >
-      <option value="all">All</option>
-      {options.map((opt) => (
-        <option key={opt} value={opt}>
-          {opt}
-        </option>
-      ))}
-    </select>
-  </div>
-);
+}> = ({ id, label, value, onChange, options }) => {
+  const [query, setQuery] = useState(value === "all" ? "" : value);
+  const [isOpen, setIsOpen] = useState(false);
+
+  useEffect(() => {
+    setQuery(value === "all" ? "" : value);
+  }, [value]);
+
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const filteredOptions = useMemo(() => {
+    if (!normalizedQuery) return options;
+    return options.filter((option) =>
+      option.toLowerCase().includes(normalizedQuery)
+    );
+  }, [options, normalizedQuery]);
+
+  const visibleOptions = filteredOptions.slice(0, 8);
+
+  const commitValue = (nextValue: string) => {
+    setQuery(nextValue);
+    onChange(nextValue);
+    setIsOpen(false);
+  };
+
+  const resetToAppliedValue = () => {
+    setQuery(value === "all" ? "" : value);
+    setIsOpen(false);
+  };
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      const exactMatch = options.find(
+        (option) => option.toLowerCase() === normalizedQuery
+      );
+
+      if (exactMatch) {
+        commitValue(exactMatch);
+        return;
+      }
+
+      if (filteredOptions.length === 1) {
+        commitValue(filteredOptions[0]);
+      }
+    }
+
+    if (event.key === "Escape") {
+      resetToAppliedValue();
+    }
+  };
+
+  return (
+    <div className="relative">
+      <label
+        htmlFor={id}
+        className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1"
+      >
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          id={id}
+          type="text"
+          value={query}
+          onChange={(event) => {
+            const nextQuery = event.target.value;
+            setQuery(nextQuery);
+            setIsOpen(true);
+
+            if (!nextQuery.trim()) {
+              onChange("all");
+            }
+          }}
+          onFocus={() => setIsOpen(true)}
+          onBlur={() => {
+            window.setTimeout(() => {
+              resetToAppliedValue();
+            }, 120);
+          }}
+          onKeyDown={handleKeyDown}
+          placeholder={`Type to search ${label.toLowerCase()}`}
+          className="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-md py-2 pl-3 pr-10 focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary sm:text-sm transition"
+          autoComplete="off"
+        />
+        {(query || value !== "all") && (
+          <button
+            type="button"
+            onMouseDown={(event) => {
+              event.preventDefault();
+              setQuery("");
+              onChange("all");
+              setIsOpen(false);
+            }}
+            className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+            aria-label={`Clear ${label} filter`}
+          >
+            ×
+          </button>
+        )}
+      </div>
+      <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        {value === "all" ? "Showing all values" : `Selected: ${value}`}
+      </p>
+      {isOpen && (
+        <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-md border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-800">
+          {visibleOptions.length > 0 ? (
+            <>
+              <div className="max-h-56 overflow-y-auto py-1">
+                {visibleOptions.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                      commitValue(option);
+                    }}
+                    className={`block w-full px-3 py-2 text-left text-sm transition-colors ${
+                      value === option
+                        ? "bg-primary/10 text-primary dark:bg-primary/20"
+                        : "text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-700"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
+              <div className="border-t border-slate-200 px-3 py-2 text-xs text-slate-500 dark:border-slate-700 dark:text-slate-400">
+                {normalizedQuery
+                  ? `Showing ${visibleOptions.length} of ${filteredOptions.length} matches`
+                  : `Showing ${visibleOptions.length} of ${options.length} values. Type to narrow.`}
+              </div>
+            </>
+          ) : (
+            <div className="px-3 py-2 text-sm text-slate-500 dark:text-slate-400">
+              No matches found.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
 
 const DashboardFilters: React.FC<DashboardFiltersProps> = ({
   filters,
@@ -176,39 +296,39 @@ const DashboardFilters: React.FC<DashboardFiltersProps> = ({
         </FilterSection>
 
         <FilterSection title="Data Filters">
-          <FilterSelect
+          <FilterSearchInput
             id="employee-filter"
             label="Employee"
             value={filters.employee}
-            onChange={(e) => onFilterChange("employee", e.target.value)}
+            onChange={(value) => onFilterChange("employee", value)}
             options={uniqueValues.employees}
           />
-          <FilterSelect
+          <FilterSearchInput
             id="account-filter"
             label="Account Name"
             value={filters.account}
-            onChange={(e) => onFilterChange("account", e.target.value)}
+            onChange={(value) => onFilterChange("account", value)}
             options={uniqueValues.accounts}
           />
-          <FilterSelect
+          <FilterSearchInput
             id="store-filter"
             label="Store"
             value={filters.store}
-            onChange={(e) => onFilterChange("store", e.target.value)}
+            onChange={(value) => onFilterChange("store", value)}
             options={uniqueValues.stores}
           />
-          <FilterSelect
+          <FilterSearchInput
             id="supervisor-filter"
             label="Supervisor"
             value={filters.supervisor}
-            onChange={(e) => onFilterChange("supervisor", e.target.value)}
+            onChange={(value) => onFilterChange("supervisor", value)}
             options={uniqueValues.supervisors}
           />
-          <FilterSelect
+          <FilterSearchInput
             id="office-filter"
             label="Office"
             value={filters.office}
-            onChange={(e) => onFilterChange("office", e.target.value)}
+            onChange={(value) => onFilterChange("office", value)}
             options={uniqueValues.offices}
           />
         </FilterSection>
