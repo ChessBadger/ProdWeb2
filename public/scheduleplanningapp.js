@@ -8,6 +8,7 @@ const state = {
   accountOfficeStats: new Map(),
   accountGlobalStats: new Map(),
   employees: new Map(),
+  activeEmployeeIds: new Set(),
   suggestedSupervisorByStore: new Map(),
   global: {
     avgPieces: 0,
@@ -252,7 +253,8 @@ const state = {
 
 const STORAGE_KEY = "crew_predictor_v2";
 const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
-const DATA_JSON_PATH = "data/EmployeeProductionExport2.json";
+const HISTORY_JSON_PATH = "data/EmployeeProductionExport.json";
+const ACTIVE_EMPLOYEE_JSON_PATH = "data/EmployeeProductionExport2.json";
 const SCHEDULE_JSON_PATH = "data/ScheduleFinalFull.json";
 const BOARD_ALLOWED_USERS = ["lclark@badgerinventory.com"];
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
@@ -553,7 +555,7 @@ function applyBoardPrefillIfAvailable() {
 
   state.selectedStoreKey = storeKey;
   state.selectedEmployees = new Set(
-    uniqueStrings(prefill.employeeIds || []).filter((id) => state.employees.has(id)),
+    filterToSchedulableEmployees(prefill.employeeIds || []),
   );
   const selectedSet = new Set(Array.from(state.selectedEmployees));
   const supervisorId = cleanText(prefill.supervisorId);
@@ -1109,14 +1111,17 @@ function bindEvents() {
 
 async function loadJsonData() {
   try {
-    const [historyResult, scheduleResult] = await Promise.all([
-      fetchRequiredJson(DATA_JSON_PATH),
-      fetchOptionalJson(SCHEDULE_JSON_PATH),
-    ]);
+    const [historyResult, activeEmployeeResult, scheduleResult] =
+      await Promise.all([
+        fetchRequiredJson(HISTORY_JSON_PATH),
+        fetchOptionalJson(ACTIVE_EMPLOYEE_JSON_PATH),
+        fetchOptionalJson(SCHEDULE_JSON_PATH),
+      ]);
     const fingerprint = buildDataFingerprintFromJsonText(historyResult.rawJsonText);
     const rawRows = extractRowsFromJson(historyResult.payload);
+    const activeEmployeeRows = extractRowsFromJson(activeEmployeeResult?.payload);
     const scheduleRows = extractRowsFromJson(scheduleResult?.payload);
-    loadRows(rawRows, scheduleRows, fingerprint);
+    loadRows(rawRows, scheduleRows, fingerprint, activeEmployeeRows);
   } catch (error) {
     const message = error?.message || "Unknown error";
     setPredictionMeta(`Data load failed: ${message}`, "warning");
@@ -1163,7 +1168,12 @@ function extractRowsFromJson(payload) {
   return [];
 }
 
-function loadRows(rawRows, scheduleRawRows = [], dataFingerprint = "") {
+function loadRows(
+  rawRows,
+  scheduleRawRows = [],
+  dataFingerprint = "",
+  activeEmployeeRawRows = [],
+) {
   const normalizedRows = rawRows.map(normalizeRow).filter((r) => r.valid);
 
   state.rows = normalizedRows;
@@ -1176,6 +1186,10 @@ function loadRows(rawRows, scheduleRawRows = [], dataFingerprint = "") {
   state.accountOfficeStats = buildAccountOfficeStats(state.jobs);
   state.accountGlobalStats = buildAccountGlobalStats(state.jobs);
   state.employees = buildEmployeeStats(normalizedRows);
+  state.activeEmployeeIds = buildActiveEmployeeIds(
+    activeEmployeeRawRows,
+    state.employees,
+  );
   state.suggestedSupervisorByStore = buildStoreSupervisorMap(normalizedRows);
   state.global = buildGlobalStats(state.jobs, state.employees);
   applyScheduleRows(scheduleRawRows);
@@ -1892,6 +1906,34 @@ function buildEmployeeStats(rows) {
   return stats;
 }
 
+function buildActiveEmployeeIds(rows, employees) {
+  const ids = uniqueStrings(
+    (rows || []).map((row) => {
+      const normalized = {};
+      Object.keys(row || {}).forEach((key) => {
+        normalized[canonicalizeKey(key)] = row[key];
+      });
+      return cleanText(firstValue(normalized, ["employee"]));
+    }),
+  ).filter((id) => employees.has(id));
+
+  return new Set(ids.length ? ids : Array.from(employees.keys()));
+}
+
+function getSchedulableEmployeeIds() {
+  if (state.activeEmployeeIds?.size > 0) {
+    return Array.from(state.activeEmployeeIds).filter((id) =>
+      state.employees.has(id),
+    );
+  }
+  return Array.from(state.employees.keys());
+}
+
+function filterToSchedulableEmployees(employeeIds) {
+  const allowed = new Set(getSchedulableEmployeeIds());
+  return uniqueStrings(employeeIds || []).filter((id) => allowed.has(id));
+}
+
 function buildStoreSupervisorMap(rows) {
   const byStore = new Map();
 
@@ -2579,7 +2621,7 @@ function renderStoreOptionList(dataListEl, stores) {
 
 function getCompareAvailableEmployeeIds(storeA, storeB) {
   if (!state.isLoaded) return [];
-  return Array.from(state.employees.keys());
+  return getSchedulableEmployeeIds();
 }
 
 function clearCompareEmployees() {
@@ -3646,7 +3688,9 @@ function formatCustomerNumber(value) {
 function renderEmployeeList() {
   const filter = (dom.employeeFilter.value || "").trim().toLowerCase();
   const selectedAccount = getSelectedAccount();
-  const employees = Array.from(state.employees.values())
+  const employees = getSchedulableEmployeeIds()
+    .map((id) => state.employees.get(id))
+    .filter(Boolean)
     .sort((a, b) => compareEmployeesByDisplayName(a.employee, b.employee))
     .filter((e) => {
       const name = getEmployeeDisplayName(e.employee);
@@ -3714,7 +3758,7 @@ function onEmployeeFilterKeyDown(event) {
   if (!query) return;
   const bulk = resolveBulkEmployeeSelection(
     query,
-    Array.from(state.employees.keys()),
+    getSchedulableEmployeeIds(),
   );
   if (bulk.entries.length > 1) {
     bulk.matchedIds.forEach((id) => state.selectedEmployees.add(id));
@@ -3756,7 +3800,7 @@ function onEmployeeFilterKeyDown(event) {
 
 function onEmployeeFilterPaste(event) {
   const rawText = event?.clipboardData?.getData("text") || "";
-  const bulk = resolveBulkEmployeeSelection(rawText, Array.from(state.employees.keys()));
+  const bulk = resolveBulkEmployeeSelection(rawText, getSchedulableEmployeeIds());
   if (bulk.entries.length <= 1) return;
   event.preventDefault();
   bulk.matchedIds.forEach((id) => state.selectedEmployees.add(id));
@@ -3829,8 +3873,12 @@ function selectLastCrew() {
   const supervisor = cleanText(
     state.storeLastSupervisor.get(state.selectedStoreKey),
   );
-  const selected = new Set(crew);
-  if (supervisor) selected.add(supervisor);
+  const allowed = new Set(getSchedulableEmployeeIds());
+  const selected = new Set(
+    uniqueStrings(crew).filter((employeeId) => allowed.has(employeeId)),
+  );
+  const activeSupervisor = allowed.has(supervisor) ? supervisor : "";
+  if (activeSupervisor) selected.add(activeSupervisor);
   state.selectedEmployees = selected;
 
   const storeKey = state.selectedStoreKey;
@@ -3838,7 +3886,7 @@ function selectLastCrew() {
     const currentRoles = getRoleSelectionForStore(storeKey);
     state.selectedRolesByStore[storeKey] = {
       ...currentRoles,
-      supervisor: supervisor || currentRoles.supervisor || "",
+      supervisor: activeSupervisor || currentRoles.supervisor || "",
     };
   }
   syncRoleAssignmentsToSelectedCrew();
@@ -5574,9 +5622,7 @@ function restoreSelectionsFromStorage() {
     : firstScheduledStoreKey || state.storesList[0]?.storeKey || null;
 
   const savedCrew = readSavedCrew(state.selectedStoreKey);
-  state.selectedEmployees = new Set(
-    savedCrew.filter((name) => state.employees.has(name)),
-  );
+  state.selectedEmployees = new Set(filterToSchedulableEmployees(savedCrew));
 }
 
 function restoreSettingsFromStorage() {
