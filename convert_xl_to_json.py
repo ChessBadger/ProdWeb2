@@ -13,16 +13,35 @@ import pandas as pd
 DEFAULT_REPO = Path(r"C:\Users\Laptop 122\Desktop\Store Prep\06 Employee Reports\Website")
 DEFAULT_WORKBOOK_NAMES = (
     "EmployeeProductionExport.xlsx",
-    "ScheduleFinalFull.xlsx",
+    "ScheduleFinal.xls",
 )
 DEFAULT_COPY_TARGETS = ["public/data", "docs/data", "data"]
+EXCEL_EXTENSIONS = (".xlsx", ".xlsm", ".xls")
+
+
+def get_excel_engine(excel_path: Path) -> str | None:
+    suffix = excel_path.suffix.lower()
+    if suffix == ".xls":
+        return "xlrd"
+    if suffix in {".xlsx", ".xlsm"}:
+        return "openpyxl"
+    return None
 
 
 def convert_excel_to_json(excel_path: Path, json_path: Path):
     """
     Read each sheet from the Excel file, replace NaNs with 0, and write to JSON.
     """
-    sheets = pd.read_excel(excel_path, sheet_name=None)
+    engine = get_excel_engine(excel_path)
+    try:
+        sheets = pd.read_excel(excel_path, sheet_name=None, engine=engine)
+    except ImportError as exc:
+        if excel_path.suffix.lower() == ".xls":
+            raise ImportError(
+                f"{exc}\n\nInstall the missing dependency with:\n"
+                "python -m pip install xlrd>=2.0.1"
+            ) from exc
+        raise
     data = {
         name: df.fillna(0).to_dict(orient="records")
         for name, df in sheets.items()
@@ -86,10 +105,65 @@ def infer_repo_root(positional_paths: list[Path], explicit_repo: Path | None) ->
     return DEFAULT_REPO, positional_paths
 
 
+def find_matching_workbooks(requested_path: Path) -> list[Path]:
+    parent_dir = requested_path.parent
+    if not parent_dir.exists():
+        return []
+
+    requested_stem = requested_path.stem.casefold()
+    extension_priority = {
+        extension: index for index, extension in enumerate(EXCEL_EXTENSIONS)
+    }
+    matches = [
+        candidate
+        for candidate in parent_dir.iterdir()
+        if candidate.is_file()
+        and candidate.suffix.lower() in EXCEL_EXTENSIONS
+        and candidate.stem.casefold().startswith(requested_stem)
+    ]
+    return sorted(
+        matches,
+        key=lambda candidate: (
+            candidate.stem.casefold() != requested_stem,
+            extension_priority.get(candidate.suffix.lower(), len(EXCEL_EXTENSIONS)),
+            candidate.name.casefold(),
+        ),
+    )
+
+
+def resolve_default_workbook_path(repo_root: Path, workbook_name: str) -> Path:
+    requested_path = repo_root / workbook_name
+    if requested_path.exists():
+        return requested_path
+
+    matches = find_matching_workbooks(requested_path)
+    if matches:
+        logging.info(
+            "Default workbook %s not found; using %s instead",
+            requested_path.name,
+            matches[0].name,
+        )
+        return matches[0]
+
+    return requested_path
+
+
 def resolve_excel_paths(repo_root: Path, positional_paths: list[Path]) -> list[Path]:
     if positional_paths:
         return positional_paths
-    return [repo_root / workbook_name for workbook_name in DEFAULT_WORKBOOK_NAMES]
+    return [
+        resolve_default_workbook_path(repo_root, workbook_name)
+        for workbook_name in DEFAULT_WORKBOOK_NAMES
+    ]
+
+
+def format_missing_workbook_error(excel_path: Path) -> str:
+    message = f"Excel file not found: {excel_path}"
+    matches = find_matching_workbooks(excel_path)
+    if matches:
+        suggestions = ", ".join(candidate.name for candidate in matches)
+        return f"{message}. Nearby matches: {suggestions}"
+    return message
 
 
 def main():
@@ -132,7 +206,8 @@ def main():
 
     for excel_path in excel_paths:
         if not excel_path.exists():
-            parser.error(f"Excel file not found: {excel_path}")
+            logging.error(format_missing_workbook_error(excel_path))
+            return 1
 
     for excel_path in excel_paths:
         json_path = args.output or (repo_root / f"{excel_path.stem}.json")
@@ -145,7 +220,10 @@ def main():
 
     run_npm_build(repo_root)
     git_add_commit_push(repo_root, args.message)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    exit_code = main()
+    if exit_code and sys.gettrace() is None:
+        sys.exit(exit_code)

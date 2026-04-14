@@ -255,7 +255,7 @@ const STORAGE_KEY = "crew_predictor_v2";
 const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
 const HISTORY_JSON_PATH = "data/EmployeeProductionExport.json";
 const ACTIVE_EMPLOYEE_JSON_PATH = "data/EmployeeProductionExport2.json";
-const SCHEDULE_JSON_PATH = "data/ScheduleFinalFull.json";
+const SCHEDULE_JSON_PATH = "data/ScheduleFinal.json";
 const BOARD_ALLOWED_USERS = ["lclark@badgerinventory.com"];
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
 const DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT = 120;
@@ -522,7 +522,11 @@ function clearBoardPrefillFromUrl() {
   try {
     const url = new URL(window.location.href);
     url.searchParams.delete("boardPrefill");
-    window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    window.history.replaceState(
+      {},
+      "",
+      `${url.pathname}${url.search}${url.hash}`,
+    );
   } catch (_error) {
     // Ignore URL cleanup failures.
   }
@@ -536,7 +540,9 @@ function resolveBoardPrefillStoreKey(prefill) {
   if (!targetStore) return null;
   const matched = state.storesList.find((store) => {
     const sameStore = cleanText(store.storeName).toLowerCase() === targetStore;
-    const sameAccount = !targetAccount || cleanText(store.account).toLowerCase() === targetAccount;
+    const sameAccount =
+      !targetAccount ||
+      cleanText(store.account).toLowerCase() === targetAccount;
     return sameStore && sameAccount;
   });
   return matched?.storeKey || null;
@@ -564,8 +570,14 @@ function applyBoardPrefillIfAvailable() {
     [storeKey]: {
       supervisor: selectedSet.has(supervisorId) ? supervisorId : "",
       rx: filterToSelected(normalizeRoleArray(roleIds.rx), selectedSet),
-      training: filterToSelected(normalizeRoleArray(roleIds.training), selectedSet),
-      earlyLate: filterToSelected(normalizeRoleArray(roleIds.earlyLate), selectedSet),
+      training: filterToSelected(
+        normalizeRoleArray(roleIds.training),
+        selectedSet,
+      ),
+      earlyLate: filterToSelected(
+        normalizeRoleArray(roleIds.earlyLate),
+        selectedSet,
+      ),
     },
   };
   const roleModes = prefill.roleModes || {};
@@ -580,7 +592,8 @@ function applyBoardPrefillIfAvailable() {
   state.planningMode = "duration";
   state.targetValue = Math.max(0, toNumber(prefill.plannedDurationHours));
   if (dom.planningMode) dom.planningMode.value = state.planningMode;
-  if (dom.targetValue) dom.targetValue.value = state.targetValue > 0 ? state.targetValue : "";
+  if (dom.targetValue)
+    dom.targetValue.value = state.targetValue > 0 ? state.targetValue : "";
 
   syncRoleAssignmentsToSelectedCrew();
   pendingBoardPrefill = null;
@@ -696,10 +709,14 @@ function compareEmployeesByDisplayName(leftEmployeeId, rightEmployeeId) {
     numeric: true,
   });
   if (byName !== 0) return byName;
-  return cleanText(leftEmployeeId).localeCompare(cleanText(rightEmployeeId), undefined, {
-    sensitivity: "base",
-    numeric: true,
-  });
+  return cleanText(leftEmployeeId).localeCompare(
+    cleanText(rightEmployeeId),
+    undefined,
+    {
+      sensitivity: "base",
+      numeric: true,
+    },
+  );
 }
 
 function summarizeBulkEntryList(items, limit = 4) {
@@ -812,7 +829,8 @@ function formatBulkSelectionMessage(result, label = "employees") {
   const fragments = [`Processed ${total} ${label}; added ${added}.`];
   const roleHints = [];
   if (result.rxIds?.length) roleHints.push(`RX ${result.rxIds.length}`);
-  if (result.earlyLateIds?.length) roleHints.push(`Early/Late ${result.earlyLateIds.length}`);
+  if (result.earlyLateIds?.length)
+    roleHints.push(`Early/Late ${result.earlyLateIds.length}`);
   if (roleHints.length) fragments.push(`Auto roles: ${roleHints.join(", ")}.`);
   if (result.ambiguousEntries.length) {
     fragments.push(
@@ -820,7 +838,9 @@ function formatBulkSelectionMessage(result, label = "employees") {
     );
   }
   if (result.unmatchedEntries.length) {
-    fragments.push(`No match: ${summarizeBulkEntryList(result.unmatchedEntries)}.`);
+    fragments.push(
+      `No match: ${summarizeBulkEntryList(result.unmatchedEntries)}.`,
+    );
   }
   return fragments.join(" ");
 }
@@ -834,8 +854,14 @@ function splitLinkedGroupLine(rawLine) {
 
 function resolveCompareConstraints(cfg, candidateIds) {
   const pool = Array.from(candidateIds || []).filter(Boolean);
-  const lockAResult = resolveBulkEmployeeSelection(cfg.lockedStoreAInput || "", pool);
-  const lockBResult = resolveBulkEmployeeSelection(cfg.lockedStoreBInput || "", pool);
+  const lockAResult = resolveBulkEmployeeSelection(
+    cfg.lockedStoreAInput || "",
+    pool,
+  );
+  const lockBResult = resolveBulkEmployeeSelection(
+    cfg.lockedStoreBInput || "",
+    pool,
+  );
   const lockASet = new Set(lockAResult.matchedIds || []);
   const lockBSet = new Set(lockBResult.matchedIds || []);
   const linkedPairGroups = [];
@@ -898,7 +924,9 @@ function resolveCompareConstraints(cfg, candidateIds) {
     );
   }
   if (linkedIssues.length) {
-    issues.push(`Linked groups unresolved: ${summarizeBulkEntryList(linkedIssues)}.`);
+    issues.push(
+      `Linked groups unresolved: ${summarizeBulkEntryList(linkedIssues)}.`,
+    );
   }
   if (lockedBoth.length) {
     issues.push(
@@ -978,7 +1006,8 @@ function buildEmployeeLinkedUnits(allIds, baseA, baseB, constraints) {
           .join(", ")}.`,
       };
     }
-    const targetStore = hasBaseA || hasLockA ? "A" : hasBaseB || hasLockB ? "B" : "";
+    const targetStore =
+      hasBaseA || hasLockA ? "A" : hasBaseB || hasLockB ? "B" : "";
     const movableMembers = groupMembers.filter(
       (id) => !baseASet.has(id) && !baseBSet.has(id),
     );
@@ -1013,8 +1042,10 @@ function buildEmployeeLinkedUnits(allIds, baseA, baseB, constraints) {
 function constraintsSatisfiedForAssignment(constraints, crewA, crewB) {
   const setA = new Set(crewA || []);
   const setB = new Set(crewB || []);
-  if ((constraints?.lockedStoreA || []).some((id) => !setA.has(id))) return false;
-  if ((constraints?.lockedStoreB || []).some((id) => !setB.has(id))) return false;
+  if ((constraints?.lockedStoreA || []).some((id) => !setA.has(id)))
+    return false;
+  if ((constraints?.lockedStoreB || []).some((id) => !setB.has(id)))
+    return false;
   for (const group of constraints?.linkedGroups || []) {
     const inA = group.some((id) => setA.has(id));
     const inB = group.some((id) => setB.has(id));
@@ -1061,7 +1092,10 @@ function disableInputAutofill() {
 function bindEvents() {
   dom.storeSearch.addEventListener("input", renderStoreSelect);
   dom.clearStoreSearchBtn.addEventListener("click", clearStoreSearch);
-  dom.storeScheduleFilter?.addEventListener("change", onStoreScheduleFilterChange);
+  dom.storeScheduleFilter?.addEventListener(
+    "change",
+    onStoreScheduleFilterChange,
+  );
   dom.storeSelect.addEventListener("change", onStoreChange);
   dom.planningMode.addEventListener("change", onPlanningInputChange);
   dom.targetValue.addEventListener("input", onPlanningInputChange);
@@ -1090,12 +1124,18 @@ function bindEvents() {
   dom.compareSupervisorB.addEventListener("change", onCompareInputChange);
   dom.compareSupervisorModeA.addEventListener("change", onCompareInputChange);
   dom.compareSupervisorModeB.addEventListener("change", onCompareInputChange);
-  dom.compareEmployeeFilter.addEventListener("input", renderCompareEmployeeList);
+  dom.compareEmployeeFilter.addEventListener(
+    "input",
+    renderCompareEmployeeList,
+  );
   dom.compareEmployeeFilter.addEventListener(
     "keydown",
     onCompareEmployeeFilterKeyDown,
   );
-  dom.compareEmployeeFilter.addEventListener("paste", onCompareEmployeeFilterPaste);
+  dom.compareEmployeeFilter.addEventListener(
+    "paste",
+    onCompareEmployeeFilterPaste,
+  );
   dom.compareLinkedPairs.addEventListener("input", onCompareInputChange);
   dom.compareLockedStoreA.addEventListener("input", onCompareInputChange);
   dom.compareLockedStoreB.addEventListener("input", onCompareInputChange);
@@ -1117,9 +1157,13 @@ async function loadJsonData() {
         fetchOptionalJson(ACTIVE_EMPLOYEE_JSON_PATH),
         fetchOptionalJson(SCHEDULE_JSON_PATH),
       ]);
-    const fingerprint = buildDataFingerprintFromJsonText(historyResult.rawJsonText);
+    const fingerprint = buildDataFingerprintFromJsonText(
+      historyResult.rawJsonText,
+    );
     const rawRows = extractRowsFromJson(historyResult.payload);
-    const activeEmployeeRows = extractRowsFromJson(activeEmployeeResult?.payload);
+    const activeEmployeeRows = extractRowsFromJson(
+      activeEmployeeResult?.payload,
+    );
     const scheduleRows = extractRowsFromJson(scheduleResult?.payload);
     loadRows(rawRows, scheduleRows, fingerprint, activeEmployeeRows);
   } catch (error) {
@@ -1236,7 +1280,9 @@ function normalizeScheduleRow(row) {
   );
   const storeName = cleanText(firstValue(normalized, ["storename"]));
   const runName = cleanText(firstValue(normalized, ["runname"]));
-  const startTimeText = cleanScheduleText(firstValue(normalized, ["expr1", "timeofinv"]));
+  const startTimeText = cleanScheduleText(
+    firstValue(normalized, ["expr1", "timeofinv"]),
+  );
   const meetTimeText = cleanScheduleText(firstValue(normalized, ["meettime"]));
   const typeOfInv = normalizeInventoryType(
     cleanText(firstValue(normalized, ["typeofinv"])) || "Unknown",
@@ -1346,17 +1392,21 @@ function resolveScheduleStoreKey(row, storeKeyIndex) {
   const candidates = storeKeyIndex.get(row.canonicalStoreName) || [];
   if (candidates.length <= 1) return candidates[0] || "";
 
-  return candidates
-    .map((storeKey) => state.stores.get(storeKey))
-    .filter(Boolean)
-    .sort((left, right) => (right.jobCount || 0) - (left.jobCount || 0))[0]?.storeKey || "";
+  return (
+    candidates
+      .map((storeKey) => state.stores.get(storeKey))
+      .filter(Boolean)
+      .sort((left, right) => (right.jobCount || 0) - (left.jobCount || 0))[0]
+      ?.storeKey || ""
+  );
 }
 
 function compareScheduleRows(left, right) {
   const byDate = cleanText(left?.date).localeCompare(cleanText(right?.date));
   if (byDate !== 0) return byDate;
-  const byTime = parseScheduleTimeToMinutes(left?.startTimeText)
-    - parseScheduleTimeToMinutes(right?.startTimeText);
+  const byTime =
+    parseScheduleTimeToMinutes(left?.startTimeText) -
+    parseScheduleTimeToMinutes(right?.startTimeText);
   if (byTime !== 0) return byTime;
   return cleanText(left?.storeName).localeCompare(cleanText(right?.storeName));
 }
@@ -1390,7 +1440,10 @@ function getPrimaryScheduleForStore(storeKey = state.selectedStoreKey) {
   return getPrimaryScheduleRow(getScheduleRowsForStore(storeKey));
 }
 
-function matchesScheduleFilter(scheduleRows, filterValue = state.storeScheduleFilter) {
+function matchesScheduleFilter(
+  scheduleRows,
+  filterValue = state.storeScheduleFilter,
+) {
   const rows = Array.isArray(scheduleRows) ? scheduleRows : [];
   if (filterValue === "all") return true;
   if (!rows.length) return false;
@@ -1419,7 +1472,8 @@ function formatScheduleFilterLabel(value) {
 }
 
 function onStoreScheduleFilterChange() {
-  state.storeScheduleFilter = cleanText(dom.storeScheduleFilter?.value) || "all";
+  state.storeScheduleFilter =
+    cleanText(dom.storeScheduleFilter?.value) || "all";
   renderStoreSelect();
   refreshStoreContextPanels();
   persistToStorage();
@@ -1461,7 +1515,10 @@ function renderGoalHint() {
 
   dom.goalHint.textContent = parts.join(" ");
   dom.goalHint.classList.remove("meta-warning");
-  dom.goalHint.classList.toggle("meta-success", schedule.plannedDurationHours > 0);
+  dom.goalHint.classList.toggle(
+    "meta-success",
+    schedule.plannedDurationHours > 0,
+  );
 }
 
 function applyScheduledGoalDefault(force = false) {
@@ -1495,7 +1552,8 @@ function normalizeRow(row) {
   const type = normalizeInventoryType(
     cleanText(firstValue(normalized, ["typeofinv"])) || "Unknown",
   );
-  const officeName = cleanText(firstValue(normalized, ["officename"])) || "Unknown";
+  const officeName =
+    cleanText(firstValue(normalized, ["officename"])) || "Unknown";
   const role = cleanText(
     firstValue(normalized, ["role", "employeerole", "position", "jobtitle"]),
   ).toLowerCase();
@@ -1577,7 +1635,10 @@ function buildJobs(rows) {
     ...job,
     crewSize: job.employees.size,
     employees: Array.from(job.employees),
-    supervisorNumber: resolveMostFrequentKey(job.supervisorCounts, job.supervisorNumber),
+    supervisorNumber: resolveMostFrequentKey(
+      job.supervisorCounts,
+      job.supervisorNumber,
+    ),
     supervisorCounts: undefined,
   }));
 }
@@ -1614,10 +1675,10 @@ function buildStoreStats(jobs) {
 
     stores.set(storeKey, {
       storeKey,
-        account: bucket.account,
-        storeName: bucket.storeName,
-        officeName: bucket.jobs[0]?.officeName || "Unknown",
-        avgPieces: summary.avgPieces,
+      account: bucket.account,
+      storeName: bucket.storeName,
+      officeName: bucket.jobs[0]?.officeName || "Unknown",
+      avgPieces: summary.avgPieces,
       medianPieces: summary.medianPieces,
       trimmedMeanPieces: summary.trimmedMeanPieces,
       recentWeightedPieces: summary.recentWeightedPieces,
@@ -1691,7 +1752,9 @@ function applySegmentsToStores(stores, storeSegmentByStoreKey) {
 function buildAccountSegmentStats(jobs) {
   const grouped = new Map();
   jobs.forEach((job) => {
-    const segmentKey = state.storeSegmentByStoreKey.get(job.storeKey)?.segmentKey;
+    const segmentKey = state.storeSegmentByStoreKey.get(
+      job.storeKey,
+    )?.segmentKey;
     if (!segmentKey) return;
     if (!grouped.has(segmentKey)) grouped.set(segmentKey, []);
     grouped.get(segmentKey).push(job);
@@ -1797,8 +1860,7 @@ function buildEmployeeStats(rows) {
     .map((row) => Date.parse(row.date || ""))
     .filter((ts) => Number.isFinite(ts))
     .reduce((max, ts) => Math.max(max, ts), 0);
-  const referenceTimestamp =
-    maxRowTimestamp > 0 ? maxRowTimestamp : Date.now();
+  const referenceTimestamp = maxRowTimestamp > 0 ? maxRowTimestamp : Date.now();
 
   rows.forEach((row) => {
     // Exclude rows where the employee was the listed supervisor for that inventory.
@@ -1881,7 +1943,8 @@ function buildEmployeeStats(rows) {
             : 0,
         avgPiecesPerHrRecent:
           accountBucket.recentWeightSum > 0
-            ? accountBucket.recentWeightedSpeedSum / accountBucket.recentWeightSum
+            ? accountBucket.recentWeightedSpeedSum /
+              accountBucket.recentWeightSum
             : 0,
         jobCount: accountBucket.jobKeys.size,
       };
@@ -2153,8 +2216,12 @@ function renderStoreSelect() {
   const previousStoreKey = state.selectedStoreKey;
   const query = (dom.storeSearch.value || "").trim().toLowerCase();
   const filtered = state.storesList
-    .filter((store) => `${store.account} ${store.storeName}`.toLowerCase().includes(query))
-    .filter((store) => matchesScheduleFilter(store.scheduleRows, state.storeScheduleFilter))
+    .filter((store) =>
+      `${store.account} ${store.storeName}`.toLowerCase().includes(query),
+    )
+    .filter((store) =>
+      matchesScheduleFilter(store.scheduleRows, state.storeScheduleFilter),
+    )
     .sort((left, right) => {
       if (state.storeScheduleFilter === "all") {
         const leftLabel = `${left.account} ${left.storeName}`.toLowerCase();
@@ -2164,12 +2231,17 @@ function renderStoreSelect() {
 
       const leftSchedule = getPrimaryScheduleForStore(left.storeKey);
       const rightSchedule = getPrimaryScheduleForStore(right.storeKey);
-      const byDate = cleanText(leftSchedule?.date).localeCompare(cleanText(rightSchedule?.date));
+      const byDate = cleanText(leftSchedule?.date).localeCompare(
+        cleanText(rightSchedule?.date),
+      );
       if (byDate !== 0) return byDate;
-      const byTime = parseScheduleTimeToMinutes(leftSchedule?.startTimeText)
-        - parseScheduleTimeToMinutes(rightSchedule?.startTimeText);
+      const byTime =
+        parseScheduleTimeToMinutes(leftSchedule?.startTimeText) -
+        parseScheduleTimeToMinutes(rightSchedule?.startTimeText);
       if (byTime !== 0) return byTime;
-      return `${left.account} ${left.storeName}`.localeCompare(`${right.account} ${right.storeName}`);
+      return `${left.account} ${left.storeName}`.localeCompare(
+        `${right.account} ${right.storeName}`,
+      );
     });
 
   dom.storeSelect.innerHTML = "";
@@ -2311,8 +2383,12 @@ function toggleCompareSection() {
 
 function onCompareInputChange() {
   setCompareBulkStatus("");
-  state.compareAssignment.storeAInput = cleanText(dom.compareStoreA.value || "");
-  state.compareAssignment.storeBInput = cleanText(dom.compareStoreB.value || "");
+  state.compareAssignment.storeAInput = cleanText(
+    dom.compareStoreA.value || "",
+  );
+  state.compareAssignment.storeBInput = cleanText(
+    dom.compareStoreB.value || "",
+  );
   state.compareAssignment.storeA = resolveStoreKeyFromInput(
     state.compareAssignment.storeAInput,
   );
@@ -2323,22 +2399,30 @@ function onCompareInputChange() {
     dom.compareGoalMode.value === "duration" ? "duration" : "manhours";
   state.compareAssignment.goalA = Math.max(0, toNumber(dom.compareGoalA.value));
   state.compareAssignment.goalB = Math.max(0, toNumber(dom.compareGoalB.value));
-  state.compareAssignment.supervisorA = cleanText(dom.compareSupervisorA.value || "");
-  state.compareAssignment.supervisorB = cleanText(dom.compareSupervisorB.value || "");
+  state.compareAssignment.supervisorA = cleanText(
+    dom.compareSupervisorA.value || "",
+  );
+  state.compareAssignment.supervisorB = cleanText(
+    dom.compareSupervisorB.value || "",
+  );
   state.compareAssignment.roleModes.supervisorA = parseContributionMode(
     dom.compareSupervisorModeA.value,
   );
   state.compareAssignment.roleModes.supervisorB = parseContributionMode(
     dom.compareSupervisorModeB.value,
   );
-  state.compareAssignment.roleModes.rx = parseContributionMode(dom.compareRxMode.value);
+  state.compareAssignment.roleModes.rx = parseContributionMode(
+    dom.compareRxMode.value,
+  );
   state.compareAssignment.roleModes.training = parseContributionMode(
     dom.compareTrainingMode.value,
   );
   state.compareAssignment.roleModes.earlyLate = parseContributionMode(
     dom.compareEarlyLateMode.value,
   );
-  state.compareAssignment.sharedRoles.rx = getRoleChecklistValues(dom.compareRxEmployee);
+  state.compareAssignment.sharedRoles.rx = getRoleChecklistValues(
+    dom.compareRxEmployee,
+  );
   state.compareAssignment.sharedRoles.training = getRoleChecklistValues(
     dom.compareTrainingEmployee,
   );
@@ -2384,7 +2468,9 @@ function renderComparePlanner() {
   const available = getCompareAvailableEmployeeIds(cfg.storeA, cfg.storeB);
   const availableSet = new Set(available);
   cfg.availableEmployees = new Set(
-    Array.from(cfg.availableEmployees || []).filter((id) => availableSet.has(id)),
+    Array.from(cfg.availableEmployees || []).filter((id) =>
+      availableSet.has(id),
+    ),
   );
   const showCompareRx = compareNeedsRxRole();
   cfg.sharedRoles.rx = showCompareRx
@@ -2449,7 +2535,8 @@ function renderComparePlanner() {
     "No early/late role",
   );
   updateCompareGoalLabels(cfg.goalMode);
-  const compareCollapsed = dom.compareSection?.classList.contains("is-collapsed");
+  const compareCollapsed =
+    dom.compareSection?.classList.contains("is-collapsed");
   const hasActiveCompareState =
     cfg.availableEmployees.size > 0 ||
     cleanText(dom.compareEmployeeFilter?.value || "").length > 0;
@@ -2521,7 +2608,8 @@ function getComparePlannerStatus(cfg) {
     earlyLate: filterToSelected(cfg.sharedRoles.earlyLate, selectedSet),
   };
   const rxRequiredCount =
-    (isRxRoleRequiredForStore(storeA) ? 1 : 0) + (isRxRoleRequiredForStore(storeB) ? 1 : 0);
+    (isRxRoleRequiredForStore(storeA) ? 1 : 0) +
+    (isRxRoleRequiredForStore(storeB) ? 1 : 0);
   const rxAssignedCount = sharedRoles.rx.length;
   const rxAssignmentsEnough = rxAssignedCount >= rxRequiredCount;
   const canSuggest =
@@ -2688,7 +2776,9 @@ function renderCompareEmployeeList() {
       else cfg.availableEmployees.delete(employeeId);
       if (!cfg.availableEmployees.has(cfg.supervisorA)) cfg.supervisorA = "";
       if (!cfg.availableEmployees.has(cfg.supervisorB)) cfg.supervisorB = "";
-      cfg.sharedRoles.rx = cfg.sharedRoles.rx.filter((id) => cfg.availableEmployees.has(id));
+      cfg.sharedRoles.rx = cfg.sharedRoles.rx.filter((id) =>
+        cfg.availableEmployees.has(id),
+      );
       cfg.sharedRoles.training = cfg.sharedRoles.training.filter((id) =>
         cfg.availableEmployees.has(id),
       );
@@ -2728,7 +2818,9 @@ function onCompareEmployeeFilterKeyDown(event) {
     ),
   );
   if (bulk.entries.length > 1) {
-    bulk.matchedIds.forEach((id) => state.compareAssignment.availableEmployees.add(id));
+    bulk.matchedIds.forEach((id) =>
+      state.compareAssignment.availableEmployees.add(id),
+    );
     dom.compareEmployeeFilter.value = "";
     renderComparePlanner();
     setCompareBulkStatus(
@@ -2766,7 +2858,9 @@ function onCompareEmployeeFilterPaste(event) {
   );
   if (bulk.entries.length <= 1) return;
   event.preventDefault();
-  bulk.matchedIds.forEach((id) => state.compareAssignment.availableEmployees.add(id));
+  bulk.matchedIds.forEach((id) =>
+    state.compareAssignment.availableEmployees.add(id),
+  );
   dom.compareEmployeeFilter.value = "";
   renderComparePlanner();
   setCompareBulkStatus(
@@ -2851,7 +2945,9 @@ async function suggestTwoStoreAssignment() {
         },
       );
     } else {
-      showComputeWaitOverlay("Building suggested assignment (optimized mode)...");
+      showComputeWaitOverlay(
+        "Building suggested assignment (optimized mode)...",
+      );
       await nextTick();
       result = solveTwoStoreGreedy(solveConfig);
     }
@@ -2931,9 +3027,11 @@ function buildGreedySeedPlans(config) {
   const accountA = config.storeA?.account || "";
   const accountB = config.storeB?.account || accountA;
   const needsA =
-    isRxRoleRequiredForStore(config.storeA) && !Array.from(baseA).some((id) => rxPool.has(id));
+    isRxRoleRequiredForStore(config.storeA) &&
+    !Array.from(baseA).some((id) => rxPool.has(id));
   const needsB =
-    isRxRoleRequiredForStore(config.storeB) && !Array.from(baseB).some((id) => rxPool.has(id));
+    isRxRoleRequiredForStore(config.storeB) &&
+    !Array.from(baseB).some((id) => rxPool.has(id));
   const rxFreeUnits = freeUnits
     .map((members, index) => ({ index, members }))
     .filter((unit) => unit.members.some((id) => rxPool.has(id)));
@@ -3030,16 +3128,22 @@ function scoreTwoStoreAssignment(config, crewA, crewB, options = {}) {
     supervisor: config.supervisorA,
     rx: (config.sharedRoles.rx || []).filter((id) => setA.has(id)),
     training: (config.sharedRoles.training || []).filter((id) => setA.has(id)),
-    earlyLate: (config.sharedRoles.earlyLate || []).filter((id) => setA.has(id)),
+    earlyLate: (config.sharedRoles.earlyLate || []).filter((id) =>
+      setA.has(id),
+    ),
   };
   const rolesB = {
     supervisor: config.supervisorB,
     rx: (config.sharedRoles.rx || []).filter((id) => setB.has(id)),
     training: (config.sharedRoles.training || []).filter((id) => setB.has(id)),
-    earlyLate: (config.sharedRoles.earlyLate || []).filter((id) => setB.has(id)),
+    earlyLate: (config.sharedRoles.earlyLate || []).filter((id) =>
+      setB.has(id),
+    ),
   };
-  if (isRxRoleRequiredForStore(config.storeA) && rolesA.rx.length === 0) return null;
-  if (isRxRoleRequiredForStore(config.storeB) && rolesB.rx.length === 0) return null;
+  if (isRxRoleRequiredForStore(config.storeA) && rolesA.rx.length === 0)
+    return null;
+  if (isRxRoleRequiredForStore(config.storeB) && rolesB.rx.length === 0)
+    return null;
   const modesA = {
     supervisor: config.roleModes.supervisorA,
     rx: config.roleModes.rx,
@@ -3065,8 +3169,10 @@ function scoreTwoStoreAssignment(config, crewA, crewB, options = {}) {
     modesB,
   );
   if (!predA || !predB) return null;
-  const valueA = config.goalMode === "duration" ? predA.onSiteDuration : predA.manHours;
-  const valueB = config.goalMode === "duration" ? predB.onSiteDuration : predB.manHours;
+  const valueA =
+    config.goalMode === "duration" ? predA.onSiteDuration : predA.manHours;
+  const valueB =
+    config.goalMode === "duration" ? predB.onSiteDuration : predB.manHours;
   const errA = Math.abs(valueA - config.goalA);
   const errB = Math.abs(valueB - config.goalB);
   return {
@@ -3098,7 +3204,8 @@ function predictForAssignedCrew(storeKey, crewIds, rolesConfig, modesConfig) {
     earlyLate: parseContributionMode(modesConfig?.earlyLate || "p50"),
   };
   const crew = uniqueStrings(crewIds || []);
-  if (!store || !roles.supervisor || !crew.includes(roles.supervisor)) return null;
+  if (!store || !roles.supervisor || !crew.includes(roles.supervisor))
+    return null;
   if (!roles.rx.every((id) => crew.includes(id))) return null;
   if (!roles.training.every((id) => crew.includes(id))) return null;
   if (!roles.earlyLate.every((id) => crew.includes(id))) return null;
@@ -3124,9 +3231,11 @@ function predictForAssignedCrew(storeKey, crewIds, rolesConfig, modesConfig) {
     .filter((v) => v > 0);
   const crewSpeedRaw = crewSpeeds.reduce((sum, n) => sum + n, 0);
   const crewSize = crewSpeeds.length;
-  if (!(baseline.value > 0) || !(crewSpeedRaw > 0) || crewSize <= 0) return null;
+  if (!(baseline.value > 0) || !(crewSpeedRaw > 0) || crewSize <= 0)
+    return null;
   const crewEfficiency = getCrewEfficiencyFactor(crewSize, tuning);
-  const rawOnSiteDuration = overhead.value + baseline.value / (crewSpeedRaw * crewEfficiency);
+  const rawOnSiteDuration =
+    overhead.value + baseline.value / (crewSpeedRaw * crewEfficiency);
   const residualAdjustment = resolveResidualAdjustmentForStore(
     store,
     crewSize,
@@ -3231,8 +3340,18 @@ function renderCompareResult(result, goalMode, goalA, goalB) {
     training: cfg.roleModes.training,
     earlyLate: cfg.roleModes.earlyLate,
   };
-  const rankedA = buildCompareStaffingRankRows(storeA, result.crewA, rolesA, modesA);
-  const rankedB = buildCompareStaffingRankRows(storeB, result.crewB, rolesB, modesB);
+  const rankedA = buildCompareStaffingRankRows(
+    storeA,
+    result.crewA,
+    rolesA,
+    modesA,
+  );
+  const rankedB = buildCompareStaffingRankRows(
+    storeB,
+    result.crewB,
+    rolesB,
+    modesB,
+  );
   dom.compareResult.innerHTML = `<div class="compare-result">
     <article class="compare-store-block">
       <h4 class="compare-store-title">${escapeHtml(getStoreDisplayLabel(storeA) || "Store A")}</h4>
@@ -3514,7 +3633,9 @@ function getRoleSelectionForStore(storeKey) {
   const current = state.selectedRolesByStore[storeKey] || {};
   return {
     supervisor: current.supervisor || "",
-    rx: selectedStoreNeedsRxRole(storeKey) ? normalizeRoleArray(current.rx) : [],
+    rx: selectedStoreNeedsRxRole(storeKey)
+      ? normalizeRoleArray(current.rx)
+      : [],
     training: normalizeRoleArray(current.training),
     earlyLate: normalizeRoleArray(current.earlyLate),
   };
@@ -3627,19 +3748,24 @@ function getContributionModeLabel(mode) {
 function renderStoreStats() {
   const store = state.stores.get(state.selectedStoreKey);
   if (!store) {
-    dom.storeStats.textContent = "Select a store to see schedule and store history.";
+    dom.storeStats.textContent =
+      "Select a store to see schedule and store history.";
     return;
   }
   const schedule = getPrimaryScheduleForStore(store.storeKey);
   const noteRows = [];
-  if (schedule?.storeNotes) noteRows.push(renderBriefItem("Store Notes", schedule.storeNotes));
-  if (schedule?.notes) noteRows.push(renderBriefItem("Schedule Notes", schedule.notes));
+  if (schedule?.storeNotes)
+    noteRows.push(renderBriefItem("Store Notes", schedule.storeNotes));
+  if (schedule?.notes)
+    noteRows.push(renderBriefItem("Schedule Notes", schedule.notes));
 
   dom.storeStats.innerHTML = `
     <div class="store-brief">
       <section class="brief-section">
         <div class="brief-section-title">Scheduled Job</div>
-        ${schedule ? `
+        ${
+          schedule
+            ? `
           <div class="brief-grid">
             ${renderBriefItem("Scheduled Date", formatLongDate(schedule.date))}
             ${renderBriefItem("Start Time", schedule.startTimeText || "Not listed")}
@@ -3651,9 +3777,11 @@ function renderStoreStats() {
             ${renderBriefItem("Scheduled On", schedule.dateScheduled || "Not listed")}
           </div>
           ${noteRows.length ? `<div class="brief-grid brief-note">${noteRows.join("")}</div>` : ""}
-        ` : `
+        `
+            : `
           <div class="brief-value muted">No linked schedule row found for this store.</div>
-        `}
+        `
+        }
       </section>
     </div>
   `;
@@ -3671,7 +3799,11 @@ function renderBriefItem(label, value, isHtml = false) {
 
 function formatScheduleAddress(schedule) {
   const lineOne = cleanText(schedule?.address);
-  const locality = [cleanText(schedule?.city), cleanText(schedule?.stateCode), cleanText(schedule?.zipcode)]
+  const locality = [
+    cleanText(schedule?.city),
+    cleanText(schedule?.stateCode),
+    cleanText(schedule?.zipcode),
+  ]
     .filter(Boolean)
     .join(", ")
     .replace(", ,", ",");
@@ -3756,13 +3888,12 @@ function onEmployeeFilterKeyDown(event) {
 
   const query = (dom.employeeFilter.value || "").trim().toLowerCase();
   if (!query) return;
-  const bulk = resolveBulkEmployeeSelection(
-    query,
-    getSchedulableEmployeeIds(),
-  );
+  const bulk = resolveBulkEmployeeSelection(query, getSchedulableEmployeeIds());
   if (bulk.entries.length > 1) {
     bulk.matchedIds.forEach((id) => state.selectedEmployees.add(id));
-    const assignedSupervisor = assignFirstBulkSupervisorToSelectedStore(bulk.matchedIds);
+    const assignedSupervisor = assignFirstBulkSupervisorToSelectedStore(
+      bulk.matchedIds,
+    );
     applyBulkRoleHintsToSelectedStore(bulk);
     syncRoleAssignmentsToSelectedCrew();
     renderRoleSelectors();
@@ -3800,11 +3931,16 @@ function onEmployeeFilterKeyDown(event) {
 
 function onEmployeeFilterPaste(event) {
   const rawText = event?.clipboardData?.getData("text") || "";
-  const bulk = resolveBulkEmployeeSelection(rawText, getSchedulableEmployeeIds());
+  const bulk = resolveBulkEmployeeSelection(
+    rawText,
+    getSchedulableEmployeeIds(),
+  );
   if (bulk.entries.length <= 1) return;
   event.preventDefault();
   bulk.matchedIds.forEach((id) => state.selectedEmployees.add(id));
-  const assignedSupervisor = assignFirstBulkSupervisorToSelectedStore(bulk.matchedIds);
+  const assignedSupervisor = assignFirstBulkSupervisorToSelectedStore(
+    bulk.matchedIds,
+  );
   applyBulkRoleHintsToSelectedStore(bulk);
   syncRoleAssignmentsToSelectedCrew();
   renderRoleSelectors();
@@ -3836,8 +3972,14 @@ function applyBulkRoleHintsToSelectedStore(bulk) {
   if (!storeKey) return;
   const roles = getRoleSelectionForStore(storeKey);
   const selectedSet = new Set(Array.from(state.selectedEmployees));
-  roles.rx = filterToSelected([...roles.rx, ...(bulk?.rxIds || [])], selectedSet);
-  roles.earlyLate = filterToSelected([...roles.earlyLate, ...(bulk?.earlyLateIds || [])], selectedSet);
+  roles.rx = filterToSelected(
+    [...roles.rx, ...(bulk?.rxIds || [])],
+    selectedSet,
+  );
+  roles.earlyLate = filterToSelected(
+    [...roles.earlyLate, ...(bulk?.earlyLateIds || [])],
+    selectedSet,
+  );
   state.selectedRolesByStore[storeKey] = roles;
 }
 
@@ -3949,7 +4091,9 @@ function predict() {
     roles.supervisor,
   );
   const overlap = getLastCrewOverlapRate(state.selectedStoreKey, selectedRaw);
-  const lastResidual = state.lastDurationResidualByStore.get(state.selectedStoreKey);
+  const lastResidual = state.lastDurationResidualByStore.get(
+    state.selectedStoreKey,
+  );
   const lastCrewBias =
     overlap > 0 && Number.isFinite(lastResidual?.durationResidual)
       ? overlap * 0.15 * safeNumber(lastResidual.durationResidual)
@@ -4068,7 +4212,8 @@ function resolveBaselinePieces(
       0,
       Math.min(0.9, safeNumber(baselineTuning?.minStoreWeight) || 0.45),
     );
-    const storeWeight = n > 0 ? Math.max(rawStoreWeight, minStoreWeight) : rawStoreWeight;
+    const storeWeight =
+      n > 0 ? Math.max(rawStoreWeight, minStoreWeight) : rawStoreWeight;
     return {
       value: storeWeight * storeCandidate + (1 - storeWeight) * context.value,
       source: `store ${storeMode} + ${context.source}`,
@@ -4163,7 +4308,8 @@ function resolveContextBaseline(
   }
 
   const sumW = candidates.reduce((sum, c) => sum + c.weight, 0);
-  const value = candidates.reduce((sum, c) => sum + c.value * c.weight, 0) / sumW;
+  const value =
+    candidates.reduce((sum, c) => sum + c.value * c.weight, 0) / sumW;
   const source = candidates.map((c) => c.key).join(" + ");
   return { value, source };
 }
@@ -4250,9 +4396,11 @@ function computePredictionForJob(job, store, options = {}) {
   if (!(crewSpeedRaw > 0)) return null;
 
   const efficiency = getCrewEfficiencyFactor(crewSize, tuning);
-  const rawOnSiteDuration = overhead.value + baseline.value / (crewSpeedRaw * efficiency);
+  const rawOnSiteDuration =
+    overhead.value + baseline.value / (crewSpeedRaw * efficiency);
   const durationAdj = options.applyResiduals
-    ? resolveResidualAdjustmentForStore(store, crewSize, job.supervisorNumber).biasHours
+    ? resolveResidualAdjustmentForStore(store, crewSize, job.supervisorNumber)
+        .biasHours
     : 0;
   const onSiteDuration = Math.max(0, rawOnSiteDuration + durationAdj);
   const manHours = Math.max(0, onSiteDuration * crewSize);
@@ -4294,7 +4442,10 @@ function updateResults() {
       : state.analyticsScheduled
         ? "Calibrating model and store accuracy. Predictions will appear automatically when complete."
         : "Model calibration is not ready. Click Compute Accuracy to retry.";
-    setPredictionMeta(waitMessage, state.analyticsScheduled ? "info" : "warning");
+    setPredictionMeta(
+      waitMessage,
+      state.analyticsScheduled ? "info" : "warning",
+    );
     renderScenarios(null);
     return;
   }
@@ -4426,7 +4577,7 @@ function renderScenarios(prediction) {
       `<td>${escapeHtml(getEmployeeDisplayName(item.id))}</td>`,
       `<td>${formatNumber(item.speed, 1)}</td>`,
     ].join("");
-  dom.scenarioBody.appendChild(tr);
+    dom.scenarioBody.appendChild(tr);
   });
 }
 
@@ -4585,16 +4736,16 @@ function renderAccuracyReport() {
   const filteredMae =
     filteredWeight > 0
       ? filteredRows.reduce(
-        (sum, row) => sum + safeNumber(row.mae) * safeNumber(row.weightSum),
-        0,
-      ) / filteredWeight
+          (sum, row) => sum + safeNumber(row.mae) * safeNumber(row.weightSum),
+          0,
+        ) / filteredWeight
       : 0;
   const filteredMape =
     filteredWeight > 0
       ? filteredRows.reduce(
-        (sum, row) => sum + safeNumber(row.mape) * safeNumber(row.weightSum),
-        0,
-      ) / filteredWeight
+          (sum, row) => sum + safeNumber(row.mape) * safeNumber(row.weightSum),
+          0,
+        ) / filteredWeight
       : 0;
   const filteredStoreCount = filteredRows.length;
   const filteredJobCount = filteredRows.reduce(
@@ -4611,9 +4762,11 @@ function renderAccuracyReport() {
   const selectedStoreRow = allRows.find((r) => r.storeKey === selectedStoreKey);
   if (selectedStoreRow) {
     const durationDelta =
-      selectedStoreRow.predictedAvgDuration - selectedStoreRow.actualAvgDuration;
+      selectedStoreRow.predictedAvgDuration -
+      selectedStoreRow.actualAvgDuration;
     const manHoursDelta =
-      selectedStoreRow.predictedAvgManHours - selectedStoreRow.actualAvgManHours;
+      selectedStoreRow.predictedAvgManHours -
+      selectedStoreRow.actualAvgManHours;
     const trend = classifyAccuracyTrend(durationDelta);
     const durationDiffClass = `accuracy-diff-${trend.key}`;
     const manTrend = classifyAccuracyTrend(manHoursDelta, 0.75);
@@ -4678,9 +4831,12 @@ async function calibrateModelParameters() {
     if (!jobsByAccountType.has(typeKey)) jobsByAccountType.set(typeKey, []);
     jobsByAccountType.get(typeKey).push(job);
 
-    const segmentKey = state.storeSegmentByStoreKey.get(job.storeKey)?.segmentKey;
+    const segmentKey = state.storeSegmentByStoreKey.get(
+      job.storeKey,
+    )?.segmentKey;
     if (segmentKey) {
-      if (!jobsByAccountSegment.has(segmentKey)) jobsByAccountSegment.set(segmentKey, []);
+      if (!jobsByAccountSegment.has(segmentKey))
+        jobsByAccountSegment.set(segmentKey, []);
       jobsByAccountSegment.get(segmentKey).push(job);
     }
     if (i % 150 === 0) await maybeYield();
@@ -4702,7 +4858,8 @@ async function calibrateModelParameters() {
   for (const [key, jobs] of jobsByAccountSegment.entries()) {
     if (jobs.length < 28) continue;
     const account = key.split("||")[0];
-    const accountModel = state.modelTuningByAccount.get(account) || state.modelTuning;
+    const accountModel =
+      state.modelTuningByAccount.get(account) || state.modelTuning;
     const accountBaseline =
       state.baselineTuningByAccount.get(account) || state.baselineTuning;
     const tuned = await calibrateParameterBundleForJobs(
@@ -4719,7 +4876,8 @@ async function calibrateModelParameters() {
   for (const [key, jobs] of jobsByAccountType.entries()) {
     if (jobs.length < 20) continue;
     const account = key.split("||")[0];
-    const accountModel = state.modelTuningByAccount.get(account) || state.modelTuning;
+    const accountModel =
+      state.modelTuningByAccount.get(account) || state.modelTuning;
     const accountBaseline =
       state.baselineTuningByAccount.get(account) || state.baselineTuning;
     const tuned = await calibrateParameterBundleForJobs(
@@ -4921,7 +5079,9 @@ async function replayScoreForParameters(
       continue;
     }
 
-    const durationErr = Math.abs(predicted.onSiteDuration - safeNumber(job.duration));
+    const durationErr = Math.abs(
+      predicted.onSiteDuration - safeNumber(job.duration),
+    );
     const manErr = Math.abs(predicted.manHours - safeNumber(job.totalManHours));
     if (!Number.isFinite(durationErr) || !Number.isFinite(manErr)) {
       if (i % 25 === 0) await maybeYield();
@@ -4999,7 +5159,9 @@ async function buildResidualStats(jobsSubset) {
     }
     const manResidual = safeNumber(job.totalManHours) - predicted.manHours;
 
-    const segmentKey = state.storeSegmentByStoreKey.get(job.storeKey)?.segmentKey;
+    const segmentKey = state.storeSegmentByStoreKey.get(
+      job.storeKey,
+    )?.segmentKey;
     const typeKey = `${job.account}||${job.typeOfInv || "Unknown"}`;
     const officeKey = `${job.account}||${job.officeName || "Unknown"}`;
     const supervisorKey = cleanText(job.supervisorNumber || "").toLowerCase();
@@ -5024,7 +5186,8 @@ async function buildResidualStats(jobsSubset) {
       );
     }
     if (segmentKey) pushResidual(byAccountSegment, segmentKey, residual);
-    if (segmentKey) pushResidual(byAccountSegmentCrewBand, segmentCrewKey, residual);
+    if (segmentKey)
+      pushResidual(byAccountSegmentCrewBand, segmentCrewKey, residual);
     pushResidual(byAccountType, typeKey, residual);
     pushResidual(byAccountOffice, officeKey, residual);
     pushResidual(byAccountTypeCrewBand, typeCrewKey, residual);
@@ -5048,7 +5211,8 @@ async function buildResidualStats(jobsSubset) {
           manResidual,
         );
       }
-      if (segmentKey) pushResidual(manByAccountSegment, segmentKey, manResidual);
+      if (segmentKey)
+        pushResidual(manByAccountSegment, segmentKey, manResidual);
       if (segmentKey)
         pushResidual(manByAccountSegmentCrewBand, segmentCrewKey, manResidual);
       pushResidual(manByAccountType, typeKey, manResidual);
@@ -5083,19 +5247,23 @@ async function buildResidualStats(jobsSubset) {
   state.residualByAccountSegmentCrewBand = summarizeResidualMap(
     byAccountSegmentCrewBand,
   );
-  state.residualByAccountTypeCrewBand = summarizeResidualMap(byAccountTypeCrewBand);
+  state.residualByAccountTypeCrewBand = summarizeResidualMap(
+    byAccountTypeCrewBand,
+  );
   state.residualByAccountCrewBand = summarizeResidualMap(byAccountCrewBand);
   state.residualGlobalCrewBand = summarizeResidualMap(globalCrewBand);
   state.residualGlobal = summarizeResiduals(globalResiduals);
   state.manHourResidualByStore = summarizeResidualMap(manByStore);
-  state.manHourResidualByAccountSegment = summarizeResidualMap(manByAccountSegment);
+  state.manHourResidualByAccountSegment =
+    summarizeResidualMap(manByAccountSegment);
   state.manHourResidualByAccountType = summarizeResidualMap(manByAccountType);
-  state.manHourResidualByAccountOffice = summarizeResidualMap(manByAccountOffice);
+  state.manHourResidualByAccountOffice =
+    summarizeResidualMap(manByAccountOffice);
   state.manHourResidualByAccount = summarizeResidualMap(manByAccount);
-  state.manHourResidualByStoreCrewBand = summarizeResidualMap(manByStoreCrewBand);
-  state.manHourResidualByStoreSupervisor = summarizeResidualMap(
-    manByStoreSupervisor,
-  );
+  state.manHourResidualByStoreCrewBand =
+    summarizeResidualMap(manByStoreCrewBand);
+  state.manHourResidualByStoreSupervisor =
+    summarizeResidualMap(manByStoreSupervisor);
   state.manHourResidualByAccountSupervisor = summarizeResidualMap(
     manByAccountSupervisor,
   );
@@ -5105,13 +5273,15 @@ async function buildResidualStats(jobsSubset) {
   state.manHourResidualByAccountTypeCrewBand = summarizeResidualMap(
     manByAccountTypeCrewBand,
   );
-  state.manHourResidualByAccountCrewBand = summarizeResidualMap(
-    manByAccountCrewBand,
-  );
+  state.manHourResidualByAccountCrewBand =
+    summarizeResidualMap(manByAccountCrewBand);
   state.manHourResidualGlobalCrewBand = summarizeResidualMap(manGlobalCrewBand);
   state.manHourResidualGlobal = summarizeResiduals(manGlobalResiduals);
   state.lastDurationResidualByStore = latestByStore;
-  state.backtestMetrics = await computeHoldoutBacktestMetrics(jobsSubset, maybeYield);
+  state.backtestMetrics = await computeHoldoutBacktestMetrics(
+    jobsSubset,
+    maybeYield,
+  );
   const inSampleMae = await replayScoreForParameters(
     jobsSubset,
     state.modelTuning,
@@ -5119,9 +5289,10 @@ async function buildResidualStats(jobsSubset) {
     maybeYield,
   );
   const holdoutDurationMae = safeNumber(state.backtestMetrics.durationMae);
-  const ratio = holdoutDurationMae > 0 && inSampleMae > 0
-    ? holdoutDurationMae / inSampleMae
-    : 1;
+  const ratio =
+    holdoutDurationMae > 0 && inSampleMae > 0
+      ? holdoutDurationMae / inSampleMae
+      : 1;
   state.uncertaintyScale = Math.max(0.85, Math.min(1.5, ratio));
 }
 
@@ -5291,9 +5462,21 @@ function resolveScopedResidualAdjustment(config) {
     biasHours,
     kOf("storeSupervisor", 6),
   );
-  biasHours = blendFromScope(scoped.globalBand, biasHours, kOf("globalBand", 18));
-  biasHours = blendFromScope(scoped.accountBand, biasHours, kOf("accountBand", 14));
-  biasHours = blendFromScope(scoped.segmentBand, biasHours, kOf("segmentBand", 12));
+  biasHours = blendFromScope(
+    scoped.globalBand,
+    biasHours,
+    kOf("globalBand", 18),
+  );
+  biasHours = blendFromScope(
+    scoped.accountBand,
+    biasHours,
+    kOf("accountBand", 14),
+  );
+  biasHours = blendFromScope(
+    scoped.segmentBand,
+    biasHours,
+    kOf("segmentBand", 12),
+  );
   biasHours = blendFromScope(scoped.typeBand, biasHours, kOf("typeBand", 12));
   biasHours = blendFromScope(scoped.storeBand, biasHours, kOf("storeBand", 8));
 
@@ -5303,7 +5486,10 @@ function resolveScopedResidualAdjustment(config) {
   const storeMean = safeNumber(scoped.store?.mean);
   const anchorShare = Math.max(
     0,
-    Math.min(1, floorOf("anchorMinShare", profileDensity === "sparse" ? 0.55 : 0.4)),
+    Math.min(
+      1,
+      floorOf("anchorMinShare", profileDensity === "sparse" ? 0.55 : 0.4),
+    ),
   );
   const anchorWeightFloor = Math.max(
     0,
@@ -5336,7 +5522,11 @@ function resolveScopedResidualAdjustment(config) {
   }
 
   const rangeCandidates = [
-    { scope: "store+crew-band", stats: scoped.storeBand, min: minOf("storeBand", 5) },
+    {
+      scope: "store+crew-band",
+      stats: scoped.storeBand,
+      min: minOf("storeBand", 5),
+    },
     {
       scope: "store+supervisor",
       stats: scoped.supervisor,
@@ -5353,7 +5543,11 @@ function resolveScopedResidualAdjustment(config) {
       stats: scoped.segmentBand,
       min: minOf("segmentBand", 10),
     },
-    { scope: "account+segment", stats: scoped.segment, min: minOf("segment", 16) },
+    {
+      scope: "account+segment",
+      stats: scoped.segment,
+      min: minOf("segment", 16),
+    },
     {
       scope: "account+type+crew-band",
       stats: scoped.typeBand,
@@ -5450,12 +5644,16 @@ async function computeHoldoutBacktestMetrics(
       if (i % 25 === 0) await maybeYield();
       continue;
     }
-    const predicted = computePredictionForJob(job, store, { applyResiduals: true });
+    const predicted = computePredictionForJob(job, store, {
+      applyResiduals: true,
+    });
     if (!predicted) {
       if (i % 25 === 0) await maybeYield();
       continue;
     }
-    durationAbs += Math.abs(predicted.onSiteDuration - safeNumber(job.duration));
+    durationAbs += Math.abs(
+      predicted.onSiteDuration - safeNumber(job.duration),
+    );
     manAbs += Math.abs(predicted.manHours - safeNumber(job.totalManHours));
     count += 1;
     if (i % 25 === 0) await maybeYield();
@@ -5616,7 +5814,8 @@ function restoreSelectionsFromStorage() {
   const snapshot = readStorage();
   const storedStoreKey = snapshot.selectedStoreKey;
   const firstScheduledStoreKey =
-    state.storesList.find((store) => (store.scheduleRows || []).length > 0)?.storeKey || null;
+    state.storesList.find((store) => (store.scheduleRows || []).length > 0)
+      ?.storeKey || null;
   state.selectedStoreKey = state.stores.has(storedStoreKey)
     ? storedStoreKey
     : firstScheduledStoreKey || state.storesList[0]?.storeKey || null;
@@ -5688,10 +5887,16 @@ function buildAnalyticsSnapshot(fingerprint) {
     baselineTuning: state.baselineTuning,
     modelTuningByAccount: mapToEntries(state.modelTuningByAccount),
     modelTuningByAccountType: mapToEntries(state.modelTuningByAccountType),
-    modelTuningByAccountSegment: mapToEntries(state.modelTuningByAccountSegment),
+    modelTuningByAccountSegment: mapToEntries(
+      state.modelTuningByAccountSegment,
+    ),
     baselineTuningByAccount: mapToEntries(state.baselineTuningByAccount),
-    baselineTuningByAccountType: mapToEntries(state.baselineTuningByAccountType),
-    baselineTuningByAccountSegment: mapToEntries(state.baselineTuningByAccountSegment),
+    baselineTuningByAccountType: mapToEntries(
+      state.baselineTuningByAccountType,
+    ),
+    baselineTuningByAccountSegment: mapToEntries(
+      state.baselineTuningByAccountSegment,
+    ),
     residualByStore: mapToEntries(state.residualByStore),
     residualByAccountSegment: mapToEntries(state.residualByAccountSegment),
     residualByAccountType: mapToEntries(state.residualByAccountType),
@@ -5700,21 +5905,35 @@ function buildAnalyticsSnapshot(fingerprint) {
     residualGlobal: state.residualGlobal,
     residualByStoreCrewBand: mapToEntries(state.residualByStoreCrewBand),
     residualByStoreSupervisor: mapToEntries(state.residualByStoreSupervisor),
-    residualByAccountSupervisor: mapToEntries(state.residualByAccountSupervisor),
+    residualByAccountSupervisor: mapToEntries(
+      state.residualByAccountSupervisor,
+    ),
     residualByAccountSegmentCrewBand: mapToEntries(
       state.residualByAccountSegmentCrewBand,
     ),
-    residualByAccountTypeCrewBand: mapToEntries(state.residualByAccountTypeCrewBand),
+    residualByAccountTypeCrewBand: mapToEntries(
+      state.residualByAccountTypeCrewBand,
+    ),
     residualByAccountCrewBand: mapToEntries(state.residualByAccountCrewBand),
     residualGlobalCrewBand: mapToEntries(state.residualGlobalCrewBand),
     manHourResidualByStore: mapToEntries(state.manHourResidualByStore),
-    manHourResidualByAccountSegment: mapToEntries(state.manHourResidualByAccountSegment),
-    manHourResidualByAccountType: mapToEntries(state.manHourResidualByAccountType),
-    manHourResidualByAccountOffice: mapToEntries(state.manHourResidualByAccountOffice),
+    manHourResidualByAccountSegment: mapToEntries(
+      state.manHourResidualByAccountSegment,
+    ),
+    manHourResidualByAccountType: mapToEntries(
+      state.manHourResidualByAccountType,
+    ),
+    manHourResidualByAccountOffice: mapToEntries(
+      state.manHourResidualByAccountOffice,
+    ),
     manHourResidualByAccount: mapToEntries(state.manHourResidualByAccount),
     manHourResidualGlobal: state.manHourResidualGlobal,
-    manHourResidualByStoreCrewBand: mapToEntries(state.manHourResidualByStoreCrewBand),
-    manHourResidualByStoreSupervisor: mapToEntries(state.manHourResidualByStoreSupervisor),
+    manHourResidualByStoreCrewBand: mapToEntries(
+      state.manHourResidualByStoreCrewBand,
+    ),
+    manHourResidualByStoreSupervisor: mapToEntries(
+      state.manHourResidualByStoreSupervisor,
+    ),
     manHourResidualByAccountSupervisor: mapToEntries(
       state.manHourResidualByAccountSupervisor,
     ),
@@ -5727,8 +5946,12 @@ function buildAnalyticsSnapshot(fingerprint) {
     manHourResidualByAccountCrewBand: mapToEntries(
       state.manHourResidualByAccountCrewBand,
     ),
-    manHourResidualGlobalCrewBand: mapToEntries(state.manHourResidualGlobalCrewBand),
-    lastDurationResidualByStore: mapToEntries(state.lastDurationResidualByStore),
+    manHourResidualGlobalCrewBand: mapToEntries(
+      state.manHourResidualGlobalCrewBand,
+    ),
+    lastDurationResidualByStore: mapToEntries(
+      state.lastDurationResidualByStore,
+    ),
     uncertaintyScale: state.uncertaintyScale,
     backtestMetrics: state.backtestMetrics,
     accuracyCache: state.accuracyCache,
@@ -5739,39 +5962,63 @@ function applyAnalyticsSnapshot(snapshot) {
   state.modelTuning = snapshot.modelTuning || state.modelTuning;
   state.baselineTuning = snapshot.baselineTuning || state.baselineTuning;
   state.modelTuningByAccount = entriesToMap(snapshot.modelTuningByAccount);
-  state.modelTuningByAccountType = entriesToMap(snapshot.modelTuningByAccountType);
-  state.modelTuningByAccountSegment = entriesToMap(snapshot.modelTuningByAccountSegment);
-  state.baselineTuningByAccount = entriesToMap(snapshot.baselineTuningByAccount);
-  state.baselineTuningByAccountType = entriesToMap(snapshot.baselineTuningByAccountType);
+  state.modelTuningByAccountType = entriesToMap(
+    snapshot.modelTuningByAccountType,
+  );
+  state.modelTuningByAccountSegment = entriesToMap(
+    snapshot.modelTuningByAccountSegment,
+  );
+  state.baselineTuningByAccount = entriesToMap(
+    snapshot.baselineTuningByAccount,
+  );
+  state.baselineTuningByAccountType = entriesToMap(
+    snapshot.baselineTuningByAccountType,
+  );
   state.baselineTuningByAccountSegment = entriesToMap(
     snapshot.baselineTuningByAccountSegment,
   );
   state.residualByStore = entriesToMap(snapshot.residualByStore);
-  state.residualByAccountSegment = entriesToMap(snapshot.residualByAccountSegment);
+  state.residualByAccountSegment = entriesToMap(
+    snapshot.residualByAccountSegment,
+  );
   state.residualByAccountType = entriesToMap(snapshot.residualByAccountType);
-  state.residualByAccountOffice = entriesToMap(snapshot.residualByAccountOffice);
+  state.residualByAccountOffice = entriesToMap(
+    snapshot.residualByAccountOffice,
+  );
   state.residualByAccount = entriesToMap(snapshot.residualByAccount);
   state.residualGlobal = snapshot.residualGlobal || state.residualGlobal;
-  state.residualByStoreCrewBand = entriesToMap(snapshot.residualByStoreCrewBand);
-  state.residualByStoreSupervisor = entriesToMap(snapshot.residualByStoreSupervisor);
-  state.residualByAccountSupervisor = entriesToMap(snapshot.residualByAccountSupervisor);
+  state.residualByStoreCrewBand = entriesToMap(
+    snapshot.residualByStoreCrewBand,
+  );
+  state.residualByStoreSupervisor = entriesToMap(
+    snapshot.residualByStoreSupervisor,
+  );
+  state.residualByAccountSupervisor = entriesToMap(
+    snapshot.residualByAccountSupervisor,
+  );
   state.residualByAccountSegmentCrewBand = entriesToMap(
     snapshot.residualByAccountSegmentCrewBand,
   );
   state.residualByAccountTypeCrewBand = entriesToMap(
     snapshot.residualByAccountTypeCrewBand,
   );
-  state.residualByAccountCrewBand = entriesToMap(snapshot.residualByAccountCrewBand);
+  state.residualByAccountCrewBand = entriesToMap(
+    snapshot.residualByAccountCrewBand,
+  );
   state.residualGlobalCrewBand = entriesToMap(snapshot.residualGlobalCrewBand);
   state.manHourResidualByStore = entriesToMap(snapshot.manHourResidualByStore);
   state.manHourResidualByAccountSegment = entriesToMap(
     snapshot.manHourResidualByAccountSegment,
   );
-  state.manHourResidualByAccountType = entriesToMap(snapshot.manHourResidualByAccountType);
+  state.manHourResidualByAccountType = entriesToMap(
+    snapshot.manHourResidualByAccountType,
+  );
   state.manHourResidualByAccountOffice = entriesToMap(
     snapshot.manHourResidualByAccountOffice,
   );
-  state.manHourResidualByAccount = entriesToMap(snapshot.manHourResidualByAccount);
+  state.manHourResidualByAccount = entriesToMap(
+    snapshot.manHourResidualByAccount,
+  );
   state.manHourResidualGlobal =
     snapshot.manHourResidualGlobal || state.manHourResidualGlobal;
   state.manHourResidualByStoreCrewBand = entriesToMap(
@@ -5795,7 +6042,9 @@ function applyAnalyticsSnapshot(snapshot) {
   state.manHourResidualGlobalCrewBand = entriesToMap(
     snapshot.manHourResidualGlobalCrewBand,
   );
-  state.lastDurationResidualByStore = entriesToMap(snapshot.lastDurationResidualByStore);
+  state.lastDurationResidualByStore = entriesToMap(
+    snapshot.lastDurationResidualByStore,
+  );
   state.uncertaintyScale = safeNumber(snapshot.uncertaintyScale) || 1;
   state.backtestMetrics = snapshot.backtestMetrics || state.backtestMetrics;
   state.accuracyCache = snapshot.accuracyCache || null;
@@ -5818,7 +6067,8 @@ function restoreAnalyticsCache(fingerprint) {
     if (!raw) return false;
     const snapshot = JSON.parse(raw);
     if (!snapshot || snapshot.version !== 1) return false;
-    if (String(snapshot.fingerprint || "") !== String(fingerprint)) return false;
+    if (String(snapshot.fingerprint || "") !== String(fingerprint))
+      return false;
     applyAnalyticsSnapshot(snapshot);
     return true;
   } catch (_error) {
