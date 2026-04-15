@@ -64,35 +64,52 @@ def copy_json_to_targets(json_path: Path, repo_root: Path, targets: list[str]):
         logging.info("Copied JSON -> %s", dest_file)
 
 
-def run_npm_build(repo_root: Path):
+def run_npm_build(repo_root: Path) -> bool:
     """
     Run `npm run build` in the repo root, with a check for npm availability.
     """
     npm_cmd = shutil.which("npm") or shutil.which("npm.cmd")
     if not npm_cmd:
         logging.error("npm not found; please install Node.js and ensure npm is in your PATH.")
-        sys.exit(1)
+        return False
 
     try:
         subprocess.run([npm_cmd, "run", "build"], cwd=repo_root, check=True)
         logging.info("npm run build succeeded")
+        return True
     except subprocess.CalledProcessError as e:
         logging.error("npm build failed: %s", e)
-        sys.exit(1)
+        return False
 
 
-def git_add_commit_push(repo_root: Path, message: str):
+def git_add_commit_push(repo_root: Path, message: str) -> bool:
     """
     Stage all changes, commit with the given message, and push.
     """
     try:
         subprocess.run(["git", "add", "."], cwd=repo_root, check=True)
+        staged_changes = subprocess.run(
+            ["git", "diff", "--cached", "--quiet"],
+            cwd=repo_root,
+            check=False,
+        )
+        if staged_changes.returncode == 0:
+            logging.info("No staged changes detected; skipping git commit and push.")
+            return True
+        if staged_changes.returncode != 1:
+            logging.error(
+                "Unable to determine whether staged changes exist (git diff exit code %s).",
+                staged_changes.returncode,
+            )
+            return False
+
         subprocess.run(["git", "commit", "-m", message], cwd=repo_root, check=True)
         subprocess.run(["git", "push"], cwd=repo_root, check=True)
         logging.info("Changes pushed to remote")
+        return True
     except subprocess.CalledProcessError as e:
         logging.error("Git operation failed: %s", e)
-        sys.exit(1)
+        return False
 
 
 def infer_repo_root(positional_paths: list[Path], explicit_repo: Path | None) -> tuple[Path, list[Path]]:
@@ -218,8 +235,10 @@ def main():
             targets=DEFAULT_COPY_TARGETS,
         )
 
-    run_npm_build(repo_root)
-    git_add_commit_push(repo_root, args.message)
+    if not run_npm_build(repo_root):
+        return 1
+    if not git_add_commit_push(repo_root, args.message):
+        return 1
     return 0
 
 
