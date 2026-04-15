@@ -253,7 +253,7 @@ const state = {
 
 const STORAGE_KEY = "crew_predictor_v2";
 const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
-const HISTORY_JSON_PATH = "data/EmployeeProductionExport.json";
+const HISTORY_JSON_PATH = "data/EmployeeProductionExport2.json";
 const ACTIVE_EMPLOYEE_JSON_PATH = "data/EmployeeProductionExport2.json";
 const SCHEDULE_JSON_PATH = "data/ScheduleFinal.json";
 const BOARD_ALLOWED_USERS = ["lclark@badgerinventory.com"];
@@ -2364,7 +2364,7 @@ function clearAllCardsAndPreview() {
       : "Select a store to begin.",
   );
   dom.scenarioBody.innerHTML =
-    '<tr><td colspan="3" class="muted">No staffing ranking available yet.</td></tr>';
+    '<tr><td colspan="4" class="muted">No staffing ranking available yet.</td></tr>';
   dom.storeAccuracySummary.textContent =
     "Select a store and configure a crew to view store accuracy.";
   dom.accuracySummary.textContent =
@@ -3301,6 +3301,31 @@ function effectiveEmployeeSpeedForRoles(
   return baseSpeed * factor;
 }
 
+function buildStaffingRankRows(store, crewIds, roles, modes, onSiteDuration) {
+  if (!store) return [];
+  const predictedHours = Math.max(0, safeNumber(onSiteDuration));
+  return (crewIds || [])
+    .map((id) => {
+      const employee = state.employees.get(id);
+      const baseSpeed = displayEmployeeSpeed(employee, store.account);
+      const effectiveSpeed = effectiveEmployeeSpeedForRoles(
+        employee,
+        store.account,
+        id,
+        roles,
+        modes,
+      );
+      return {
+        id,
+        baseSpeed,
+        effectiveSpeed,
+        predictedPieces: effectiveSpeed * predictedHours,
+      };
+    })
+    .filter((row) => row.baseSpeed > 0 || row.effectiveSpeed > 0)
+    .sort((a, b) => b.predictedPieces - a.predictedPieces || b.baseSpeed - a.baseSpeed);
+}
+
 function renderCompareResult(result, goalMode, goalA, goalB) {
   const unit = goalMode === "duration" ? "hrs" : "man-hours";
   const deltaA = result.valueA - goalA;
@@ -3340,17 +3365,19 @@ function renderCompareResult(result, goalMode, goalA, goalB) {
     training: cfg.roleModes.training,
     earlyLate: cfg.roleModes.earlyLate,
   };
-  const rankedA = buildCompareStaffingRankRows(
+  const rankedA = buildStaffingRankRows(
     storeA,
     result.crewA,
     rolesA,
     modesA,
+    result.predA.onSiteDuration,
   );
-  const rankedB = buildCompareStaffingRankRows(
+  const rankedB = buildStaffingRankRows(
     storeB,
     result.crewB,
     rolesB,
     modesB,
+    result.predB.onSiteDuration,
   );
   dom.compareResult.innerHTML = `<div class="compare-result">
     <article class="compare-store-block">
@@ -3379,6 +3406,7 @@ function renderCompareResult(result, goalMode, goalA, goalB) {
             <th>Rank</th>
             <th>Employee</th>
             <th>Predicted Production (pieces/hr)</th>
+            <th>Predicted Total Pieces</th>
           </tr>
         </thead>
         <tbody>${renderCompareRankRows(rankedA)}</tbody>
@@ -3410,6 +3438,7 @@ function renderCompareResult(result, goalMode, goalA, goalB) {
             <th>Rank</th>
             <th>Employee</th>
             <th>Predicted Production (pieces/hr)</th>
+            <th>Predicted Total Pieces</th>
           </tr>
         </thead>
         <tbody>${renderCompareRankRows(rankedB)}</tbody>
@@ -3418,33 +3447,17 @@ function renderCompareResult(result, goalMode, goalA, goalB) {
   </div>`;
 }
 
-function buildCompareStaffingRankRows(store, crewIds, roles, modes) {
-  if (!store) return [];
-  return (crewIds || [])
-    .map((id) => ({
-      id,
-      speed: effectiveEmployeeSpeedForRoles(
-        state.employees.get(id),
-        store.account,
-        id,
-        roles,
-        modes,
-      ),
-    }))
-    .filter((row) => row.speed > 0)
-    .sort((a, b) => b.speed - a.speed);
-}
-
 function renderCompareRankRows(rows) {
   if (!rows.length) {
-    return '<tr><td colspan="3" class="muted">No valid speed data for assigned crew.</td></tr>';
+    return '<tr><td colspan="4" class="muted">No valid speed data for assigned crew.</td></tr>';
   }
   return rows
     .map(
       (row, idx) => `<tr>
         <td>${idx + 1}</td>
         <td>${escapeHtml(getEmployeeDisplayName(row.id))}</td>
-        <td>${formatNumber(row.speed, 1)}</td>
+        <td>${formatNumber(row.baseSpeed, 1)}</td>
+        <td>${formatNumber(row.predictedPieces, 0)}</td>
       </tr>`,
     )
     .join("");
@@ -4547,26 +4560,20 @@ function renderScenarios(prediction) {
   dom.scenarioBody.innerHTML = "";
 
   if (!prediction) {
-    dom.scenarioBody.innerHTML = `<tr><td colspan="3" class="muted">No staffing ranking available yet.</td></tr>`;
+    dom.scenarioBody.innerHTML = `<tr><td colspan="4" class="muted">No staffing ranking available yet.</td></tr>`;
     return;
   }
 
-  const poolRaw = Array.from(state.selectedEmployees);
-
-  const ranked = poolRaw
-    .map((id) => ({
-      id,
-      speed: effectiveEmployeeSpeed(
-        state.employees.get(id),
-        state.selectedStoreKey,
-        getSelectedAccount(),
-      ),
-    }))
-    .filter((item) => item.speed > 0)
-    .sort((a, b) => b.speed - a.speed);
+  const ranked = buildStaffingRankRows(
+    state.stores.get(state.selectedStoreKey),
+    Array.from(state.selectedEmployees),
+    prediction.roleAssignments,
+    prediction.roleModes,
+    prediction.onSiteDuration,
+  );
 
   if (ranked.length === 0) {
-    dom.scenarioBody.innerHTML = `<tr><td colspan="3" class="muted">No valid speed data for selected crew.</td></tr>`;
+    dom.scenarioBody.innerHTML = `<tr><td colspan="4" class="muted">No valid speed data for selected crew.</td></tr>`;
     return;
   }
 
@@ -4575,7 +4582,8 @@ function renderScenarios(prediction) {
     tr.innerHTML = [
       `<td>${index + 1}</td>`,
       `<td>${escapeHtml(getEmployeeDisplayName(item.id))}</td>`,
-      `<td>${formatNumber(item.speed, 1)}</td>`,
+      `<td>${formatNumber(item.baseSpeed, 1)}</td>`,
+      `<td>${formatNumber(item.predictedPieces, 0)}</td>`,
     ].join("");
     dom.scenarioBody.appendChild(tr);
   });
