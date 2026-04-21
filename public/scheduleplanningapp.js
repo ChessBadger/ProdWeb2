@@ -1174,7 +1174,7 @@ async function loadJsonData() {
 }
 
 async function fetchRequiredJson(path) {
-  const response = await fetch(path, { cache: "force-cache" });
+  const response = await fetch(path, { cache: "no-store" });
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
@@ -3323,7 +3323,10 @@ function buildStaffingRankRows(store, crewIds, roles, modes, onSiteDuration) {
       };
     })
     .filter((row) => row.baseSpeed > 0 || row.effectiveSpeed > 0)
-    .sort((a, b) => b.predictedPieces - a.predictedPieces || b.baseSpeed - a.baseSpeed);
+    .sort(
+      (a, b) =>
+        b.predictedPieces - a.predictedPieces || b.baseSpeed - a.baseSpeed,
+    );
 }
 
 function renderCompareResult(result, goalMode, goalA, goalB) {
@@ -6410,10 +6413,28 @@ function getLocalDateStamp(offsetDays = 0) {
 }
 
 function normalizeDateString(value) {
-  if (!value) return "";
-  const date = new Date(value);
+  const text = cleanText(value);
+  if (!text) return "";
+
+  const isoLikeMatch = text.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/,
+  );
+  if (isoLikeMatch) {
+    return `${isoLikeMatch[1]}-${isoLikeMatch[2]}-${isoLikeMatch[3]}`;
+  }
+
+  const slashDateMatch = text.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+.*)?$/,
+  );
+  if (slashDateMatch) {
+    const month = slashDateMatch[1].padStart(2, "0");
+    const day = slashDateMatch[2].padStart(2, "0");
+    return `${slashDateMatch[3]}-${month}-${day}`;
+  }
+
+  const date = new Date(text);
   if (!Number.isNaN(date.getTime())) return date.toISOString().slice(0, 10);
-  return String(value).trim();
+  return text;
 }
 
 function formatLongDate(value) {

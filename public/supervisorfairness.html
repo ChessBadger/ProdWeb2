@@ -1,179 +1,215 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Supervisor Crew Equity Dashboard</title>
-  <link rel="stylesheet" href="supervisorfairness.css" />
-</head>
-<body>
-  <header class="hero">
-    <div class="hero-copy">
-      <p class="eyebrow">BADGER INVENTORY SERVICE, INC.</p>
-      <h1>Supervisor Crew Equity Dashboard</h1>
-      <p class="subtitle">Reads production JSON exports to test whether supervisors receive weaker crews or longer days.</p>
-    </div>
-    <a class="btn subtle" href="scheduleplanning.html">Open Planner</a>
-  </header>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Supervisor Crew Equity Dashboard</title>
+    <link rel="stylesheet" href="supervisorfairness.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div class="hero-copy">
+        <p class="eyebrow">BADGER INVENTORY SERVICE, INC.</p>
+        <h1>Supervisor Crew Equity Dashboard</h1>
+        <p class="subtitle">
+          Reads production JSON exports to test whether supervisors receive
+          weaker crews or longer days.
+        </p>
+      </div>
+      <a class="btn subtle" href="scheduleplanning.html">Open Planner</a>
+    </header>
 
-  <main class="layout">
-    <aside class="panel controls">
-      <h2>Inputs</h2>
+    <main class="layout">
+      <aside class="panel controls">
+        <h2>Inputs</h2>
 
-      <section class="block">
-        <h3>1. Data Source</h3>
-        <p class="help">Loads bundled JSON from <code>public/data/EmployeeProductionExport.json</code>. Optional: upload another JSON export with the same fields.</p>
-        <div class="control-row stack">
-          <button id="loadJsonBtn" class="btn" type="button">Load Bundled JSON</button>
-          <label class="btn subtle file-btn" for="fileInput">Upload JSON (Optional)</label>
-          <input id="fileInput" type="file" accept=".json,application/json" />
-        </div>
-        <p id="dataStatus" class="meta">No data loaded.</p>
-        <div id="qualitySummary" class="quality-list muted"></div>
-      </section>
-
-      <section class="block">
-        <h3>2. Scope</h3>
-        <label for="supervisorSelect">Supervisor</label>
-        <select id="supervisorSelect"></select>
-
-        <label for="officeSelect">Office</label>
-        <select id="officeSelect">
-          <option value="__all__">All Offices</option>
-        </select>
-
-        <label for="typeSelect">Inventory Type</label>
-        <select id="typeSelect">
-          <option value="__all__">All Types</option>
-        </select>
-
-        <div class="input-grid two">
-          <div>
-            <label for="startDate">Start Date</label>
-            <input id="startDate" type="date" />
+        <section class="block">
+          <h3>1. Data Source</h3>
+          <p class="help">
+            Loads bundled JSON from
+            <code>public/data/EmployeeProductionExport2.json</code>. Optional:
+            upload another JSON export with the same fields.
+          </p>
+          <div class="control-row stack">
+            <button id="loadJsonBtn" class="btn" type="button">
+              Load Bundled JSON
+            </button>
+            <label class="btn subtle file-btn" for="fileInput"
+              >Upload JSON (Optional)</label
+            >
+            <input id="fileInput" type="file" accept=".json,application/json" />
           </div>
-          <div>
-            <label for="endDate">End Date</label>
-            <input id="endDate" type="date" />
+          <p id="dataStatus" class="meta">No data loaded.</p>
+          <div id="qualitySummary" class="quality-list muted"></div>
+        </section>
+
+        <section class="block">
+          <h3>2. Scope</h3>
+          <label for="supervisorSelect">Supervisor</label>
+          <select id="supervisorSelect"></select>
+
+          <label for="officeSelect">Office</label>
+          <select id="officeSelect">
+            <option value="__all__">All Offices</option>
+          </select>
+
+          <label for="typeSelect">Inventory Type</label>
+          <select id="typeSelect">
+            <option value="__all__">All Types</option>
+          </select>
+
+          <div class="input-grid two">
+            <div>
+              <label for="startDate">Start Date</label>
+              <input id="startDate" type="date" />
+            </div>
+            <div>
+              <label for="endDate">End Date</label>
+              <input id="endDate" type="date" />
+            </div>
           </div>
-        </div>
 
-        <button id="analyzeBtn" class="btn" type="button">Run Analysis</button>
-      </section>
+          <button id="analyzeBtn" class="btn" type="button">
+            Run Analysis
+          </button>
+        </section>
 
-      <section class="block">
-        <h3>3. Method</h3>
-        <p class="help">Crew quality baseline is recency-weighted (90-day half-life), and job crew quality excludes the supervisor where possible.</p>
-        <p class="help">Adjusted effects use fixed-effects models with store + month demeaning, controls for store size and crew size, and clustered standard errors (by store).</p>
-        <p class="help">Significance includes clustered p-values plus bootstrap/permutation checks for the selected supervisor.</p>
-      </section>
+        <section class="block">
+          <h3>3. Method</h3>
+          <p class="help">
+            Crew quality baseline is recency-weighted (90-day half-life), and
+            job crew quality excludes the supervisor where possible.
+          </p>
+          <p class="help">
+            Adjusted effects use fixed-effects models with store + month
+            demeaning, controls for store size and crew size, and clustered
+            standard errors (by store).
+          </p>
+          <p class="help">
+            Significance includes clustered p-values plus bootstrap/permutation
+            checks for the selected supervisor.
+          </p>
+        </section>
 
-      <section class="block">
-        <h3>4. Audit</h3>
-        <p class="help">Export methods, filters, model coefficients, and p-values for audit review.</p>
-        <button id="exportAuditBtn" class="btn subtle" type="button">Export Audit CSV</button>
-      </section>
-    </aside>
+        <section class="block">
+          <h3>4. Audit</h3>
+          <p class="help">
+            Export methods, filters, model coefficients, and p-values for audit
+            review.
+          </p>
+          <button id="exportAuditBtn" class="btn subtle" type="button">
+            Export Audit CSV
+          </button>
+        </section>
+      </aside>
 
-    <section class="panel results">
-      <article id="verdictBox" class="verdict neutral">
-        <h2>Statistical Summary</h2>
-        <p id="verdictText">Load JSON data to begin.</p>
-      </article>
-
-      <section class="cards" id="kpiCards"></section>
-
-      <section class="surface">
-        <h3>Selected Supervisor vs Company Average</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Metric</th>
-              <th>Selected</th>
-              <th>Company</th>
-              <th>Difference</th>
-            </tr>
-          </thead>
-          <tbody id="comparisonBody">
-            <tr><td colspan="4" class="muted">No data.</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section class="surface">
-        <h3>Supervisor Comparison Table</h3>
-        <p id="allSuperSummary" class="help">Each row includes raw averages and regression-adjusted effects.</p>
-        <table>
-          <thead>
-            <tr>
-              <th>Supervisor</th>
-              <th>Shifts</th>
-              <th>Unique Employees</th>
-              <th>Avg Shift Hrs</th>
-              <th>Avg Crew Quality</th>
-              <th>Avg Pieces/Hr</th>
-              <th>Avg Dollar/Hr</th>
-              <th>Avg Skus/Hr</th>
-              <th>Avg Store Size</th>
-              <th>Adj Shift Effect</th>
-              <th>Adj Crew Effect</th>
-              <th>Reliability</th>
-            </tr>
-          </thead>
-          <tbody id="allSuperBody">
-            <tr><td colspan="12" class="muted">No data.</td></tr>
-          </tbody>
-        </table>
-      </section>
-
-      <section class="chart-grid">
-        <article class="surface">
-          <h3>Avg Shift Length by Supervisor</h3>
-          <div id="shiftChart" class="chart-wrap"></div>
+      <section class="panel results">
+        <article id="verdictBox" class="verdict neutral">
+          <h2>Statistical Summary</h2>
+          <p id="verdictText">Load JSON data to begin.</p>
         </article>
 
-        <article class="surface">
-          <h3>Crew Quality by Supervisor</h3>
-          <div id="crewChart" class="chart-wrap"></div>
-        </article>
+        <section class="cards" id="kpiCards"></section>
 
-        <article class="surface">
-          <h3>Store Size Distribution</h3>
-          <div id="storeSizeChart" class="chart-wrap"></div>
-        </article>
+        <section class="surface">
+          <h3>Selected Supervisor vs Company Average</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Selected</th>
+                <th>Company</th>
+                <th>Difference</th>
+              </tr>
+            </thead>
+            <tbody id="comparisonBody">
+              <tr>
+                <td colspan="4" class="muted">No data.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
 
-        <article class="surface">
-          <h3>Trend Over Time (Monthly Shift Hours)</h3>
-          <div id="trendChart" class="chart-wrap"></div>
-          <p id="trendInsight" class="help">No trend decomposition yet.</p>
-        </article>
+        <section class="surface">
+          <h3>Supervisor Comparison Table</h3>
+          <p id="allSuperSummary" class="help">
+            Each row includes raw averages and regression-adjusted effects.
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>Supervisor</th>
+                <th>Shifts</th>
+                <th>Unique Employees</th>
+                <th>Avg Shift Hrs</th>
+                <th>Avg Crew Quality</th>
+                <th>Avg Pieces/Hr</th>
+                <th>Avg Dollar/Hr</th>
+                <th>Avg Skus/Hr</th>
+                <th>Avg Store Size</th>
+                <th>Adj Shift Effect</th>
+                <th>Adj Crew Effect</th>
+                <th>Reliability</th>
+              </tr>
+            </thead>
+            <tbody id="allSuperBody">
+              <tr>
+                <td colspan="12" class="muted">No data.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="chart-grid">
+          <article class="surface">
+            <h3>Avg Shift Length by Supervisor</h3>
+            <div id="shiftChart" class="chart-wrap"></div>
+          </article>
+
+          <article class="surface">
+            <h3>Crew Quality by Supervisor</h3>
+            <div id="crewChart" class="chart-wrap"></div>
+          </article>
+
+          <article class="surface">
+            <h3>Store Size Distribution</h3>
+            <div id="storeSizeChart" class="chart-wrap"></div>
+          </article>
+
+          <article class="surface">
+            <h3>Trend Over Time (Monthly Shift Hours)</h3>
+            <div id="trendChart" class="chart-wrap"></div>
+            <p id="trendInsight" class="help">No trend decomposition yet.</p>
+          </article>
+        </section>
+
+        <section class="surface">
+          <h3>Store-Level Aggregation (Supervisor + Date + Store)</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>Supervisor</th>
+                <th>Date</th>
+                <th>Office</th>
+                <th>Store</th>
+                <th>Crew Size</th>
+                <th>Store Size</th>
+                <th>Avg Shift Hrs</th>
+                <th>Avg Pieces/Hr</th>
+                <th>Avg Dollar/Hr</th>
+                <th>Avg Skus/Hr</th>
+                <th>Crew Quality</th>
+              </tr>
+            </thead>
+            <tbody id="storeBody">
+              <tr>
+                <td colspan="11" class="muted">No data.</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
       </section>
-
-      <section class="surface">
-        <h3>Store-Level Aggregation (Supervisor + Date + Store)</h3>
-        <table>
-          <thead>
-            <tr>
-              <th>Supervisor</th>
-              <th>Date</th>
-              <th>Office</th>
-              <th>Store</th>
-              <th>Crew Size</th>
-              <th>Store Size</th>
-              <th>Avg Shift Hrs</th>
-              <th>Avg Pieces/Hr</th>
-              <th>Avg Dollar/Hr</th>
-              <th>Avg Skus/Hr</th>
-              <th>Crew Quality</th>
-            </tr>
-          </thead>
-          <tbody id="storeBody">
-            <tr><td colspan="11" class="muted">No data.</td></tr>
-          </tbody>
-        </table>
-      </section>
-    </section>
-  </main>
-  <script src="supervisorfairness.js"></script>
-</body>
+    </main>
+    <script src="supervisorfairness.js"></script>
+  </body>
 </html>

@@ -7,14 +7,20 @@ const REQUIRED_COLUMNS = [
   { label: "PiecesPerHr", aliases: ["piecesperhr", "pph"] },
   { label: "DollarPerHr", aliases: ["dollarperhr", "dollarsperhr"] },
   { label: "SkusPerHr", aliases: ["skusperhr", "skuperhr"] },
-  { label: "Total_Ext_Qty", aliases: ["totalextqty", "totalqty", "extendedqty"] },
-  { label: "Total_Ext_Price", aliases: ["totalextprice", "totalprice", "extendedprice"] },
+  {
+    label: "Total_Ext_Qty",
+    aliases: ["totalextqty", "totalqty", "extendedqty"],
+  },
+  {
+    label: "Total_Ext_Price",
+    aliases: ["totalextprice", "totalprice", "extendedprice"],
+  },
   { label: "OfficeName", aliases: ["officename", "office"] },
   { label: "TypeOfInv", aliases: ["typeofinv", "inventorytype"] },
 ];
 
 const SIGNIFICANCE_LEVEL = 0.05;
-const DATA_JSON_PATH = "data/EmployeeProductionExport.json";
+const DATA_JSON_PATH = "data/EmployeeProductionExport2.json";
 const EMPTY_STATE_TEXT = "Load JSON data to begin.";
 const BASELINE_HALF_LIFE_DAYS = 90;
 const MIN_SHIFTS_FOR_SIGNIFICANCE = 12;
@@ -84,7 +90,10 @@ async function loadBundledJson() {
     const payload = await response.json();
     ingestJsonPayload(payload, DATA_JSON_PATH);
   } catch (error) {
-    setDataStatus(`Could not load ${DATA_JSON_PATH}: ${error?.message || "unknown error"}`, "bad");
+    setDataStatus(
+      `Could not load ${DATA_JSON_PATH}: ${error?.message || "unknown error"}`,
+      "bad",
+    );
     renderEmptyState("Could not load bundled JSON data.");
   }
 }
@@ -102,7 +111,10 @@ function onJsonUpload(event) {
       const payload = JSON.parse(String(reader.result || "{}"));
       ingestJsonPayload(payload, file.name);
     } catch (error) {
-      setDataStatus(`Could not parse ${file.name}: ${error?.message || "invalid JSON"}`, "bad");
+      setDataStatus(
+        `Could not parse ${file.name}: ${error?.message || "invalid JSON"}`,
+        "bad",
+      );
     }
   };
   reader.onerror = () => {
@@ -168,7 +180,10 @@ function ingestJsonPayload(payload, sourceName) {
 function populateDateFilters(rows) {
   const previousStart = dom.startDate.value;
   const previousEnd = dom.endDate.value;
-  const dates = rows.map((row) => row.date).filter(Boolean).sort();
+  const dates = rows
+    .map((row) => row.date)
+    .filter(Boolean)
+    .sort();
   const minDate = dates[0] || "";
   const maxDate = dates.at(-1) || "";
 
@@ -201,28 +216,45 @@ function normalizeRow(rawRow) {
     row[canonicalizeKey(key)] = rawRow[key];
   });
 
-  const supervisorId = cleanText(getFieldValue(row, ["supervisornumber", "supervisor"]));
-  const date = normalizeDate(getFieldValue(row, ["dateofinv", "date", "inventorydate"]));
+  const supervisorId = cleanText(
+    getFieldValue(row, ["supervisornumber", "supervisor"]),
+  );
+  const date = normalizeDate(
+    getFieldValue(row, ["dateofinv", "date", "inventorydate"]),
+  );
   const storeName = cleanText(getFieldValue(row, ["storename", "store"]));
-  const employee = cleanText(getFieldValue(row, ["employee", "employeenumber", "employeeid"]));
+  const employee = cleanText(
+    getFieldValue(row, ["employee", "employeenumber", "employeeid"]),
+  );
   const firstName = cleanText(getFieldValue(row, ["firstname", "fname"]));
   const lastName = cleanText(getFieldValue(row, ["lastname", "lname"]));
   const fullName = cleanText(getFieldValue(row, ["employeename", "name"]));
-  const officeName = cleanText(getFieldValue(row, ["officename", "office"])) || "Unknown";
-  const typeOfInv = cleanText(getFieldValue(row, ["typeofinv", "inventorytype"])) || "Unknown";
+  const officeName =
+    cleanText(getFieldValue(row, ["officename", "office"])) || "Unknown";
+  const typeOfInv =
+    cleanText(getFieldValue(row, ["typeofinv", "inventorytype"])) || "Unknown";
 
-  const manHrs = parseNumber(getFieldValue(row, ["manhrs", "hours", "manhours", "expr1"]));
+  const manHrs = parseNumber(
+    getFieldValue(row, ["manhrs", "hours", "manhours", "expr1"]),
+  );
   const piecesPerHr = parseNumber(getFieldValue(row, ["piecesperhr", "pph"]));
-  const dollarPerHr = parseNumber(getFieldValue(row, ["dollarperhr", "dollarsperhr"]));
+  const dollarPerHr = parseNumber(
+    getFieldValue(row, ["dollarperhr", "dollarsperhr"]),
+  );
   const skusPerHr = parseNumber(getFieldValue(row, ["skusperhr", "skuperhr"]));
-  const totalExtQty = parseNumber(getFieldValue(row, ["totalextqty", "totalqty", "extendedqty"]));
-  const totalExtPrice = parseNumber(getFieldValue(row, ["totalextprice", "totalprice", "extendedprice"]));
+  const totalExtQty = parseNumber(
+    getFieldValue(row, ["totalextqty", "totalqty", "extendedqty"]),
+  );
+  const totalExtPrice = parseNumber(
+    getFieldValue(row, ["totalextprice", "totalprice", "extendedprice"]),
+  );
 
-  const storeSize = Number.isFinite(totalExtQty) && totalExtQty > 0
-    ? totalExtQty
-    : Number.isFinite(totalExtPrice) && totalExtPrice > 0
-      ? totalExtPrice
-      : Number.NaN;
+  const storeSize =
+    Number.isFinite(totalExtQty) && totalExtQty > 0
+      ? totalExtQty
+      : Number.isFinite(totalExtPrice) && totalExtPrice > 0
+        ? totalExtPrice
+        : Number.NaN;
 
   return {
     valid: Boolean(supervisorId && date && storeName && employee),
@@ -231,7 +263,9 @@ function normalizeRow(rawRow) {
     month: date ? date.slice(0, 7) : "",
     storeName,
     employee,
-    employeeName: cleanDisplayName(`${firstName} ${lastName}`.trim() || fullName),
+    employeeName: cleanDisplayName(
+      `${firstName} ${lastName}`.trim() || fullName,
+    ),
     officeName,
     typeOfInv,
     manHrs: manHrs > 0 ? manHrs : Number.NaN,
@@ -274,28 +308,39 @@ function populateStaticFilters(rows) {
   const officePrevious = dom.officeSelect.value || "__all__";
   const typePrevious = dom.typeSelect.value || "__all__";
 
-  const offices = Array.from(new Set(rows.map((row) => row.officeName))).sort((left, right) =>
-    left.localeCompare(right),
+  const offices = Array.from(new Set(rows.map((row) => row.officeName))).sort(
+    (left, right) => left.localeCompare(right),
   );
-  const invTypes = Array.from(new Set(rows.map((row) => row.typeOfInv))).sort((left, right) =>
-    left.localeCompare(right),
+  const invTypes = Array.from(new Set(rows.map((row) => row.typeOfInv))).sort(
+    (left, right) => left.localeCompare(right),
   );
 
   dom.officeSelect.innerHTML = "";
   dom.officeSelect.appendChild(new Option("All Offices", "__all__"));
-  offices.forEach((office) => dom.officeSelect.appendChild(new Option(office, office)));
-  dom.officeSelect.value = offices.includes(officePrevious) ? officePrevious : "__all__";
+  offices.forEach((office) =>
+    dom.officeSelect.appendChild(new Option(office, office)),
+  );
+  dom.officeSelect.value = offices.includes(officePrevious)
+    ? officePrevious
+    : "__all__";
 
   dom.typeSelect.innerHTML = "";
   dom.typeSelect.appendChild(new Option("All Types", "__all__"));
-  invTypes.forEach((type) => dom.typeSelect.appendChild(new Option(type, type)));
-  dom.typeSelect.value = invTypes.includes(typePrevious) ? typePrevious : "__all__";
+  invTypes.forEach((type) =>
+    dom.typeSelect.appendChild(new Option(type, type)),
+  );
+  dom.typeSelect.value = invTypes.includes(typePrevious)
+    ? typePrevious
+    : "__all__";
 }
 
 function renderQualitySummary(rows) {
   const supervisors = new Set(rows.map((row) => row.supervisorId));
   const employees = new Set(rows.map((row) => row.employee));
-  const dates = rows.map((row) => row.date).filter(Boolean).sort();
+  const dates = rows
+    .map((row) => row.date)
+    .filter(Boolean)
+    .sort();
 
   const minDate = dates[0] || "-";
   const maxDate = dates.at(-1) || "-";
@@ -316,7 +361,9 @@ function renderQualitySummary(rows) {
     `Missing Required Columns: ${missingColumnsText}`,
   ];
 
-  dom.qualitySummary.innerHTML = lines.map((line) => `<div>${escapeHtml(line)}</div>`).join("");
+  dom.qualitySummary.innerHTML = lines
+    .map((line) => `<div>${escapeHtml(line)}</div>`)
+    .join("");
 }
 
 function runAnalysis() {
@@ -362,7 +409,9 @@ function runAnalysis() {
   const storeGroups = buildStoreGroups(filteredRows, state.employeeBaselines);
   if (!storeGroups.length) {
     state.lastAnalysis = null;
-    renderEmptyState("No store-level groups could be formed from the current scope.");
+    renderEmptyState(
+      "No store-level groups could be formed from the current scope.",
+    );
     return;
   }
 
@@ -378,12 +427,26 @@ function runAnalysis() {
   state.selectedSupervisor = selectedSupervisor;
 
   const company = buildCompanySummary(storeGroups);
-  const regressions = runRegressionsForSupervisors(storeGroups, summaries.map((item) => item.supervisorId));
-  const selectedSummary = summaries.find((item) => item.supervisorId === selectedSupervisor) || summaries[0];
-  const selectedRegression = regressions.get(selectedSummary.supervisorId) || { shift: null, crew: null };
-  const selectedRobustness = runRobustnessChecks(storeGroups, selectedSummary.supervisorId);
+  const regressions = runRegressionsForSupervisors(
+    storeGroups,
+    summaries.map((item) => item.supervisorId),
+  );
+  const selectedSummary =
+    summaries.find((item) => item.supervisorId === selectedSupervisor) ||
+    summaries[0];
+  const selectedRegression = regressions.get(selectedSummary.supervisorId) || {
+    shift: null,
+    crew: null,
+  };
+  const selectedRobustness = runRobustnessChecks(
+    storeGroups,
+    selectedSummary.supervisorId,
+  );
   const reliability = getReliabilityTier(selectedSummary.shiftCount);
-  const trendRows = buildMonthlyTrend(storeGroups, selectedSummary.supervisorId);
+  const trendRows = buildMonthlyTrend(
+    storeGroups,
+    selectedSummary.supervisorId,
+  );
   const trendDecomposition = decomposeTrendGap(trendRows);
 
   renderVerdict(
@@ -398,7 +461,13 @@ function runAnalysis() {
   renderCards(selectedSummary, company, reliability);
   renderSelectedVsCompanyTable(selectedSummary, company);
   renderSupervisorTable(summaries, regressions, selectedSummary.supervisorId);
-  renderCharts(summaries, storeGroups, selectedSummary.supervisorId, company, trendRows);
+  renderCharts(
+    summaries,
+    storeGroups,
+    selectedSummary.supervisorId,
+    company,
+    trendRows,
+  );
   renderStoreTable(storeGroups, selectedSummary.supervisorId);
 
   dom.allSuperSummary.textContent = `Scope contains ${storeGroups.length.toLocaleString()} store-level shifts across ${summaries.length.toLocaleString()} supervisors. Models use store+month fixed effects and clustered errors.`;
@@ -432,13 +501,19 @@ function populateSupervisorFilter(summaries) {
   });
 
   const ids = summaries.map((item) => item.supervisorId);
-  dom.supervisorSelect.value = ids.includes(previous) ? previous : summaries[0].supervisorId;
+  dom.supervisorSelect.value = ids.includes(previous)
+    ? previous
+    : summaries[0].supervisorId;
 }
 
 function buildEmployeeBaselines(rows) {
   const employeeTotals = new Map();
-  const finiteDateValues = rows.map((row) => dateToMs(row.date)).filter((value) => Number.isFinite(value));
-  const maxDateMs = finiteDateValues.length ? Math.max(...finiteDateValues) : Date.now();
+  const finiteDateValues = rows
+    .map((row) => dateToMs(row.date))
+    .filter((value) => Number.isFinite(value));
+  const maxDateMs = finiteDateValues.length
+    ? Math.max(...finiteDateValues)
+    : Date.now();
 
   rows.forEach((row) => {
     if (!employeeTotals.has(row.employee)) {
@@ -473,15 +548,27 @@ function buildEmployeeBaselines(rows) {
   employeeTotals.forEach((bucket, employee) => {
     employeeAverages.push({
       employee,
-      avgPiecesPerHr: bucket.piecesWeight ? bucket.piecesWeightedSum / bucket.piecesWeight : Number.NaN,
-      avgDollarPerHr: bucket.dollarWeight ? bucket.dollarWeightedSum / bucket.dollarWeight : Number.NaN,
-      avgSkusPerHr: bucket.skusWeight ? bucket.skusWeightedSum / bucket.skusWeight : Number.NaN,
+      avgPiecesPerHr: bucket.piecesWeight
+        ? bucket.piecesWeightedSum / bucket.piecesWeight
+        : Number.NaN,
+      avgDollarPerHr: bucket.dollarWeight
+        ? bucket.dollarWeightedSum / bucket.dollarWeight
+        : Number.NaN,
+      avgSkusPerHr: bucket.skusWeight
+        ? bucket.skusWeightedSum / bucket.skusWeight
+        : Number.NaN,
     });
   });
 
-  const piecesStats = meanAndStd(employeeAverages.map((item) => item.avgPiecesPerHr));
-  const dollarStats = meanAndStd(employeeAverages.map((item) => item.avgDollarPerHr));
-  const skusStats = meanAndStd(employeeAverages.map((item) => item.avgSkusPerHr));
+  const piecesStats = meanAndStd(
+    employeeAverages.map((item) => item.avgPiecesPerHr),
+  );
+  const dollarStats = meanAndStd(
+    employeeAverages.map((item) => item.avgDollarPerHr),
+  );
+  const skusStats = meanAndStd(
+    employeeAverages.map((item) => item.avgSkusPerHr),
+  );
 
   const baselineMap = new Map();
   employeeAverages.forEach((item) => {
@@ -567,7 +654,9 @@ function buildStoreGroups(rows, baselineMap) {
   const result = [];
   groups.forEach((group) => {
     let baselineSkills = Array.from(group.employees)
-      .filter((employee) => cleanText(employee) !== cleanText(group.supervisorId))
+      .filter(
+        (employee) => cleanText(employee) !== cleanText(group.supervisorId),
+      )
       .map((employee) => baselineMap.get(employee))
       .filter((value) => Number.isFinite(value));
 
@@ -586,11 +675,21 @@ function buildStoreGroups(rows, baselineMap) {
       typeOfInv: group.typeOfInv,
       storeName: group.storeName,
       crewSize: group.employees.size,
-      storeSize: group.storeSizeCount ? group.storeSizeSum / group.storeSizeCount : Number.NaN,
-      avgShiftLength: group.shiftCount ? group.shiftSum / group.shiftCount : Number.NaN,
-      avgPiecesPerHr: group.piecesCount ? group.piecesSum / group.piecesCount : Number.NaN,
-      avgDollarPerHr: group.dollarCount ? group.dollarSum / group.dollarCount : Number.NaN,
-      avgSkusPerHr: group.skusCount ? group.skusSum / group.skusCount : Number.NaN,
+      storeSize: group.storeSizeCount
+        ? group.storeSizeSum / group.storeSizeCount
+        : Number.NaN,
+      avgShiftLength: group.shiftCount
+        ? group.shiftSum / group.shiftCount
+        : Number.NaN,
+      avgPiecesPerHr: group.piecesCount
+        ? group.piecesSum / group.piecesCount
+        : Number.NaN,
+      avgDollarPerHr: group.dollarCount
+        ? group.dollarSum / group.dollarCount
+        : Number.NaN,
+      avgSkusPerHr: group.skusCount
+        ? group.skusSum / group.skusCount
+        : Number.NaN,
       crewQuality: baselineSkills.length ? mean(baselineSkills) : Number.NaN,
     });
   });
@@ -665,14 +764,30 @@ function buildSupervisorSummaries(rows, storeGroups) {
       supervisorLabel: bucket.supervisorLabel,
       shiftCount: bucket.shiftCount,
       uniqueEmployees: bucket.employeeSet.size,
-      avgShiftLength: bucket.shiftValueCount ? bucket.shiftSum / bucket.shiftValueCount : Number.NaN,
-      avgCrewQuality: bucket.crewQualityCount ? bucket.crewQualitySum / bucket.crewQualityCount : Number.NaN,
-      avgPiecesPerHr: bucket.piecesCount ? bucket.piecesSum / bucket.piecesCount : Number.NaN,
-      avgDollarPerHr: bucket.dollarCount ? bucket.dollarSum / bucket.dollarCount : Number.NaN,
-      avgSkusPerHr: bucket.skusCount ? bucket.skusSum / bucket.skusCount : Number.NaN,
-      avgStoreSize: bucket.storeSizeCount ? bucket.storeSizeSum / bucket.storeSizeCount : Number.NaN,
+      avgShiftLength: bucket.shiftValueCount
+        ? bucket.shiftSum / bucket.shiftValueCount
+        : Number.NaN,
+      avgCrewQuality: bucket.crewQualityCount
+        ? bucket.crewQualitySum / bucket.crewQualityCount
+        : Number.NaN,
+      avgPiecesPerHr: bucket.piecesCount
+        ? bucket.piecesSum / bucket.piecesCount
+        : Number.NaN,
+      avgDollarPerHr: bucket.dollarCount
+        ? bucket.dollarSum / bucket.dollarCount
+        : Number.NaN,
+      avgSkusPerHr: bucket.skusCount
+        ? bucket.skusSum / bucket.skusCount
+        : Number.NaN,
+      avgStoreSize: bucket.storeSizeCount
+        ? bucket.storeSizeSum / bucket.storeSizeCount
+        : Number.NaN,
     }))
-    .sort((left, right) => left.supervisorLabel.localeCompare(right.supervisorLabel, undefined, { numeric: true }));
+    .sort((left, right) =>
+      left.supervisorLabel.localeCompare(right.supervisorLabel, undefined, {
+        numeric: true,
+      }),
+    );
 }
 
 function buildCompanySummary(storeGroups) {
@@ -691,7 +806,11 @@ function runRegressionsForSupervisors(storeGroups, supervisorIds) {
 
   supervisorIds.forEach((supervisorId) => {
     map.set(supervisorId, {
-      shift: runIndicatorRegression(storeGroups, supervisorId, "avgShiftLength"),
+      shift: runIndicatorRegression(
+        storeGroups,
+        supervisorId,
+        "avgShiftLength",
+      ),
       crew: runIndicatorRegression(storeGroups, supervisorId, "crewQuality"),
     });
   });
@@ -700,19 +819,22 @@ function runRegressionsForSupervisors(storeGroups, supervisorIds) {
 }
 
 function runIndicatorRegression(storeGroups, supervisorId, outcomeKey) {
-  const rows = storeGroups.filter((group) =>
-    Number.isFinite(group[outcomeKey]) &&
-    Number.isFinite(group.storeSize) &&
-    group.storeSize > 0 &&
-    Number.isFinite(group.crewSize) &&
-    group.crewSize > 0,
+  const rows = storeGroups.filter(
+    (group) =>
+      Number.isFinite(group[outcomeKey]) &&
+      Number.isFinite(group.storeSize) &&
+      group.storeSize > 0 &&
+      Number.isFinite(group.crewSize) &&
+      group.crewSize > 0,
   );
 
   if (rows.length < 18) {
     return null;
   }
 
-  const selectedCount = rows.filter((row) => row.supervisorId === supervisorId).length;
+  const selectedCount = rows.filter(
+    (row) => row.supervisorId === supervisorId,
+  ).length;
   const peerCount = rows.length - selectedCount;
   if (selectedCount < 5 || peerCount < 8) {
     return null;
@@ -730,7 +852,11 @@ function runIndicatorRegression(storeGroups, supervisorId, outcomeKey) {
 
   const coefficient = fit.beta[2];
   const standardError = fit.se[2];
-  if (!Number.isFinite(coefficient) || !Number.isFinite(standardError) || standardError <= 0) {
+  if (
+    !Number.isFinite(coefficient) ||
+    !Number.isFinite(standardError) ||
+    standardError <= 0
+  ) {
     return null;
   }
 
@@ -743,7 +869,9 @@ function runIndicatorRegression(storeGroups, supervisorId, outcomeKey) {
     tValue,
     pValue,
     significant: pValue < SIGNIFICANCE_LEVEL,
-    significantReliable: pValue < SIGNIFICANCE_LEVEL && selectedCount >= MIN_SHIFTS_FOR_SIGNIFICANCE,
+    significantReliable:
+      pValue < SIGNIFICANCE_LEVEL &&
+      selectedCount >= MIN_SHIFTS_FOR_SIGNIFICANCE,
     sampleSize: prepared.rows.length,
     selectedCount,
     peerCount,
@@ -792,14 +920,23 @@ function fitRegressionWithFixedEffects(prepared) {
   );
 
   const yRes = residualized[0];
-  const X = yRes.map((_, index) => [residualized[1][index], residualized[2][index], residualized[3][index]]);
+  const X = yRes.map((_, index) => [
+    residualized[1][index],
+    residualized[2][index],
+    residualized[3][index],
+  ]);
   const fit = olsFitNoIntercept(X, yRes);
   if (!fit) {
     return null;
   }
 
   const clusterIds = prepared.rows.map((row) => row.cluster);
-  const clusterVariance = clusterRobustVariance(X, fit.residuals, fit.xtxInv, clusterIds);
+  const clusterVariance = clusterRobustVariance(
+    X,
+    fit.residuals,
+    fit.xtxInv,
+    clusterIds,
+  );
   if (!clusterVariance) {
     return null;
   }
@@ -820,19 +957,22 @@ function runRobustnessChecks(storeGroups, supervisorId) {
 }
 
 function runRobustnessForOutcome(storeGroups, supervisorId, outcomeKey) {
-  const rows = storeGroups.filter((group) =>
-    Number.isFinite(group[outcomeKey]) &&
-    Number.isFinite(group.storeSize) &&
-    group.storeSize > 0 &&
-    Number.isFinite(group.crewSize) &&
-    group.crewSize > 0,
+  const rows = storeGroups.filter(
+    (group) =>
+      Number.isFinite(group[outcomeKey]) &&
+      Number.isFinite(group.storeSize) &&
+      group.storeSize > 0 &&
+      Number.isFinite(group.crewSize) &&
+      group.crewSize > 0,
   );
 
   if (rows.length < 25) {
     return null;
   }
 
-  const selectedCount = rows.filter((row) => row.supervisorId === supervisorId).length;
+  const selectedCount = rows.filter(
+    (row) => row.supervisorId === supervisorId,
+  ).length;
   if (selectedCount < MIN_SHIFTS_FOR_SIGNIFICANCE) {
     return null;
   }
@@ -849,8 +989,13 @@ function runRobustnessForOutcome(storeGroups, supervisorId, outcomeKey) {
   const baseRows = prepared.rows;
 
   for (let i = 0; i < ROBUSTNESS_ITERATIONS; i += 1) {
-    const permutationIndicators = shuffleArray(baseRows.map((row) => row.indicator));
-    const permRows = baseRows.map((row, index) => ({ ...row, indicator: permutationIndicators[index] }));
+    const permutationIndicators = shuffleArray(
+      baseRows.map((row) => row.indicator),
+    );
+    const permRows = baseRows.map((row, index) => ({
+      ...row,
+      indicator: permutationIndicators[index],
+    }));
     const permFit = fitRegressionWithFixedEffects({ rows: permRows });
     if (permFit && Number.isFinite(permFit.beta[2])) {
       permuted.push(permFit.beta[2]);
@@ -874,7 +1019,15 @@ function runRobustnessForOutcome(storeGroups, supervisorId, outcomeKey) {
   };
 }
 
-function renderVerdict(selected, company, selectedRegression, robustness, reliability, trendDecomposition, groupCount) {
+function renderVerdict(
+  selected,
+  company,
+  selectedRegression,
+  robustness,
+  reliability,
+  trendDecomposition,
+  groupCount,
+) {
   if (!selected) {
     renderEmptyState("Select a supervisor to run the analysis.");
     return;
@@ -890,18 +1043,28 @@ function renderVerdict(selected, company, selectedRegression, robustness, reliab
   let verdictClass = "neutral";
   const statements = [];
 
-  if (shiftModel && shiftModel.significantReliable && shiftModel.coefficient > 0) {
+  if (
+    shiftModel &&
+    shiftModel.significantReliable &&
+    shiftModel.coefficient > 0
+  ) {
     statements.push(
       `After controls (store FE, month FE, crew size, store size), shift length is higher by ${formatHours(shiftModel.coefficient)} (clustered p=${formatPValue(shiftModel.pValue)}).`,
     );
     verdictClass = "bad";
-  } else if (shiftModel && shiftModel.significantReliable && shiftModel.coefficient < 0) {
+  } else if (
+    shiftModel &&
+    shiftModel.significantReliable &&
+    shiftModel.coefficient < 0
+  ) {
     statements.push(
       `After controls, shift length is lower by ${formatHours(Math.abs(shiftModel.coefficient))} (clustered p=${formatPValue(shiftModel.pValue)}).`,
     );
     verdictClass = "good";
   } else {
-    statements.push("No reliable statistically significant adjusted shift-length difference was detected.");
+    statements.push(
+      "No reliable statistically significant adjusted shift-length difference was detected.",
+    );
     verdictClass = "warn";
   }
 
@@ -910,7 +1073,11 @@ function renderVerdict(selected, company, selectedRegression, robustness, reliab
       `Crew quality is lower by ${formatIndex(Math.abs(crewModel.coefficient))} after controls (clustered p=${formatPValue(crewModel.pValue)}).`,
     );
     verdictClass = "bad";
-  } else if (crewModel && crewModel.significantReliable && crewModel.coefficient > 0) {
+  } else if (
+    crewModel &&
+    crewModel.significantReliable &&
+    crewModel.coefficient > 0
+  ) {
     statements.push(
       `Crew quality is higher by ${formatIndex(crewModel.coefficient)} after controls (clustered p=${formatPValue(crewModel.pValue)}).`,
     );
@@ -918,14 +1085,18 @@ function renderVerdict(selected, company, selectedRegression, robustness, reliab
       verdictClass = "good";
     }
   } else {
-    statements.push("No reliable statistically significant adjusted crew-quality difference was detected.");
+    statements.push(
+      "No reliable statistically significant adjusted crew-quality difference was detected.",
+    );
     if (verdictClass === "neutral") {
       verdictClass = "warn";
     }
   }
 
   if (reliability.tier === "Low") {
-    statements.push("Reliability is low due to small selected-supervisor shift count, so significance labels are suppressed.");
+    statements.push(
+      "Reliability is low due to small selected-supervisor shift count, so significance labels are suppressed.",
+    );
   } else {
     if (robustShift) {
       statements.push(
@@ -940,9 +1111,7 @@ function renderVerdict(selected, company, selectedRegression, robustness, reliab
   }
 
   if (trendDecomposition) {
-    statements.push(
-      `Trend decomposition: ${trendDecomposition.summary}`,
-    );
+    statements.push(`Trend decomposition: ${trendDecomposition.summary}`);
   }
 
   const summary = [
@@ -972,22 +1141,32 @@ function renderCards(selected, company, reliability) {
     },
     {
       label: "Avg Shift Delta",
-      value: formatSignedHours(selected.avgShiftLength - company.avgShiftLength),
+      value: formatSignedHours(
+        selected.avgShiftLength - company.avgShiftLength,
+      ),
       sub: `Selected ${formatHours(selected.avgShiftLength)} vs Company ${formatHours(company.avgShiftLength)}`,
     },
     {
       label: "Crew Quality Delta",
-      value: formatSignedIndex(selected.avgCrewQuality - company.avgCrewQuality),
+      value: formatSignedIndex(
+        selected.avgCrewQuality - company.avgCrewQuality,
+      ),
       sub: `Selected ${formatIndex(selected.avgCrewQuality)} vs Company ${formatIndex(company.avgCrewQuality)}`,
     },
     {
       label: "Pieces/Hr Delta",
-      value: formatSignedNumber(selected.avgPiecesPerHr - company.avgPiecesPerHr, 1),
+      value: formatSignedNumber(
+        selected.avgPiecesPerHr - company.avgPiecesPerHr,
+        1,
+      ),
       sub: `Selected ${formatNumber(selected.avgPiecesPerHr, 1)} vs Company ${formatNumber(company.avgPiecesPerHr, 1)}`,
     },
     {
       label: "Store Size Delta",
-      value: formatSignedNumber(selected.avgStoreSize - company.avgStoreSize, 0),
+      value: formatSignedNumber(
+        selected.avgStoreSize - company.avgStoreSize,
+        0,
+      ),
       sub: `Selected ${formatStoreSize(selected.avgStoreSize)} vs Company ${formatStoreSize(company.avgStoreSize)}`,
     },
     {
@@ -1028,13 +1207,18 @@ function renderSelectedVsCompanyTable(selected, company) {
       label: "Avg PiecesPerHr",
       selected: formatNumber(selected.avgPiecesPerHr, 1),
       company: formatNumber(company.avgPiecesPerHr, 1),
-      diff: formatSignedNumber(selected.avgPiecesPerHr - company.avgPiecesPerHr, 1),
+      diff: formatSignedNumber(
+        selected.avgPiecesPerHr - company.avgPiecesPerHr,
+        1,
+      ),
     },
     {
       label: "Avg DollarPerHr",
       selected: formatMoneyLike(selected.avgDollarPerHr),
       company: formatMoneyLike(company.avgDollarPerHr),
-      diff: formatSignedMoneyLike(selected.avgDollarPerHr - company.avgDollarPerHr),
+      diff: formatSignedMoneyLike(
+        selected.avgDollarPerHr - company.avgDollarPerHr,
+      ),
     },
     {
       label: "Avg SkusPerHr",
@@ -1070,11 +1254,26 @@ function renderSupervisorTable(summaries, regressions, selectedSupervisorId) {
     .map((summary) => {
       const regression = regressions.get(summary.supervisorId) || {};
       const reliability = getReliabilityTier(summary.shiftCount);
-      const shiftText = formatRegressionCell(regression.shift, formatHours, true, reliability);
-      const crewText = formatRegressionCell(regression.crew, formatIndex, true, reliability);
-      const rowClass = summary.supervisorId === selectedSupervisorId ? "selected-row" : "";
+      const shiftText = formatRegressionCell(
+        regression.shift,
+        formatHours,
+        true,
+        reliability,
+      );
+      const crewText = formatRegressionCell(
+        regression.crew,
+        formatIndex,
+        true,
+        reliability,
+      );
+      const rowClass =
+        summary.supervisorId === selectedSupervisorId ? "selected-row" : "";
       const reliabilityClass =
-        reliability.tier === "High" ? "num-pos" : reliability.tier === "Medium" ? "num-warn" : "muted";
+        reliability.tier === "High"
+          ? "num-pos"
+          : reliability.tier === "Medium"
+            ? "num-warn"
+            : "muted";
       return `
         <tr class="${rowClass}">
           <td>${escapeHtml(summary.supervisorLabel)}</td>
@@ -1095,7 +1294,13 @@ function renderSupervisorTable(summaries, regressions, selectedSupervisorId) {
     .join("");
 }
 
-function renderCharts(summaries, storeGroups, selectedSupervisorId, companySummary, trendRows) {
+function renderCharts(
+  summaries,
+  storeGroups,
+  selectedSupervisorId,
+  companySummary,
+  trendRows,
+) {
   renderBarChart(
     dom.shiftChart,
     summaries.map((item) => ({
@@ -1126,14 +1331,21 @@ function renderCharts(summaries, storeGroups, selectedSupervisorId, companySumma
     },
   );
 
-  renderStoreSizeHistogram(dom.storeSizeChart, storeGroups.map((item) => item.storeSize));
+  renderStoreSizeHistogram(
+    dom.storeSizeChart,
+    storeGroups.map((item) => item.storeSize),
+  );
   renderTrendChart(dom.trendChart, trendRows);
   const trend = decomposeTrendGap(trendRows);
-  dom.trendInsight.textContent = trend ? trend.summary : "Not enough monthly overlap for trend decomposition.";
+  dom.trendInsight.textContent = trend
+    ? trend.summary
+    : "Not enough monthly overlap for trend decomposition.";
 }
 
 function renderBarChart(container, rows, options) {
-  const finiteRows = rows.filter((row) => Number.isFinite(row.value)).sort((left, right) => right.value - left.value);
+  const finiteRows = rows
+    .filter((row) => Number.isFinite(row.value))
+    .sort((left, right) => right.value - left.value);
   if (!finiteRows.length) {
     container.innerHTML = `<div class="chart-empty">No chart data in current scope.</div>`;
     return;
@@ -1150,8 +1362,12 @@ function renderBarChart(container, rows, options) {
           const widthPct = maxValue > 0 ? (row.value / maxValue) * 100 : 0;
           let fillClass = "";
           if (Number.isFinite(reference)) {
-            const isWorse = options.highIsBad ? row.value > reference : row.value < reference;
-            const isMuchWorse = options.highIsBad ? row.value > reference * 1.08 : row.value < reference * 0.92;
+            const isWorse = options.highIsBad
+              ? row.value > reference
+              : row.value < reference;
+            const isMuchWorse = options.highIsBad
+              ? row.value > reference * 1.08
+              : row.value < reference * 0.92;
             if (isMuchWorse) {
               fillClass = " bad";
             } else if (isWorse) {
@@ -1159,7 +1375,10 @@ function renderBarChart(container, rows, options) {
             }
           }
 
-          const rowLabel = row.id === options.selectedId ? `${row.label} (Selected)` : row.label;
+          const rowLabel =
+            row.id === options.selectedId
+              ? `${row.label} (Selected)`
+              : row.label;
           return `
             <div class="bar-row">
               <div class="bar-label">${escapeHtml(rowLabel)}</div>
@@ -1243,8 +1462,12 @@ function buildMonthlyTrend(storeGroups, selectedSupervisorId) {
   return Array.from(monthly.values())
     .map((bucket) => ({
       month: bucket.month,
-      company: bucket.companyCount ? bucket.companySum / bucket.companyCount : Number.NaN,
-      selected: bucket.selectedCount ? bucket.selectedSum / bucket.selectedCount : Number.NaN,
+      company: bucket.companyCount
+        ? bucket.companySum / bucket.companyCount
+        : Number.NaN,
+      selected: bucket.selectedCount
+        ? bucket.selectedSum / bucket.selectedCount
+        : Number.NaN,
     }))
     .sort((left, right) => left.month.localeCompare(right.month));
 }
@@ -1278,13 +1501,22 @@ function renderTrendChart(container, trendRows) {
   const ySpan = Math.max(yMax - yMin, 1e-6);
 
   const toX = (index) => padding.left + xStep * index;
-  const toY = (value) => padding.top + usableHeight * (1 - (value - yMin) / ySpan);
+  const toY = (value) =>
+    padding.top + usableHeight * (1 - (value - yMin) / ySpan);
 
   const companyPath = buildLinePath(
-    trendRows.map((row, index) => (Number.isFinite(row.company) ? { x: toX(index), y: toY(row.company) } : null)),
+    trendRows.map((row, index) =>
+      Number.isFinite(row.company)
+        ? { x: toX(index), y: toY(row.company) }
+        : null,
+    ),
   );
   const selectedPath = buildLinePath(
-    trendRows.map((row, index) => (Number.isFinite(row.selected) ? { x: toX(index), y: toY(row.selected) } : null)),
+    trendRows.map((row, index) =>
+      Number.isFinite(row.selected)
+        ? { x: toX(index), y: toY(row.selected) }
+        : null,
+    ),
   );
 
   const gridLines = 4;
@@ -1349,7 +1581,8 @@ function renderStoreTable(storeGroups, selectedSupervisorId) {
 
   dom.storeBody.innerHTML = rows
     .map((row) => {
-      const rowClass = row.supervisorId === selectedSupervisorId ? "selected-row" : "";
+      const rowClass =
+        row.supervisorId === selectedSupervisorId ? "selected-row" : "";
       return `
         <tr class="${rowClass}">
           <td>${escapeHtml(row.supervisorLabel)}</td>
@@ -1405,7 +1638,9 @@ function formatRegressionCell(model, formatter, withPValue, reliability) {
 
   const sign = model.coefficient > 0 ? "+" : "";
   const effect = `${sign}${formatter(model.coefficient)}`;
-  const pText = withPValue ? ` (clustered p=${formatPValue(model.pValue)})` : "";
+  const pText = withPValue
+    ? ` (clustered p=${formatPValue(model.pValue)})`
+    : "";
   let className = "muted";
   if (model.significantReliable) {
     className = model.coefficient > 0 ? "num-neg" : "num-pos";
@@ -1428,17 +1663,24 @@ function meanAndStd(values) {
   if (!finite.length) {
     return { mean: Number.NaN, std: Number.NaN };
   }
-  const meanValue = finite.reduce((sum, value) => sum + value, 0) / finite.length;
+  const meanValue =
+    finite.reduce((sum, value) => sum + value, 0) / finite.length;
   if (finite.length < 2) {
     return { mean: meanValue, std: 0 };
   }
-  const variance = finite.reduce((sum, value) => sum + (value - meanValue) ** 2, 0) / (finite.length - 1);
+  const variance =
+    finite.reduce((sum, value) => sum + (value - meanValue) ** 2, 0) /
+    (finite.length - 1);
   return { mean: meanValue, std: Math.sqrt(Math.max(variance, 0)) };
 }
 
 function zNormalize(values) {
   const stats = meanAndStd(values);
-  if (!Number.isFinite(stats.mean) || !Number.isFinite(stats.std) || stats.std === 0) {
+  if (
+    !Number.isFinite(stats.mean) ||
+    !Number.isFinite(stats.std) ||
+    stats.std === 0
+  ) {
     return values.map(() => 0);
   }
   return values.map((value) => (value - stats.mean) / stats.std);
@@ -1517,7 +1759,10 @@ function applyGroupDemean(vectors, groups) {
 
   groups.forEach((group, index) => {
     if (!sums.has(group)) {
-      sums.set(group, vectors.map(() => 0));
+      sums.set(
+        group,
+        vectors.map(() => 0),
+      );
       counts.set(group, 0);
     }
     const sumRow = sums.get(group);
@@ -1530,7 +1775,10 @@ function applyGroupDemean(vectors, groups) {
   const means = new Map();
   sums.forEach((sumRow, group) => {
     const count = counts.get(group) || 1;
-    means.set(group, sumRow.map((value) => value / count));
+    means.set(
+      group,
+      sumRow.map((value) => value / count),
+    );
   });
 
   groups.forEach((group, index) => {
@@ -1573,9 +1821,10 @@ function clusterRobustVariance(X, residuals, xtxInv, clusterIds) {
   const variance = multiplyMatrices(left, xtxInv);
   const clusterCount = clusterScores.size;
   const n = X.length;
-  const correction = clusterCount > 1 && n > k
-    ? (clusterCount / (clusterCount - 1)) * ((n - 1) / (n - k))
-    : 1;
+  const correction =
+    clusterCount > 1 && n > k
+      ? (clusterCount / (clusterCount - 1)) * ((n - 1) / (n - k))
+      : 1;
   const diagonal = [];
   for (let i = 0; i < k; i += 1) {
     diagonal.push(variance[i][i] * correction);
@@ -1607,7 +1856,9 @@ function twoTailedEmpiricalP(observed, samples) {
   if (!finite.length || !Number.isFinite(observed)) {
     return Number.NaN;
   }
-  const hits = finite.filter((value) => Math.abs(value) >= Math.abs(observed)).length;
+  const hits = finite.filter(
+    (value) => Math.abs(value) >= Math.abs(observed),
+  ).length;
   return (hits + 1) / (finite.length + 1);
 }
 
@@ -1633,14 +1884,18 @@ function multiplyMatrices(a, b) {
 }
 
 function multiplyMatrixVector(matrix, vector) {
-  return matrix.map((row) => row.reduce((sum, value, index) => sum + value * vector[index], 0));
+  return matrix.map((row) =>
+    row.reduce((sum, value, index) => sum + value * vector[index], 0),
+  );
 }
 
 function invertMatrix(matrix) {
   const size = matrix.length;
   const augmented = matrix.map((row, rowIndex) => [
     ...row.map((value) => value),
-    ...Array.from({ length: size }, (_, colIndex) => (colIndex === rowIndex ? 1 : 0)),
+    ...Array.from({ length: size }, (_, colIndex) =>
+      colIndex === rowIndex ? 1 : 0,
+    ),
   ]);
 
   for (let col = 0; col < size; col += 1) {
@@ -1706,12 +1961,15 @@ function erf(value) {
   const a5 = 1.061405429;
   const p = 0.3275911;
   const t = 1 / (1 + p * x);
-  const y = 1 - (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x));
+  const y =
+    1 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-x * x);
   return sign * y;
 }
 
 function canonicalizeKey(value) {
-  return cleanText(value).replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  return cleanText(value)
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toLowerCase();
 }
 
 function cleanText(value) {
@@ -1744,7 +2002,9 @@ function parseNumber(value) {
   if (typeof value === "number") {
     return Number.isFinite(value) ? value : Number.NaN;
   }
-  const cleaned = String(value).replace(/[$,%\s]/g, "").replaceAll(",", "");
+  const cleaned = String(value)
+    .replace(/[$,%\s]/g, "")
+    .replaceAll(",", "");
   if (!cleaned) {
     return Number.NaN;
   }
@@ -1757,7 +2017,12 @@ function normalizeDate(value) {
     return "";
   }
 
-  if (typeof value === "number" && Number.isFinite(value) && value > 20000 && value < 80000) {
+  if (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value > 20000 &&
+    value < 80000
+  ) {
     return excelSerialToDate(value);
   }
 
@@ -1771,7 +2036,11 @@ function normalizeDate(value) {
   }
 
   const excelCandidate = Number(text);
-  if (Number.isFinite(excelCandidate) && excelCandidate > 20000 && excelCandidate < 80000) {
+  if (
+    Number.isFinite(excelCandidate) &&
+    excelCandidate > 20000 &&
+    excelCandidate < 80000
+  ) {
     return excelSerialToDate(excelCandidate);
   }
 
@@ -1822,7 +2091,10 @@ function safeNumber(value) {
 }
 
 function getReliabilityTier(shiftCount) {
-  if (!Number.isFinite(shiftCount) || shiftCount < RELIABILITY_MEDIUM_SHIFT_COUNT) {
+  if (
+    !Number.isFinite(shiftCount) ||
+    shiftCount < RELIABILITY_MEDIUM_SHIFT_COUNT
+  ) {
     return { tier: "Low" };
   }
   if (shiftCount < RELIABILITY_HIGH_SHIFT_COUNT) {
@@ -1836,7 +2108,10 @@ function decomposeTrendGap(trendRows) {
     .map((row, index) => ({
       index,
       month: row.month,
-      gap: Number.isFinite(row.selected) && Number.isFinite(row.company) ? row.selected - row.company : Number.NaN,
+      gap:
+        Number.isFinite(row.selected) && Number.isFinite(row.company)
+          ? row.selected - row.company
+          : Number.NaN,
     }))
     .filter((row) => Number.isFinite(row.gap));
 
@@ -1856,8 +2131,12 @@ function decomposeTrendGap(trendRows) {
 
   const absValues = gaps.map((row) => Math.abs(row.gap)).sort((a, b) => b - a);
   const topCount = Math.max(1, Math.floor(absValues.length * 0.25));
-  const topShare = absValues.slice(0, topCount).reduce((sum, value) => sum + value, 0) /
-    Math.max(absValues.reduce((sum, value) => sum + value, 0), 1e-6);
+  const topShare =
+    absValues.slice(0, topCount).reduce((sum, value) => sum + value, 0) /
+    Math.max(
+      absValues.reduce((sum, value) => sum + value, 0),
+      1e-6,
+    );
 
   let pattern = "stable";
   if (slope > 0.07) {
@@ -1866,7 +2145,8 @@ function decomposeTrendGap(trendRows) {
     pattern = "improving";
   }
 
-  const concentrated = topShare > 0.55 ? "concentrated in a short period" : "spread over time";
+  const concentrated =
+    topShare > 0.55 ? "concentrated in a short period" : "spread over time";
   const summary = `Gap appears ${pattern} month-to-month and is ${concentrated}.`;
 
   return { slope, topShare, summary };
@@ -1882,32 +2162,84 @@ function exportAuditCsv() {
   const rows = [];
   rows.push(["section", "key", "value"]);
   rows.push(["metadata", "generated_at", analysis.generatedAt]);
-  rows.push(["metadata", "selected_supervisor", analysis.selectedSupervisorLabel]);
-  rows.push(["metadata", "selected_supervisor_id", analysis.selectedSupervisorId]);
-  rows.push(["metadata", "scoped_store_shifts", String(analysis.scopedShiftCount)]);
+  rows.push([
+    "metadata",
+    "selected_supervisor",
+    analysis.selectedSupervisorLabel,
+  ]);
+  rows.push([
+    "metadata",
+    "selected_supervisor_id",
+    analysis.selectedSupervisorId,
+  ]);
+  rows.push([
+    "metadata",
+    "scoped_store_shifts",
+    String(analysis.scopedShiftCount),
+  ]);
   rows.push(["filter", "office", analysis.filters.office]);
   rows.push(["filter", "inventory_type", analysis.filters.type]);
   rows.push(["filter", "start_date", analysis.filters.startDate || ""]);
   rows.push(["filter", "end_date", analysis.filters.endDate || ""]);
   rows.push(["method", "fixed_effects", "store + month"]);
-  rows.push(["method", "controls", "log_store_size + crew_size + supervisor_indicator"]);
+  rows.push([
+    "method",
+    "controls",
+    "log_store_size + crew_size + supervisor_indicator",
+  ]);
   rows.push(["method", "clustered_standard_errors", "store"]);
   rows.push(["method", "robustness_checks", "bootstrap + permutation"]);
-  rows.push(["method", "crew_quality", "recency-weighted employee baseline, supervisor excluded where possible"]);
+  rows.push([
+    "method",
+    "crew_quality",
+    "recency-weighted employee baseline, supervisor excluded where possible",
+  ]);
 
   const shiftModel = analysis.selectedRegression.shift;
   const crewModel = analysis.selectedRegression.crew;
   const robustShift = analysis.selectedRobustness?.shift;
   const robustCrew = analysis.selectedRobustness?.crew;
 
-  rows.push(["selected_model_shift", "coefficient", formatRawNumber(shiftModel?.coefficient)]);
-  rows.push(["selected_model_shift", "clustered_p", formatRawNumber(shiftModel?.pValue)]);
-  rows.push(["selected_model_shift", "bootstrap_p", formatRawNumber(robustShift?.bootstrapP)]);
-  rows.push(["selected_model_shift", "permutation_p", formatRawNumber(robustShift?.permutationP)]);
-  rows.push(["selected_model_crew", "coefficient", formatRawNumber(crewModel?.coefficient)]);
-  rows.push(["selected_model_crew", "clustered_p", formatRawNumber(crewModel?.pValue)]);
-  rows.push(["selected_model_crew", "bootstrap_p", formatRawNumber(robustCrew?.bootstrapP)]);
-  rows.push(["selected_model_crew", "permutation_p", formatRawNumber(robustCrew?.permutationP)]);
+  rows.push([
+    "selected_model_shift",
+    "coefficient",
+    formatRawNumber(shiftModel?.coefficient),
+  ]);
+  rows.push([
+    "selected_model_shift",
+    "clustered_p",
+    formatRawNumber(shiftModel?.pValue),
+  ]);
+  rows.push([
+    "selected_model_shift",
+    "bootstrap_p",
+    formatRawNumber(robustShift?.bootstrapP),
+  ]);
+  rows.push([
+    "selected_model_shift",
+    "permutation_p",
+    formatRawNumber(robustShift?.permutationP),
+  ]);
+  rows.push([
+    "selected_model_crew",
+    "coefficient",
+    formatRawNumber(crewModel?.coefficient),
+  ]);
+  rows.push([
+    "selected_model_crew",
+    "clustered_p",
+    formatRawNumber(crewModel?.pValue),
+  ]);
+  rows.push([
+    "selected_model_crew",
+    "bootstrap_p",
+    formatRawNumber(robustCrew?.bootstrapP),
+  ]);
+  rows.push([
+    "selected_model_crew",
+    "permutation_p",
+    formatRawNumber(robustCrew?.permutationP),
+  ]);
   rows.push(["selected_model", "reliability", analysis.reliability.tier]);
 
   rows.push([]);
@@ -2055,10 +2387,10 @@ function formatRawNumber(value) {
 
 function csvEscape(value) {
   const text = String(value ?? "");
-  if (!text.includes(",") && !text.includes("\"") && !text.includes("\n")) {
+  if (!text.includes(",") && !text.includes('"') && !text.includes("\n")) {
     return text;
   }
-  return `"${text.replaceAll("\"", "\"\"")}"`;
+  return `"${text.replaceAll('"', '""')}"`;
 }
 
 function triggerCsvDownload(fileName, csvText) {

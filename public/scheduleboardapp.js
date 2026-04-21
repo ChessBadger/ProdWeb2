@@ -164,7 +164,7 @@ const state = {
 
 const STORAGE_KEY = "schedule_board_assignments_v1";
 const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
-const HISTORY_JSON_PATH = "data/EmployeeProductionExport.json";
+const HISTORY_JSON_PATH = "data/EmployeeProductionExport2.json";
 const SCHEDULE_JSON_PATH = "data/ScheduleFinalFull.json";
 const ALLOWED_USERS = ["lclark@badgerinventory.com"];
 const firebaseConfig = {
@@ -356,7 +356,7 @@ async function loadData() {
 }
 
 async function fetchJsonResult(path) {
-  const response = await fetch(path, { cache: "force-cache" });
+  const response = await fetch(path, { cache: "no-store" });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const rawJsonText = await response.text();
   return { rawJsonText, payload: JSON.parse(rawJsonText) };
@@ -2776,11 +2776,27 @@ function safeNumber(value) {
 }
 
 function stamp(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? clean(value)
-    : date.toISOString().slice(0, 10);
+  const text = clean(value);
+  if (!text) return "";
+
+  const isoLikeMatch = text.match(
+    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/,
+  );
+  if (isoLikeMatch) {
+    return `${isoLikeMatch[1]}-${isoLikeMatch[2]}-${isoLikeMatch[3]}`;
+  }
+
+  const slashDateMatch = text.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+.*)?$/,
+  );
+  if (slashDateMatch) {
+    const month = slashDateMatch[1].padStart(2, "0");
+    const day = slashDateMatch[2].padStart(2, "0");
+    return `${slashDateMatch[3]}-${month}-${day}`;
+  }
+
+  const date = new Date(text);
+  return Number.isNaN(date.getTime()) ? text : date.toISOString().slice(0, 10);
 }
 
 function normalizeDateString(value) {

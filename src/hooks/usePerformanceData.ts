@@ -51,7 +51,7 @@ export const usePerformanceData = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch("data/EmployeeProductionExport.json");
+        const response = await fetch("data/EmployeeProductionExport2.json");
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
@@ -62,7 +62,7 @@ export const usePerformanceData = () => {
 
         if (!Array.isArray(rawDataArray)) {
           throw new Error(
-            "Loaded data is not in the expected format (array not found)."
+            "Loaded data is not in the expected format (array not found).",
           );
         }
 
@@ -100,7 +100,7 @@ export const usePerformanceData = () => {
 
         // Sort data by date ascending by default
         const sortedData = transformedData.sort(
-          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
         );
         setData(sortedData);
       } catch (e: any) {
