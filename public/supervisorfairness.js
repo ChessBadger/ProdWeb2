@@ -20,7 +20,7 @@ const REQUIRED_COLUMNS = [
 ];
 
 const SIGNIFICANCE_LEVEL = 0.05;
-const DATA_JSON_PATH = "data/EmployeeProductionExport2.json";
+const DATA_JSON_PATH = "data/EmployeeProductionExport.json";
 const EMPTY_STATE_TEXT = "Load JSON data to begin.";
 const BASELINE_HALF_LIFE_DAYS = 90;
 const MIN_SHIFTS_FOR_SIGNIFICANCE = 12;

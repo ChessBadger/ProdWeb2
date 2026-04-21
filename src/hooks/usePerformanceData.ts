@@ -51,7 +51,7 @@ export const usePerformanceData = () => {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const response = await fetch("data/EmployeeProductionExport2.json");
+        const response = await fetch("data/EmployeeProductionExport.json");
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
