@@ -13,7 +13,7 @@ import pandas as pd
 DEFAULT_REPO = Path(r"C:\Users\Laptop 122\Desktop\Store Prep\06 Employee Reports\Website")
 DEFAULT_WORKBOOK_NAMES = (
     "EmployeeProductionExport.xlsx",
-    "ScheduleFinal.xls",
+    "ScheduleFinalFull.xlsx",
 )
 DEFAULT_COPY_TARGETS = ["public/data", "docs/data", "data"]
 EXCEL_EXTENSIONS = (".xlsx", ".xlsm", ".xls")
