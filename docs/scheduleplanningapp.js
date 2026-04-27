@@ -253,8 +253,8 @@ const state = {
 
 const STORAGE_KEY = "crew_predictor_v2";
 const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
-const HISTORY_JSON_PATH = "data/EmployeeProductionExport2.json";
-const ACTIVE_EMPLOYEE_JSON_PATH = "data/EmployeeProductionExport2.json";
+const HISTORY_JSON_PATH = "data/EmployeeProductionExport.json";
+const ACTIVE_EMPLOYEE_JSON_PATH = "data/EmployeeProductionExport.json";
 const SCHEDULE_JSON_PATH = "data/ScheduleFinalFull.json";
 const BOARD_ALLOWED_USERS = ["lclark@badgerinventory.com"];
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
@@ -6416,9 +6416,7 @@ function normalizeDateString(value) {
   const text = cleanText(value);
   if (!text) return "";
 
-  const isoLikeMatch = text.match(
-    /^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/,
-  );
+  const isoLikeMatch = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
   if (isoLikeMatch) {
     return `${isoLikeMatch[1]}-${isoLikeMatch[2]}-${isoLikeMatch[3]}`;
   }
