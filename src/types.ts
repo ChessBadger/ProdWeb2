@@ -6,6 +6,7 @@ export interface EmployeeRecord {
   typeOfInv: string;
   store: string;
   supervisor: string;
+  rx: boolean;
   date: string; // YYYY-MM-DD
   pieces: number;
   dollars: number;
@@ -16,7 +17,7 @@ export interface EmployeeRecord {
   gap15_count: number;
 }
 
-export type Metric = keyof Omit<EmployeeRecord, 'employee' | 'office' | 'account' | 'typeOfInv' | 'store' | 'date' | 'supervisor'>;
+export type Metric = keyof Omit<EmployeeRecord, 'employee' | 'office' | 'account' | 'typeOfInv' | 'store' | 'date' | 'supervisor' | 'rx'>;
 
 export interface UniqueValues {
     employees: string[];

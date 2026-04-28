@@ -295,22 +295,37 @@ const Dashboard: React.FC = () => {
     filters.specificDate,
   ]);
 
+  const productionData = useMemo(
+    () => filteredData.filter((record) => !record.rx),
+    [filteredData]
+  );
+
+  const productionOverallData = useMemo(
+    () => dataForAnomalyOverall.filter((record) => !record.rx),
+    [dataForAnomalyOverall]
+  );
+
+  const productionBaseData = useMemo(
+    () => data.filter((record) => !record.rx),
+    [data]
+  );
+
   const kpiValues = useMemo(() => {
-    if (!filteredData.length) {
+    if (!productionData.length) {
       return {
         avgMetric: 0,
         uniqueEmployees: 0,
         bestPerformer: { name: "N/A", value: 0 },
       };
     }
-    const metricValues = filteredData.map((d) => d[selectedMetric]);
+    const metricValues = productionData.map((d) => d[selectedMetric]);
     const avgMetric =
       metricValues.reduce((a, b) => a + b, 0) / metricValues.length;
 
     const employeeTotals = new Map<string, number>();
     const employeeCounts = new Map<string, number>();
 
-    filteredData.forEach((d) => {
+    productionData.forEach((d) => {
       employeeTotals.set(
         d.employee,
         (employeeTotals.get(d.employee) || 0) + d[selectedMetric]
@@ -334,7 +349,7 @@ const Dashboard: React.FC = () => {
       uniqueEmployees: new Set(filteredData.map((d) => d.employee)).size,
       bestPerformer,
     };
-  }, [filteredData, selectedMetric]);
+  }, [filteredData, productionData, selectedMetric]);
 
   const metricLabel =
     METRIC_OPTIONS.find((m) => m.value === selectedMetric)?.label || "Metric";
@@ -344,7 +359,7 @@ const Dashboard: React.FC = () => {
       case "comparison":
         return (
           <PerformanceBarChart
-            data={filteredData}
+            data={productionData}
             metric={selectedMetric}
             topN={filters.topN}
             showTop={filters.showTop}
@@ -354,8 +369,8 @@ const Dashboard: React.FC = () => {
       case "trend":
         return (
           <PerformanceTrendChart
-            data={filteredData}
-            overallData={dataForAnomalyOverall}
+            data={productionData}
+            overallData={productionOverallData}
             metric={selectedMetric}
             employee={filters.employee}
             isDarkMode={isDarkMode}
@@ -364,7 +379,7 @@ const Dashboard: React.FC = () => {
       case "dayOfWeek":
         return (
           <DayOfWeekChart
-            data={filteredData}
+            data={productionData}
             metric={selectedMetric}
             isDarkMode={isDarkMode}
           />
@@ -372,8 +387,8 @@ const Dashboard: React.FC = () => {
       case "anomaly":
         return (
           <AnomalyDetection
-            data={filteredData}
-            overallData={dataForAnomalyOverall}
+            data={productionData}
+            overallData={productionOverallData}
             metric={selectedMetric}
             account={filters.account}
             isDarkMode={isDarkMode}
@@ -609,7 +624,7 @@ const Dashboard: React.FC = () => {
                   {
                     label: "Averages by Employee",
                     content: (
-                      <AveragesTable data={filteredData} metric={selectedMetric} />
+                      <AveragesTable data={productionData} metric={selectedMetric} />
                     ),
                   },
                   {
@@ -647,7 +662,7 @@ const Dashboard: React.FC = () => {
                           </div>
                         </div>
                         <PerformanceByGroupTable
-                          data={filteredData}
+                          data={productionData}
                           groupBy={groupBy}
                         />
                       </>
@@ -663,9 +678,9 @@ const Dashboard: React.FC = () => {
           </>
         ) : (
           activePage === "compare" ? (
-            <ProductionComparisonPage data={data} isDarkMode={isDarkMode} />
+            <ProductionComparisonPage data={productionBaseData} isDarkMode={isDarkMode} />
           ) : (
-            <TypeOfInvComparisonPage data={data} isDarkMode={isDarkMode} />
+            <TypeOfInvComparisonPage data={productionBaseData} isDarkMode={isDarkMode} />
           )
         )}
       </main>

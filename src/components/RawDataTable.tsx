@@ -74,6 +74,7 @@ const RawDataTable: React.FC<RawDataTableProps> = ({ data }) => {
                             {renderHeader('office', 'Office')}
                             {renderHeader('account', 'Account')}
                             {renderHeader('store', 'Store')}
+                            {renderHeader('rx', 'Status')}
                             {METRIC_OPTIONS.map(m => renderHeader(m.value, m.label))}
                         </tr>
                     </thead>
@@ -85,8 +86,17 @@ const RawDataTable: React.FC<RawDataTableProps> = ({ data }) => {
                                 <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">{row.office}</td>
                                 <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">{row.account}</td>
                                 <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">{row.store}</td>
+                                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                                    {row.rx ? (
+                                        <span className="inline-flex rounded-full bg-blue-100 px-2 py-1 text-xs font-semibold text-blue-800 dark:bg-blue-900/40 dark:text-blue-200">
+                                            Rx - production omitted
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-500 dark:text-slate-400">Production</span>
+                                    )}
+                                </td>
                                 {METRIC_OPTIONS.map(m => (
-                                    <td key={m.value} className="px-4 py-3 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">{row[m.value]}</td>
+                                    <td key={m.value} className="px-4 py-3 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">{row.rx ? '-' : row[m.value]}</td>
                                 ))}
                             </tr>
                         ))}

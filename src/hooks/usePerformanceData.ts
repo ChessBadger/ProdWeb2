@@ -33,15 +33,19 @@ interface RawEmployeeRecord {
   TypeOfInv: string;
   StoreName: string;
   DateOfInv: string;
-  PiecesPerHr: number;
-  DollarPerHr: number;
-  SkusPerHr: number;
-  AVG_DELTA: number;
-  GAP5_COUNT: number;
-  GAP10_COUNT: number;
-  GAP15_COUNT: number;
+  PiecesPerHr: number | null;
+  DollarPerHr: number | null;
+  SkusPerHr: number | null;
+  AVG_DELTA: number | null;
+  GAP5_COUNT: number | null;
+  GAP10_COUNT: number | null;
+  GAP15_COUNT: number | null;
   SupervisorNumber: number;
+  Rx?: boolean;
 }
+
+const toNumber = (value: number | null | undefined): number =>
+  typeof value === "number" && Number.isFinite(value) ? value : 0;
 
 export const usePerformanceData = () => {
   const [data, setData] = useState<EmployeeRecord[]>([]);
@@ -87,14 +91,15 @@ export const usePerformanceData = () => {
             typeOfInv: normalizeTypeOfInv(record.TypeOfInv),
             store: record.StoreName,
             supervisor: supervisorName,
+            rx: Boolean(record.Rx),
             date: record.DateOfInv.split(" ")[0], // Keep only YYYY-MM-DD
-            pieces: record.PiecesPerHr,
-            dollars: record.DollarPerHr,
-            skus: record.SkusPerHr,
-            avg_delta: record.AVG_DELTA,
-            gap5_count: record.GAP5_COUNT,
-            gap10_count: record.GAP10_COUNT,
-            gap15_count: record.GAP15_COUNT,
+            pieces: toNumber(record.PiecesPerHr),
+            dollars: toNumber(record.DollarPerHr),
+            skus: toNumber(record.SkusPerHr),
+            avg_delta: toNumber(record.AVG_DELTA),
+            gap5_count: toNumber(record.GAP5_COUNT),
+            gap10_count: toNumber(record.GAP10_COUNT),
+            gap15_count: toNumber(record.GAP15_COUNT),
           };
         });
 
