@@ -41,7 +41,7 @@ const ProductionComparisonPage: React.FC<{
     "employee"
   );
   const [metric, setMetric] = useState<Metric>("pieces");
-  const [timeframe, setTimeframe] = useState<Timeframe>("last180");
+  const [timeframe, setTimeframe] = useState<Timeframe>("last90");
   const [office, setOffice] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -58,7 +58,7 @@ const ProductionComparisonPage: React.FC<{
     setCompareBy("account");
     setBreakdownBy("employee");
     setMetric("pieces");
-    setTimeframe("last180");
+    setTimeframe("last90");
     setOffice("all");
     setStartDate("");
     setEndDate("");

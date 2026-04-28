@@ -2,15 +2,17 @@ import React, { useState, useMemo } from 'react';
 import { EmployeeRecord } from '../types';
 import { METRIC_OPTIONS } from '../constants';
 import { SortAscIcon, SortDescIcon, ChevronLeftIcon, ChevronRightIcon } from './icons/Icons';
+import RxBadge from './RxBadge';
 
 interface RawDataTableProps {
     data: EmployeeRecord[];
+    showRxBadges?: boolean;
 }
 
 type SortKey = keyof EmployeeRecord;
 const ITEMS_PER_PAGE = 10;
 
-const RawDataTable: React.FC<RawDataTableProps> = ({ data }) => {
+const RawDataTable: React.FC<RawDataTableProps> = ({ data, showRxBadges = false }) => {
     const [sortKey, setSortKey] = useState<SortKey>('date');
     const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
     const [currentPage, setCurrentPage] = useState(1);
@@ -84,11 +86,7 @@ const RawDataTable: React.FC<RawDataTableProps> = ({ data }) => {
                                 <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-800 dark:text-slate-200">
                                     <span className="inline-flex items-center gap-2">
                                         <span>{row.employee}</span>
-                                        {row.rx && (
-                                            <span className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-800 dark:bg-blue-900/40 dark:text-blue-200">
-                                                Rx
-                                            </span>
-                                        )}
+                                        {showRxBadges && row.rx && <RxBadge />}
                                     </span>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">{row.office}</td>

@@ -47,7 +47,7 @@ const TypeOfInvComparisonPage: React.FC<{
   const [breakdownBy, setBreakdownBy] =
     useState<BreakdownDimension>("store");
   const [metric, setMetric] = useState<Metric>("pieces");
-  const [timeframe, setTimeframe] = useState<Timeframe>("last180");
+  const [timeframe, setTimeframe] = useState<Timeframe>("last90");
   const [office, setOffice] = useState("all");
   const [selectedAccount, setSelectedAccount] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -62,7 +62,7 @@ const TypeOfInvComparisonPage: React.FC<{
   const handleClearCompareFilters = () => {
     setBreakdownBy("store");
     setMetric("pieces");
-    setTimeframe("last180");
+    setTimeframe("last90");
     setOffice("all");
     setSelectedAccount("");
     setStartDate("");

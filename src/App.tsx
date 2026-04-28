@@ -105,7 +105,7 @@ const initialFilterState: FilterState = {
   employee: "all",
   store: "all",
   supervisor: "all",
-  timeframe: "last180",
+  timeframe: "last90",
   startDate: "",
   endDate: "",
   specificDate: "",
@@ -353,6 +353,7 @@ const Dashboard: React.FC = () => {
 
   const metricLabel =
     METRIC_OPTIONS.find((m) => m.value === selectedMetric)?.label || "Metric";
+  const isSingleStoreView = filters.store !== "all";
 
   const renderActiveChart = () => {
     switch (activeChart) {
@@ -625,9 +626,11 @@ const Dashboard: React.FC = () => {
                     label: "Averages by Employee",
                     content: (
                       <AveragesTable
-                        data={productionData}
+                        data={isSingleStoreView ? filteredData : productionData}
+                        overallData={productionData}
                         attendanceData={filteredData}
                         metric={selectedMetric}
+                        showRxBadges={isSingleStoreView}
                       />
                     ),
                   },
@@ -674,7 +677,12 @@ const Dashboard: React.FC = () => {
                   },
                   {
                     label: "All Stores",
-                    content: <RawDataTable data={filteredData} />,
+                    content: (
+                      <RawDataTable
+                        data={filteredData}
+                        showRxBadges={isSingleStoreView}
+                      />
+                    ),
                   },
                 ]}
               />

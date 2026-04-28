@@ -2,11 +2,14 @@ import React, { useMemo, useState } from "react";
 import { EmployeeRecord, Metric } from "../types";
 import { METRIC_OPTIONS } from "../constants";
 import { SortAscIcon, SortDescIcon } from "./icons/Icons";
+import RxBadge from "./RxBadge";
 
 interface AveragesTableProps {
   data: EmployeeRecord[];
+  overallData?: EmployeeRecord[];
   attendanceData?: EmployeeRecord[];
   metric: Metric;
+  showRxBadges?: boolean;
 }
 
 type SortKey = Metric | "employee" | "consistency";
@@ -173,11 +176,14 @@ export const PerformanceByGroupTable: React.FC<
 
 const AveragesTable: React.FC<AveragesTableProps> = ({
   data,
+  overallData,
   attendanceData,
   metric,
+  showRxBadges = false,
 }) => {
   const [sortKey, setSortKey] = useState<SortKey>("employee");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const dataForOverall = overallData ?? data;
 
   const rxEmployees = useMemo(() => {
     const sourceData = attendanceData ?? data;
@@ -189,14 +195,14 @@ const AveragesTable: React.FC<AveragesTableProps> = ({
   }, [attendanceData, data]);
 
   const overallAverages = useMemo(() => {
-    if (!data.length) return null;
+    if (!dataForOverall.length) return null;
 
     const totals = METRIC_OPTIONS.reduce((acc, metric) => {
       acc[metric.value] = 0;
       return acc;
     }, {} as { [K in Metric]: number });
 
-    data.forEach((record) => {
+    dataForOverall.forEach((record) => {
       METRIC_OPTIONS.forEach(({ value }) => {
         totals[value] += record[value];
       });
@@ -204,16 +210,16 @@ const AveragesTable: React.FC<AveragesTableProps> = ({
 
     const averages = {} as { [K in Metric]: number };
     METRIC_OPTIONS.forEach(({ value }) => {
-      averages[value] = totals[value] / data.length;
+      averages[value] = totals[value] / dataForOverall.length;
     });
 
     return averages;
-  }, [data]);
+  }, [dataForOverall]);
 
   const overallConsistencyScore = useMemo(() => {
-    if (data.length < 2) return data.length === 1 ? 100 : 0;
+    if (dataForOverall.length < 2) return dataForOverall.length === 1 ? 100 : 0;
 
-    const metricValues = data.map((r) => r[metric]);
+    const metricValues = dataForOverall.map((r) => r[metric]);
     const mean = metricValues.reduce((a, b) => a + b, 0) / metricValues.length;
 
     if (mean === 0) {
@@ -227,7 +233,7 @@ const AveragesTable: React.FC<AveragesTableProps> = ({
     );
     const cv = stdDev / Math.abs(mean);
     return Math.max(0, 1 - cv) * 100;
-  }, [data, metric]);
+  }, [dataForOverall, metric]);
 
   const averagesData = useMemo(() => {
     if (!data.length) return [];
@@ -369,11 +375,7 @@ const AveragesTable: React.FC<AveragesTableProps> = ({
                 <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-800 dark:text-slate-200">
                   <span className="inline-flex items-center gap-2">
                     <span>{row.employee}</span>
-                    {rxEmployees.has(row.employee) && (
-                      <span className="inline-flex rounded-full bg-blue-600 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-white shadow-sm ring-2 ring-blue-200 dark:bg-blue-500 dark:ring-blue-900">
-                        Rx
-                      </span>
-                    )}
+                    {showRxBadges && rxEmployees.has(row.employee) && <RxBadge />}
                   </span>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400 font-semibold">
