@@ -11,6 +11,7 @@ import AveragesTable, {
   PerformanceByGroupTable,
 } from "./components/AveragesTable";
 import RawDataTable from "./components/RawDataTable";
+import AccountDateInstancesTable from "./components/AccountDateInstancesTable";
 import AnomalyDetection from "./components/AnomalyDetection";
 import KPI from "./components/KPI";
 import Tabs from "./components/Tabs";
@@ -682,6 +683,12 @@ const Dashboard: React.FC = () => {
                         data={filteredData}
                         showRxBadges={isSingleStoreView}
                       />
+                    ),
+                  },
+                  {
+                    label: "Account Frequency",
+                    content: (
+                      <AccountDateInstancesTable data={productionData} />
                     ),
                   },
                 ]}
