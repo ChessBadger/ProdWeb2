@@ -99,9 +99,53 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
         overallAvg: overallMap.get(pt.date) ?? null,
       }));
     } else {
-      finalChartData = [...sourceData].sort(
-        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      const storeTotals = new Map<string, { total: number; count: number }>();
+
+      overallData.forEach((record) => {
+        if (!storeTotals.has(record.store)) {
+          storeTotals.set(record.store, { total: 0, count: 0 });
+        }
+        const current = storeTotals.get(record.store)!;
+        current.total += record[metric];
+        current.count += 1;
+      });
+
+      const storeAverageMap = new Map(
+        Array.from(storeTotals.entries()).map(([store, values]) => [
+          store,
+          values.total / values.count,
+        ])
       );
+
+      finalChartData = [...sourceData]
+        .sort(
+          (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+        )
+        .map((record) => ({
+          ...record,
+          overallAvg: storeAverageMap.get(record.store) ?? null,
+        }));
+    }
+
+    if (employee !== "all" && viewMode === "store") {
+      finalChartData = finalChartData.map((point, index) => ({
+        ...point,
+        chartKey: `${point.date}-${point.store}-${index}`,
+      }));
+    }
+
+    if (employee !== "all" && viewMode !== "store") {
+      finalChartData = finalChartData.map((point) => ({
+        ...point,
+        chartKey: point.date,
+      }));
+    }
+
+    if (employee === "all") {
+      finalChartData = finalChartData.map((point) => ({
+        ...point,
+        chartKey: point.date,
+      }));
     }
 
     // Anomaly detection logic
@@ -177,17 +221,23 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
   const tooltipFormatter = (value: any, name: string, props: any) => {
     if (typeof value !== "number") return null;
     const { payload } = props;
+    if (name === "Store Avg") {
+      return [value.toFixed(2), `${payload.store} Avg`];
+    }
     if (employee !== "all" && trendView === "store" && payload.store) {
       return [value.toFixed(2), payload.store];
     }
     return [value.toFixed(2), name];
   };
 
+  const xAxisDataKey =
+    employee !== "all" && trendView === "store" ? "chartKey" : "date";
+
   const renderAnnotationDot = (point: any, label: string, color: string) => {
     if (!point) return null;
     return (
       <ReferenceDot
-        x={point.date}
+        x={point[xAxisDataKey]}
         y={point[metric]}
         r={5}
         fill={color}
@@ -243,7 +293,15 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
             margin={{ top: 20, right: 20, left: -10, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke={gridColor} />
-            <XAxis dataKey="date" tick={{ fontSize: 12, fill: tickColor }} />
+              <XAxis
+                dataKey={xAxisDataKey}
+                tick={{ fontSize: 12, fill: tickColor }}
+                tickFormatter={(value) =>
+                  employee !== "all" && trendView === "store"
+                    ? String(value).split("-").slice(0, 3).join("-")
+                    : value
+                }
+              />
             <YAxis
               tick={{ fontSize: 12, fill: tickColor }}
               domain={[0, yAxisMax]}
@@ -258,7 +316,8 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
                   employee !== "all" &&
                   trendView === "store"
                 ) {
-                  return `Date: ${label}`;
+                  const record = payload[0].payload;
+                  return `Date: ${record.date}`;
                 }
                 return label;
               }}
@@ -289,16 +348,17 @@ const PerformanceTrendChart: React.FC<PerformanceTrendChartProps> = ({
 
             {/* dashed overall‑avg line */}
             {employee !== "all" &&
-              trendView === "monthly" &&
+              (trendView === "monthly" || trendView === "store") &&
               showOverallAvg && (
                 <Line
                   type="monotone"
                   dataKey="overallAvg"
-                  name="Overall Avg"
+                  name={trendView === "store" ? "Store Avg" : "Overall Avg"}
                   stroke="#2563eb"
                   strokeWidth={2}
-                  dot={false}
-                  strokeDasharray="5 5"
+                  dot={{ r: 4, fill: "#2563eb" }}
+                  activeDot={{ r: 7 }}
+                  strokeDasharray={trendView === "store" ? undefined : "5 5"}
                 />
               )}
 

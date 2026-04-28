@@ -245,4 +245,4 @@ def main():
 if __name__ == "__main__":
     exit_code = main()
     if exit_code and sys.gettrace() is None:
-        sys.exit(exit_code)
+        s
