@@ -47,6 +47,12 @@ interface RawEmployeeRecord {
 const toNumber = (value: number | null | undefined): number =>
   typeof value === "number" && Number.isFinite(value) ? value : 0;
 
+const toBoolean = (value: unknown): boolean =>
+  value === true ||
+  value === 1 ||
+  (typeof value === "string" &&
+    ["true", "yes", "y", "1"].includes(value.trim().toLowerCase()));
+
 export const usePerformanceData = () => {
   const [data, setData] = useState<EmployeeRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -91,7 +97,7 @@ export const usePerformanceData = () => {
             typeOfInv: normalizeTypeOfInv(record.TypeOfInv),
             store: record.StoreName,
             supervisor: supervisorName,
-            rx: Boolean(record.Rx),
+            rx: toBoolean(record.Rx),
             date: record.DateOfInv.split(" ")[0], // Keep only YYYY-MM-DD
             pieces: toNumber(record.PiecesPerHr),
             dollars: toNumber(record.DollarPerHr),

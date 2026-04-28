@@ -5,6 +5,7 @@ import { SortAscIcon, SortDescIcon } from "./icons/Icons";
 
 interface AveragesTableProps {
   data: EmployeeRecord[];
+  attendanceData?: EmployeeRecord[];
   metric: Metric;
 }
 
@@ -170,9 +171,22 @@ export const PerformanceByGroupTable: React.FC<
   );
 };
 
-const AveragesTable: React.FC<AveragesTableProps> = ({ data, metric }) => {
+const AveragesTable: React.FC<AveragesTableProps> = ({
+  data,
+  attendanceData,
+  metric,
+}) => {
   const [sortKey, setSortKey] = useState<SortKey>("employee");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+
+  const rxEmployees = useMemo(() => {
+    const sourceData = attendanceData ?? data;
+    return new Set(
+      sourceData
+        .filter((record) => record.rx)
+        .map((record) => record.employee)
+    );
+  }, [attendanceData, data]);
 
   const overallAverages = useMemo(() => {
     if (!data.length) return null;
@@ -353,7 +367,14 @@ const AveragesTable: React.FC<AveragesTableProps> = ({ data, metric }) => {
                 className="hover:bg-slate-50 dark:hover:bg-slate-700/50"
               >
                 <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-slate-800 dark:text-slate-200">
-                  {row.employee}
+                  <span className="inline-flex items-center gap-2">
+                    <span>{row.employee}</span>
+                    {rxEmployees.has(row.employee) && (
+                      <span className="inline-flex rounded-full bg-blue-600 px-2.5 py-1 text-xs font-bold uppercase tracking-wide text-white shadow-sm ring-2 ring-blue-200 dark:bg-blue-500 dark:ring-blue-900">
+                        Rx
+                      </span>
+                    )}
+                  </span>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400 font-semibold">
                   {row.consistency.toFixed(1)}

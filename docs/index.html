@@ -20,58 +20,6 @@
         document.documentElement.classList.remove("dark");
       }
     </script>
-    <script>
-      (() => {
-        const productionFields = [
-          "PiecesPerHr",
-          "DollarPerHr",
-          "SkusPerHr",
-          "AVG_DELTA",
-          "GAP5_COUNT",
-          "GAP10_COUNT",
-          "GAP15_COUNT",
-        ];
-
-        const isEmployeeProductionUrl = (input) => {
-          const url = typeof input === "string" ? input : input?.url;
-          return typeof url === "string" && url.includes("EmployeeProductionExport.json");
-        };
-
-        const isRx = (value) =>
-          value === true ||
-          value === 1 ||
-          (typeof value === "string" &&
-            ["true", "yes", "y", "1"].includes(value.trim().toLowerCase()));
-
-        const omitRxProduction = (payload) => {
-          Object.values(payload || {}).forEach((sheet) => {
-            if (!Array.isArray(sheet)) return;
-            sheet.forEach((row) => {
-              if (!isRx(row?.Rx)) return;
-              productionFields.forEach((field) => {
-                if (field in row) row[field] = null;
-              });
-            });
-          });
-          return payload;
-        };
-
-        const originalFetch = window.fetch.bind(window);
-        window.fetch = async (...args) => {
-          const response = await originalFetch(...args);
-          if (!isEmployeeProductionUrl(args[0])) return response;
-
-          const data = omitRxProduction(await response.clone().json());
-          return new Response(JSON.stringify(data), {
-            status: response.status,
-            statusText: response.statusText,
-            headers: {
-              "content-type": "application/json",
-            },
-          });
-        };
-      })();
-    </script>
 
     <script type="importmap">
       {
@@ -86,8 +34,8 @@
         }
       }
     </script>
-    <script type="module" crossorigin src="./assets/index-DoKj2mLT.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-D4Sd5sLx.css">
+    <script type="module" crossorigin src="./assets/index-DG4WUgDU.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-DEgbol9q.css">
   </head>
   <body
     class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 antialiased"

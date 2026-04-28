@@ -624,7 +624,11 @@ const Dashboard: React.FC = () => {
                   {
                     label: "Averages by Employee",
                     content: (
-                      <AveragesTable data={productionData} metric={selectedMetric} />
+                      <AveragesTable
+                        data={productionData}
+                        attendanceData={filteredData}
+                        metric={selectedMetric}
+                      />
                     ),
                   },
                   {
