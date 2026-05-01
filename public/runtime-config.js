@@ -13,4 +13,8 @@ window.__BADGER_RUNTIME_CONFIG__ = {
       "qianabatton@gmail.com",
     ],
   },
+  scheduleDataApi: {
+    url: "https://us-central1-studio-3970274252-bf282.cloudfunctions.net/getScheduleData",
+    apiKey: "badger_sync_secret_7721_x92156657",
+  },
 };

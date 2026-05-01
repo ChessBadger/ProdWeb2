@@ -22,6 +22,7 @@ const state = {
   },
   storesList: [],
   scheduleRows: [],
+  externalScheduleRows: [],
   scheduleByStoreKey: new Map(),
   scheduleUnmatchedRows: [],
   storeScheduleFilter: "all",
@@ -256,6 +257,8 @@ const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
 const HISTORY_JSON_PATH = "data/EmployeeProductionExport.json";
 const ACTIVE_EMPLOYEE_JSON_PATH = "data/EmployeeProductionExport.json";
 const SCHEDULE_JSON_PATH = "data/ScheduleFinalFull.json";
+const runtimeConfig = window.__BADGER_RUNTIME_CONFIG__ || {};
+const scheduleDataApiConfig = runtimeConfig.scheduleDataApi || {};
 const BOARD_ALLOWED_USERS = ["lclark@badgerinventory.com"];
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
 const DEFAULT_COMPARE_EMPLOYEE_RENDER_LIMIT = 120;
@@ -1151,11 +1154,17 @@ function bindEvents() {
 
 async function loadJsonData() {
   try {
-    const [historyResult, activeEmployeeResult, scheduleResult] =
+    const [
+      historyResult,
+      activeEmployeeResult,
+      scheduleResult,
+      externalScheduleResult,
+    ] =
       await Promise.all([
         fetchRequiredJson(HISTORY_JSON_PATH),
         fetchOptionalJson(ACTIVE_EMPLOYEE_JSON_PATH),
         fetchOptionalJson(SCHEDULE_JSON_PATH),
+        fetchOptionalScheduleDataApi(),
       ]);
     const fingerprint = buildDataFingerprintFromJsonText(
       historyResult.rawJsonText,
@@ -1165,11 +1174,47 @@ async function loadJsonData() {
       activeEmployeeResult?.payload,
     );
     const scheduleRows = extractRowsFromJson(scheduleResult?.payload);
+    state.externalScheduleRows = extractRowsFromJson(
+      externalScheduleResult?.payload,
+    );
     loadRows(rawRows, scheduleRows, fingerprint, activeEmployeeRows);
   } catch (error) {
     const message = error?.message || "Unknown error";
     setPredictionMeta(`Data load failed: ${message}`, "warning");
     hideComputeWaitOverlay();
+  }
+}
+
+function hasScheduleDataApiConfig() {
+  return Boolean(
+    cleanText(scheduleDataApiConfig.url) && cleanText(scheduleDataApiConfig.apiKey),
+  );
+}
+
+async function fetchOptionalScheduleDataApi() {
+  if (!hasScheduleDataApiConfig()) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(cleanText(scheduleDataApiConfig.url), {
+      cache: "no-store",
+      headers: {
+        "x-api-key": cleanText(scheduleDataApiConfig.apiKey),
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+
+    const rawJsonText = await response.text();
+    return {
+      rawJsonText,
+      payload: JSON.parse(rawJsonText),
+    };
+  } catch (error) {
+    console.warn("Optional schedule data API load failed:", error);
+    return null;
   }
 }
 

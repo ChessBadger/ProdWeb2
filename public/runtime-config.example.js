@@ -11,4 +11,8 @@ window.__BADGER_RUNTIME_CONFIG__ = {
     allowedDomain: "badgerinventory.com",
     allowedEmails: [],
   },
+  scheduleDataApi: {
+    url: "https://us-central1-studio-3970274252-bf282.cloudfunctions.net/getScheduleData",
+    apiKey: "REPLACE_ME",
+  },
 };
