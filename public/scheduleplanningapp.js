@@ -249,6 +249,7 @@ const state = {
   dataFingerprint: "",
   lastDurationResidualByStore: new Map(),
   lastCrewAppliedStoreKey: null,
+  detailedView: false,
   isLoaded: false,
 };
 
@@ -358,6 +359,7 @@ const dom = {
   earlyLateMode: document.getElementById("earlyLateMode"),
   employeeFilter: document.getElementById("employeeFilter"),
   employeeBulkStatus: document.getElementById("employeeBulkStatus"),
+  selectedCrewChips: document.getElementById("selectedCrewChips"),
   employeeList: document.getElementById("employeeList"),
   lastCrewBtn: document.getElementById("lastCrewBtn"),
   clearEmployeesBtn: document.getElementById("clearEmployeesBtn"),
@@ -365,9 +367,14 @@ const dom = {
   predManHours: document.getElementById("predManHours"),
   predBand: document.getElementById("predBand"),
   predDelta: document.getElementById("predDelta"),
+  detailModeBtn: document.getElementById("detailModeBtn"),
+  detailBackgroundPanel: document.getElementById("detailBackgroundPanel"),
+  detailBackgroundContent: document.getElementById("detailBackgroundContent"),
+  recommendationStatus: document.getElementById("recommendationStatus"),
   predictionMeta: document.getElementById("predictionMeta"),
   scenarioBody: document.getElementById("scenarioBody"),
   storeAccuracySummary: document.getElementById("storeAccuracySummary"),
+  lastCrewSummary: document.getElementById("lastCrewSummary"),
   accuracyAccountFilter: document.getElementById("accuracyAccountFilter"),
   computeAccuracyBtn: document.getElementById("computeAccuracyBtn"),
   accuracySummary: document.getElementById("accuracySummary"),
@@ -1146,6 +1153,7 @@ function bindEvents() {
   dom.storeSelect.addEventListener("change", onStoreChange);
   dom.planningMode.addEventListener("change", onPlanningInputChange);
   dom.targetValue.addEventListener("input", onPlanningInputChange);
+  dom.detailModeBtn?.addEventListener("click", toggleDetailedView);
   dom.supervisorEmployee.addEventListener("change", onRoleConfigChange);
   dom.supervisorMode.addEventListener("change", onRoleConfigChange);
   dom.rxMode.addEventListener("change", onRoleConfigChange);
@@ -1573,6 +1581,7 @@ function onStoreScheduleFilterChange() {
 function refreshStoreContextPanels() {
   renderStoreStats();
   renderGoalHint();
+  renderLastCrewSummary();
 }
 
 function renderGoalHint() {
@@ -2009,6 +2018,11 @@ function buildEmployeeStats(rows) {
         recentWeightedSpeedSum: 0,
         recentWeightSum: 0,
         jobKeys: new Set(),
+        mostRecentSpeed: 0,
+        mostRecentTimestamp: 0,
+        mostRecentStoreName: "",
+        mostRecentStoreKey: "",
+        mostRecentAccount: "",
       });
     }
     const accountBucket = bucket.accountBuckets.get(accountKey);
@@ -2017,6 +2031,13 @@ function buildEmployeeStats(rows) {
       accountBucket.weightSum += weight;
       accountBucket.recentWeightedSpeedSum += speed * recencyWeight;
       accountBucket.recentWeightSum += recencyWeight;
+    }
+    if (speed > 0 && rowTimestamp > accountBucket.mostRecentTimestamp) {
+      accountBucket.mostRecentSpeed = speed;
+      accountBucket.mostRecentTimestamp = rowTimestamp;
+      accountBucket.mostRecentStoreName = row.store;
+      accountBucket.mostRecentStoreKey = row.storeKey;
+      accountBucket.mostRecentAccount = row.account;
     }
     accountBucket.jobKeys.add(row.jobKey);
 
@@ -2044,6 +2065,10 @@ function buildEmployeeStats(rows) {
               accountBucket.recentWeightSum
             : 0,
         jobCount: accountBucket.jobKeys.size,
+        mostRecentPiecesPerHr: accountBucket.mostRecentSpeed,
+        mostRecentStoreName: accountBucket.mostRecentStoreName,
+        mostRecentStoreKey: accountBucket.mostRecentStoreKey,
+        mostRecentAccount: accountBucket.mostRecentAccount,
       };
     });
 
@@ -2455,13 +2480,16 @@ function clearAllCardsAndPreview() {
   dom.predManHours.textContent = "-";
   dom.predBand.textContent = "-";
   dom.predDelta.textContent = "-";
+  setRecommendationStatus("Select Store", "info");
+  applyMetricTone("info");
   setPredictionMeta(
     state.selectedStoreKey
       ? "Store changed. Re-select crew and roles to view a new plan."
       : "Select a store to begin.",
   );
   dom.scenarioBody.innerHTML =
-    '<tr><td colspan="4" class="muted">No staffing ranking available yet.</td></tr>';
+    '<tr><td colspan="5" class="muted">No staffing ranking available yet.</td></tr>';
+  renderDetailedBackground([]);
   dom.storeAccuracySummary.textContent =
     "Select a store and configure a crew to view store accuracy.";
   dom.accuracySummary.textContent =
@@ -3398,6 +3426,18 @@ function effectiveEmployeeSpeedForRoles(
   return baseSpeed * factor;
 }
 
+function getEmployeeMostRecentAccountProduction(employee, account) {
+  if (!employee) return { piecesPerHr: 0, storeName: "", account: "" };
+  const accountKey = getLinkedAccountKey(account);
+  const accountStat = accountKey ? employee.accountStats?.[accountKey] : null;
+  return {
+    piecesPerHr: safeNumber(accountStat?.mostRecentPiecesPerHr),
+    storeName: accountStat?.mostRecentStoreName || "",
+    storeKey: accountStat?.mostRecentStoreKey || "",
+    account: accountStat?.mostRecentAccount || "",
+  };
+}
+
 function buildStaffingRankRows(store, crewIds, roles, modes, onSiteDuration) {
   if (!store) return [];
   const predictedHours = Math.max(0, safeNumber(onSiteDuration));
@@ -3412,10 +3452,13 @@ function buildStaffingRankRows(store, crewIds, roles, modes, onSiteDuration) {
         roles,
         modes,
       );
+      const mostRecentAccountProduction =
+        getEmployeeMostRecentAccountProduction(employee, store.account);
       return {
         id,
         baseSpeed,
         effectiveSpeed,
+        mostRecentAccountProduction,
         predictedPieces: effectiveSpeed * predictedHours,
       };
     })
@@ -3882,7 +3925,6 @@ function renderStoreStats() {
           <div class="brief-grid">
             ${renderBriefItem("Scheduled Date", formatLongDate(schedule.date))}
             ${renderBriefItem("Start Time", schedule.startTimeText || "Not listed")}
-            ${renderBriefItem("Meet Time", schedule.meetTimeText || "Not listed")}
             ${renderBriefItem("Customer Number", formatCustomerNumber(schedule.customerNumber))}
             ${renderBriefItem("Address", formatScheduleAddress(schedule))}
             ${renderBriefItem("Phone", schedule.phone || "Not listed")}
@@ -3898,6 +3940,49 @@ function renderStoreStats() {
       </section>
     </div>
   `;
+}
+
+function renderLastCrewSummary() {
+  if (!dom.lastCrewSummary) return;
+  const store = state.stores.get(state.selectedStoreKey);
+  if (!store) {
+    dom.lastCrewSummary.textContent = "Select a store to view the last crew.";
+    return;
+  }
+
+  const lastJob = getMostRecentJobForStore(store.storeKey);
+  const lastCrew = uniqueStrings(lastJob?.employees || state.storeLastCrew.get(store.storeKey) || []);
+  if (!lastCrew.length) {
+    dom.lastCrewSummary.textContent =
+      "No previous crew found for this store yet.";
+    return;
+  }
+
+  const duration = safeNumber(lastJob?.duration);
+  const crewNames = lastCrew.map(getEmployeeDisplayName).sort((a, b) => a.localeCompare(b));
+  dom.lastCrewSummary.innerHTML = `
+    <div class="last-crew-grid">
+      <div>
+        <span class="brief-label">People</span>
+        <strong>${formatNumber(lastCrew.length, 0)}</strong>
+      </div>
+      <div>
+        <span class="brief-label">In-Store Time</span>
+        <strong>${duration > 0 ? `${formatNumber(duration, 1)} hrs` : "Not available"}</strong>
+      </div>
+      <div class="last-crew-names">
+        <span class="brief-label">Crew</span>
+        <p>${crewNames.map(escapeHtml).join(", ")}</p>
+      </div>
+    </div>
+    ${renderLastCrewDataNotice()}
+  `;
+}
+
+function getMostRecentJobForStore(storeKey) {
+  return (state.jobs || [])
+    .filter((job) => job.storeKey === storeKey)
+    .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
 }
 
 function renderBriefItem(label, value, isHtml = false) {
@@ -3933,6 +4018,7 @@ function formatCustomerNumber(value) {
 function renderEmployeeList() {
   const filter = (dom.employeeFilter.value || "").trim().toLowerCase();
   const selectedAccount = getSelectedAccount();
+  renderSelectedCrewChips();
   const employees = getSchedulableEmployeeIds()
     .map((id) => state.employees.get(id))
     .filter(Boolean)
@@ -3975,6 +4061,7 @@ function renderEmployeeList() {
       else state.selectedEmployees.delete(emp.employee);
       syncRoleAssignmentsToSelectedCrew();
       renderRoleSelectors();
+      renderSelectedCrewChips();
       persistToStorage();
       updateResults();
     });
@@ -3992,6 +4079,25 @@ function renderEmployeeList() {
     fragment.appendChild(row);
   });
   dom.employeeList.appendChild(fragment);
+}
+
+function renderSelectedCrewChips() {
+  if (!dom.selectedCrewChips) return;
+  const selected = Array.from(state.selectedEmployees || [])
+    .filter(Boolean)
+    .sort(compareEmployeesByDisplayName);
+  if (!selected.length) {
+    dom.selectedCrewChips.textContent = "No crew selected.";
+    dom.selectedCrewChips.classList.add("muted");
+    return;
+  }
+  dom.selectedCrewChips.classList.remove("muted");
+  dom.selectedCrewChips.innerHTML = selected
+    .map(
+      (id) =>
+        `<span class="chip">${escapeHtml(getEmployeeDisplayName(id))}</span>`,
+    )
+    .join("");
 }
 
 function onEmployeeFilterKeyDown(event) {
@@ -4102,6 +4208,22 @@ function onPlanningInputChange() {
   state.targetValue = Math.max(0, toNumber(dom.targetValue.value));
   persistToStorage();
   updateResults();
+}
+
+function toggleDetailedView() {
+  state.detailedView = !state.detailedView;
+  updateDetailedViewVisibility();
+  updateResults();
+}
+
+function updateDetailedViewVisibility() {
+  dom.detailBackgroundPanel?.classList.toggle("is-hidden", !state.detailedView);
+  if (dom.detailModeBtn) {
+    dom.detailModeBtn.classList.toggle("is-active", state.detailedView);
+    dom.detailModeBtn.textContent = state.detailedView
+      ? "Hide Details"
+      : "Detailed View";
+  }
 }
 
 function clearEmployees() {
@@ -4251,6 +4373,7 @@ function predict() {
     baselineSource: baseline.source,
     baselineMode: baseline.modeLabel,
     baselineBlend: baseline.blendLabel,
+    baselineSupport: baseline.support,
     overheadHours: overhead.value,
     overheadSource: overhead.source,
     tuningScope: tuningCtx.scope,
@@ -4264,6 +4387,7 @@ function predict() {
     crewSpeed,
     rawOnSiteDuration,
     biasAdjustmentHours: residualAdjustment.biasHours,
+    lastCrewBiasHours: lastCrewBias,
     manHourBiasAdjustment: 0,
     onSiteDuration,
     manHours,
@@ -4309,6 +4433,13 @@ function resolveBaselinePieces(
   const officeKey = `${accountKey}||${store.officeName || "Unknown"}`;
   const officeStats = state.accountOfficeStats.get(officeKey);
   const accountStats = state.accountGlobalStats.get(accountKey);
+  const support = {
+    store: safeNumber(store?.jobCount),
+    segment: safeNumber(segmentStats?.jobCount),
+    type: safeNumber(typeStats?.jobCount),
+    office: safeNumber(officeStats?.jobCount),
+    account: safeNumber(accountStats?.jobCount),
+  };
   const context = resolveContextBaseline(
     segmentStats,
     typeStats,
@@ -4333,6 +4464,7 @@ function resolveBaselinePieces(
       source: `store ${storeMode} + ${context.source}`,
       modeLabel: `store=${storeMode}, context=${contextMode}`,
       blendLabel: `store weight ${formatNumber(storeWeight, 2)} (raw ${formatNumber(rawStoreWeight, 2)})`,
+      support,
     };
   }
 
@@ -4342,6 +4474,7 @@ function resolveBaselinePieces(
       source: `store ${storeMode}`,
       modeLabel: `store=${storeMode}, context=${contextMode}`,
       blendLabel: "store-only",
+      support,
     };
   }
 
@@ -4350,6 +4483,7 @@ function resolveBaselinePieces(
     source: context.source,
     modeLabel: `store=${storeMode}, context=${contextMode}`,
     blendLabel: "context-only",
+    support,
   };
 }
 
@@ -4552,6 +4686,8 @@ function updateResults() {
     dom.predManHours.textContent = "-";
     dom.predBand.textContent = "-";
     dom.predDelta.textContent = "-";
+    setRecommendationStatus("Preparing", "info");
+    applyMetricTone("info");
     const waitMessage = !state.isLoaded
       ? "Loading data..."
       : state.analyticsScheduled
@@ -4572,6 +4708,11 @@ function updateResults() {
     dom.predManHours.textContent = "-";
     dom.predBand.textContent = "-";
     dom.predDelta.textContent = "-";
+    setRecommendationStatus(
+      missingSupervisor || missingRxRole ? "Needs Roles" : state.selectedStoreKey ? "Choose Crew" : "Select Store",
+      missingSupervisor || missingRxRole ? "caution" : "info",
+    );
+    applyMetricTone("info");
     const metaMessage = !state.isLoaded
       ? "Loading data..."
       : !state.selectedStoreKey
@@ -4589,16 +4730,16 @@ function updateResults() {
     return;
   }
 
-  dom.predDuration.textContent = `${formatNumber(prediction.onSiteDuration, 2)} hrs`;
-  dom.predManHours.textContent = `${formatNumber(prediction.manHours, 2)} man-hours`;
-  dom.predBand.textContent = `${formatNumber(prediction.confidenceLow, 2)} - ${formatNumber(prediction.confidenceHigh, 2)} hrs`;
+  dom.predDuration.textContent = `${formatNumber(prediction.onSiteDuration, 1)} hrs`;
+  dom.predManHours.textContent = `${formatNumber(prediction.manHours, 1)} hrs`;
+  dom.predBand.textContent = `${formatNumber(prediction.confidenceLow, 1)} - ${formatNumber(prediction.confidenceHigh, 1)} hrs`;
   dom.predDelta.textContent = formatDelta(prediction.delta);
+  const recommendation = getRecommendationForPrediction(prediction);
+  setRecommendationStatus(recommendation.label, recommendation.tone);
+  applyMetricTone(recommendation.tone);
 
-  const baselineWeights = prediction.baselineTuning
-    ? `w[s/t/o/a/g]=${formatNumber(prediction.baselineTuning.segmentWeight, 2)}/${formatNumber(prediction.baselineTuning.typeWeight, 2)}/${formatNumber(prediction.baselineTuning.officeWeight, 2)}/${formatNumber(prediction.baselineTuning.accountWeight, 2)}/${formatNumber(prediction.baselineTuning.globalWeight, 2)}`
-    : "";
   setPredictionMeta(
-    `In-store ${formatNumber(prediction.onSiteDuration, 2)} hrs | Crew speed ${formatNumber(prediction.crewSpeed, 1)} pieces/hr (eff ${formatNumber(prediction.crewEfficiency, 2)}) | Duration bias ${formatSigned(prediction.biasAdjustmentHours, 2)} hrs | Man-hour bias ${formatSigned(prediction.manHourBiasAdjustment, 2)} | Baseline ${prediction.baselineMode} (${prediction.baselineBlend}) ${baselineWeights} | Error band source ${prediction.residualRangeScope} (${prediction.residualRangeCount} jobs)`,
+    buildPlainEnglishEstimateReason(prediction),
     "info",
   );
   renderScenarios(prediction);
@@ -4608,6 +4749,52 @@ function setPredictionMeta(message, tone = "info") {
   dom.predictionMeta.textContent = message || "";
   const isWarning = tone === "warning";
   dom.predictionMeta.classList.toggle("meta-warning", isWarning);
+  dom.predictionMeta.classList.toggle("meta-success", tone === "success");
+}
+
+function setRecommendationStatus(label, tone = "info") {
+  if (!dom.recommendationStatus) return;
+  dom.recommendationStatus.textContent = label;
+  dom.recommendationStatus.className = `recommendation-status ${tone}`;
+}
+
+function applyMetricTone(tone = "info") {
+  [dom.predDuration, dom.predManHours, dom.predBand, dom.predDelta].forEach(
+    (el) => {
+      const card = el?.closest(".metric-card");
+      if (!card) return;
+      card.classList.remove("status-success", "status-caution", "status-risk");
+      if (tone === "success") card.classList.add("status-success");
+      if (tone === "caution") card.classList.add("status-caution");
+      if (tone === "risk") card.classList.add("status-risk");
+    },
+  );
+}
+
+function getRecommendationForPrediction(prediction) {
+  const deltaValue = safeNumber(prediction?.delta?.value);
+  if (!prediction?.delta?.available) {
+    return { label: "High Confidence Estimate", tone: "success" };
+  }
+  const absDelta = Math.abs(deltaValue);
+  const riskBand = prediction.delta.mode === "manhours" ? 2 : 0.5;
+  if (absDelta <= riskBand) return { label: "On Target", tone: "success" };
+  if (deltaValue > 0) return { label: "Likely Understaffed", tone: "risk" };
+  return { label: "Ahead of Goal", tone: "success" };
+}
+
+function buildPlainEnglishEstimateReason(prediction) {
+  const pieces = [
+    `Similar past stores suggest about ${formatNumber(prediction.baselinePieces, 0)} pieces.`,
+    `This crew is projected around ${formatNumber(prediction.crewSpeed, 0)} pieces per hour after role adjustments.`,
+    `Store complexity and recent history add ${formatSigned(prediction.biasAdjustmentHours, 1)} hrs to the estimate.`,
+  ];
+  if (prediction.roleAssignments?.supervisor) {
+    pieces.push(
+      `Supervisor impact is included for ${getEmployeeDisplayName(prediction.roleAssignments.supervisor)}.`,
+    );
+  }
+  return pieces.join(" ");
 }
 
 function getStoreDisplayLabel(store) {
@@ -4662,7 +4849,8 @@ function renderScenarios(prediction) {
   dom.scenarioBody.innerHTML = "";
 
   if (!prediction) {
-    dom.scenarioBody.innerHTML = `<tr><td colspan="4" class="muted">No staffing ranking available yet.</td></tr>`;
+    dom.scenarioBody.innerHTML = `<tr><td colspan="5" class="muted">No staffing ranking available yet.</td></tr>`;
+    renderDetailedBackground([]);
     return;
   }
 
@@ -4675,20 +4863,263 @@ function renderScenarios(prediction) {
   );
 
   if (ranked.length === 0) {
-    dom.scenarioBody.innerHTML = `<tr><td colspan="4" class="muted">No valid speed data for selected crew.</td></tr>`;
+    dom.scenarioBody.innerHTML = `<tr><td colspan="5" class="muted">No valid speed data for selected crew.</td></tr>`;
+    renderDetailedBackground([]);
     return;
   }
 
+  renderDetailedBackground(ranked);
   ranked.forEach((item, index) => {
     const tr = document.createElement("tr");
+    const varianceTone = getProductionVarianceTone(item);
+    if (varianceTone) tr.classList.add(varianceTone);
     tr.innerHTML = [
       `<td>${index + 1}</td>`,
-      `<td>${escapeHtml(getEmployeeDisplayName(item.id))}</td>`,
+      `<td>${escapeHtml(getEmployeeDisplayName(item.id))}${renderProductionVarianceArrow(item, varianceTone)}</td>`,
       `<td>${formatNumber(item.baseSpeed, 1)}</td>`,
+      `<td>${escapeHtml(formatMostRecentAccountProduction(item.mostRecentAccountProduction))}</td>`,
       `<td>${formatNumber(item.predictedPieces, 0)}</td>`,
     ].join("");
     dom.scenarioBody.appendChild(tr);
   });
+}
+
+function renderDetailedBackground(rankedRows = []) {
+  if (!dom.detailBackgroundContent) return;
+  const store = state.stores.get(state.selectedStoreKey);
+  if (!store) {
+    dom.detailBackgroundContent.textContent =
+      "Select a store and crew to view source details.";
+    return;
+  }
+
+  const segmentKey =
+    state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
+    store.segmentKey ||
+    `${store.accountKey || getLinkedAccountKey(store.account)}||S1`;
+  const siblingStores = (state.storesList || [])
+    .filter((candidate) => candidate.segmentKey === segmentKey)
+    .sort((a, b) => a.storeName.localeCompare(b.storeName));
+  const otherStoreNames = siblingStores
+    .filter((candidate) => candidate.storeKey !== store.storeKey)
+    .map((candidate) => `${candidate.account} | ${candidate.storeName}`);
+  const rows = rankedRows.length
+    ? rankedRows
+    : Array.from(state.selectedEmployees || []).map((id) => {
+        const employee = state.employees.get(id);
+        const baseSpeed = displayEmployeeSpeed(employee, store.account);
+        return {
+          id,
+          baseSpeed,
+          effectiveSpeed: baseSpeed,
+          mostRecentAccountProduction: getEmployeeMostRecentAccountProduction(
+            employee,
+            store.account,
+          ),
+        };
+      });
+  const prediction = predict();
+
+  dom.detailBackgroundContent.innerHTML = `
+    <div class="detail-grid">
+      <section>
+        <h4>Account Segment</h4>
+        <p><strong>${escapeHtml(store.segmentId || "S1")}</strong> of ${formatNumber(getSegmentCountForAccount(store), 0)} segments for ${escapeHtml(store.account)}</p>
+        <p class="muted">Segment key: ${escapeHtml(segmentKey)}</p>
+        ${renderAccountSegmentBreakout(store)}
+      </section>
+      <section>
+        <h4>Other Stores In This Segment</h4>
+        ${
+          otherStoreNames.length
+            ? `<ul>${otherStoreNames.map((name) => `<li>${escapeHtml(name)}</li>`).join("")}</ul>`
+            : `<p class="muted">No other stores are currently in this segment.</p>`
+        }
+      </section>
+      <section>
+        <h4>Store Baseline Source</h4>
+        ${renderBaselineDetail(prediction)}
+      </section>
+      <section>
+        <h4>Historical Time Difference Impact</h4>
+        ${renderPredictionDifferenceImpact(prediction)}
+      </section>
+      <section class="detail-wide">
+        <h4>Recent vs Long-Term Speed</h4>
+        ${
+          rows.length
+            ? `<table>
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Recent Account</th>
+                    <th>Long-Term Account</th>
+                    <th>Used In Plan</th>
+                    <th>Source Store</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${rows
+                    .map((row) => {
+                      const source = row.mostRecentAccountProduction || {};
+                      const sourceStore = source.storeName
+                        ? `${source.account || store.account} | ${source.storeName}`
+                        : "No account history";
+                      return `
+                        <tr>
+                          <td>${escapeHtml(getEmployeeDisplayName(row.id))}</td>
+                          <td>${escapeHtml(formatMostRecentAccountProduction(source))}</td>
+                          <td>${escapeHtml(formatEmployeeLongTermAccountSpeed(row.id, store.account))}</td>
+                          <td>${formatNumber(safeNumber(row.effectiveSpeed || row.baseSpeed), 0)} pieces/hr</td>
+                          <td>${escapeHtml(sourceStore)}</td>
+                        </tr>
+                      `;
+                    })
+                    .join("")}
+                </tbody>
+              </table>`
+            : `<p class="muted">Select crew members to view employee source stores.</p>`
+        }
+      </section>
+    </div>
+  `;
+}
+
+function getSegmentCountForAccount(store) {
+  const accountKey = store?.accountKey || getLinkedAccountKey(store?.account);
+  return new Set(
+    (state.storesList || [])
+      .filter(
+        (candidate) =>
+          (candidate.accountKey || getLinkedAccountKey(candidate.account)) ===
+          accountKey,
+      )
+      .map((candidate) => candidate.segmentId || "S1"),
+  ).size;
+}
+
+function renderAccountSegmentBreakout(store) {
+  const accountKey = store?.accountKey || getLinkedAccountKey(store?.account);
+  const groups = new Map();
+  (state.storesList || [])
+    .filter(
+      (candidate) =>
+        (candidate.accountKey || getLinkedAccountKey(candidate.account)) ===
+        accountKey,
+    )
+    .forEach((candidate) => {
+      const segmentId = candidate.segmentId || "S1";
+      if (!groups.has(segmentId)) groups.set(segmentId, []);
+      groups.get(segmentId).push(candidate);
+    });
+  const entries = Array.from(groups.entries()).sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  );
+  if (!entries.length) return `<p class="muted">No segment breakout available.</p>`;
+  return `
+    <ul class="segment-breakout">
+      ${entries
+        .map(([segmentId, stores]) => {
+          const sortedSignals = stores
+            .map(getStoreSizeSignal)
+            .filter((value) => value > 0)
+            .sort((a, b) => a - b);
+          const low = sortedSignals[0];
+          const high = sortedSignals[sortedSignals.length - 1];
+          const rangeText =
+            low > 0 && high > 0
+              ? `${formatNumber(low, 0)}-${formatNumber(high, 0)} pieces`
+              : "size range unavailable";
+          return `<li><strong>${escapeHtml(segmentId)}</strong>: ${stores.length} stores, ${rangeText}</li>`;
+        })
+        .join("")}
+    </ul>
+  `;
+}
+
+function renderBaselineDetail(prediction) {
+  if (!prediction) {
+    return `<p class="muted">Complete a plan to view baseline source.</p>`;
+  }
+  const support = prediction.baselineSupport || {};
+  return `
+    <p><strong>${formatNumber(prediction.baselinePieces, 0)} pieces</strong> from ${escapeHtml(prediction.baselineSource || "baseline history")}</p>
+    <p class="muted">${escapeHtml(prediction.baselineMode || "")} | ${escapeHtml(prediction.baselineBlend || "")}</p>
+    <ul>
+      <li>Store history: ${formatNumber(safeNumber(support.store), 0)} jobs</li>
+      <li>Segment history: ${formatNumber(safeNumber(support.segment), 0)} jobs</li>
+      <li>Account type history: ${formatNumber(safeNumber(support.type), 0)} jobs</li>
+      <li>Office history: ${formatNumber(safeNumber(support.office), 0)} jobs</li>
+      <li>Account history: ${formatNumber(safeNumber(support.account), 0)} jobs</li>
+    </ul>
+  `;
+}
+
+function renderPredictionDifferenceImpact(prediction) {
+  if (!prediction) {
+    return `<p class="muted">Complete a plan to view time-difference impact.</p>`;
+  }
+  const residualBias = safeNumber(prediction.biasAdjustmentHours);
+  const lastCrewBias = safeNumber(prediction.lastCrewBiasHours);
+  const totalAdjustment = residualBias + lastCrewBias;
+  const beforeAdjustment = safeNumber(prediction.rawOnSiteDuration);
+  const afterAdjustment = safeNumber(prediction.onSiteDuration);
+  return `
+    <p><strong>${formatSigned(totalAdjustment, 1)} hrs</strong> applied to the current estimate.</p>
+    <ul>
+      <li>Before historical adjustment: ${formatNumber(beforeAdjustment, 1)} hrs</li>
+      <li>Historical prediction difference: ${formatSigned(residualBias, 1)} hrs from ${formatNumber(prediction.residualRangeCount, 0)} jobs at the ${escapeHtml(prediction.residualRangeScope || "global")} scope</li>
+      <li>Last-crew overlap adjustment: ${formatSigned(lastCrewBias, 1)} hrs (${formatNumber(safeNumber(prediction.lastCrewOverlap) * 100, 0)}% overlap)</li>
+      <li>After adjustment: ${formatNumber(afterAdjustment, 1)} hrs</li>
+    </ul>
+    <p class="muted">Positive values mean past actual time tended to run longer than predicted, so the current estimate is nudged up. Negative values nudge it down.</p>
+  `;
+}
+
+function renderLastCrewDataNotice() {
+  return `<p class="last-crew-notice">Heads up: this site only includes employees who are still employed, so the last crew may be missing former employees.</p>`;
+}
+
+function formatEmployeeLongTermAccountSpeed(employeeId, account) {
+  const employee = state.employees.get(employeeId);
+  const accountKey = getLinkedAccountKey(account);
+  const accountStat = accountKey ? employee?.accountStats?.[accountKey] : null;
+  const value = safeNumber(accountStat?.avgPiecesPerHr);
+  if (!(value > 0)) return "No account history";
+  return `${formatNumber(value, 0)} pieces/hr (${formatNumber(safeNumber(accountStat.jobCount), 0)} jobs)`;
+}
+
+function formatMostRecentAccountProduction(production) {
+  const piecesPerHr = safeNumber(production?.piecesPerHr);
+  if (!(piecesPerHr > 0)) return "No account history";
+  return `${formatNumber(piecesPerHr, 0)} pieces/hr`;
+}
+
+function renderProductionVarianceArrow(item, varianceTone) {
+  if (!varianceTone) return "";
+  const recentPiecesPerHr = safeNumber(
+    item?.mostRecentAccountProduction?.piecesPerHr,
+  );
+  const predictedPiecesPerHr = safeNumber(item?.effectiveSpeed);
+  if (!(recentPiecesPerHr > 0) || !(predictedPiecesPerHr > 0)) return "";
+  const isHigher = predictedPiecesPerHr > recentPiecesPerHr;
+  const className = isHigher ? "variance-arrow up" : "variance-arrow down";
+  const symbol = isHigher ? "↑" : "↓";
+  const label = isHigher
+    ? "Predicted production is higher than most recent account production"
+    : "Predicted production is lower than most recent account production";
+  return ` <span class="${className}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${symbol}</span>`;
+}
+
+function getProductionVarianceTone(item) {
+  const recentPiecesPerHr = safeNumber(
+    item?.mostRecentAccountProduction?.piecesPerHr,
+  );
+  if (!(recentPiecesPerHr > 0)) return "";
+  const variance = Math.abs(safeNumber(item.effectiveSpeed) - recentPiecesPerHr);
+  if (variance > 1000) return "production-risk-high";
+  if (variance > 500) return "production-risk-medium";
+  return "";
 }
 
 async function buildAccuracyCache(jobsSubset) {
@@ -4892,8 +5323,8 @@ function renderAccuracyReport() {
       `<span class="accuracy-status accuracy-status-${trend.key}">${escapeHtml(trend.label)}</span>`,
       `<strong>Store:</strong> ${escapeHtml(selectedStoreRow.label)}`,
       `<strong>Based On:</strong> Recency-weighted averages across ${selectedStoreRow.count} past inventories`,
-      `<strong>Avg In-Store Time</strong> | Actual: ${formatNumber(selectedStoreRow.actualAvgDuration, 2)} hrs | Predicted: ${formatNumber(selectedStoreRow.predictedAvgDuration, 2)} hrs | Difference: <span class="accuracy-diff ${durationDiffClass}">${formatSigned(durationDelta, 2)} hrs</span>`,
-      `<strong>Avg Man-Hours</strong> | Actual: ${formatNumber(selectedStoreRow.actualAvgManHours, 2)} | Predicted: ${formatNumber(selectedStoreRow.predictedAvgManHours, 2)} | Difference: <span class="accuracy-diff ${manDiffClass}">${formatSigned(manHoursDelta, 2)}</span>`,
+      `<strong>Avg In-Store Time</strong> | Actual: ${formatNumber(selectedStoreRow.actualAvgDuration, 1)} hrs | Predicted: ${formatNumber(selectedStoreRow.predictedAvgDuration, 1)} hrs | Difference: <span class="accuracy-diff ${durationDiffClass}">${formatSigned(durationDelta, 1)} hrs</span>`,
+      `<strong>Avg Man-Hours</strong> | Actual: ${formatNumber(selectedStoreRow.actualAvgManHours, 1)} | Predicted: ${formatNumber(selectedStoreRow.predictedAvgManHours, 1)} | Difference: <span class="accuracy-diff ${manDiffClass}">${formatSigned(manHoursDelta, 1)}</span>`,
     ].join("<br>");
   } else {
     dom.storeAccuracySummary.textContent =
@@ -6323,7 +6754,7 @@ function getEmployeeDisplayName(rawId) {
 function formatDelta(delta) {
   if (!delta.available) return "No goal";
   const unit = delta.mode === "manhours" ? "man-hours" : "hrs";
-  return `${formatSigned(delta.value, 2)} ${unit}`;
+  return `${formatSigned(delta.value, 1)} ${unit}`;
 }
 
 function classifyAccuracyTrend(delta, neutralBand = 0.2) {

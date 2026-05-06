@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Shift Crew Planner</title>
-  <link rel="stylesheet" href="scheduleplanningstyle.css" />
+  <link rel="stylesheet" href="scheduleplanningstyle.css?v=20260506-3" />
 </head>
 <body>
   <header class="topbar">
@@ -24,13 +24,15 @@
     </div>
   </header>
 
-  <main class="layout">
-    <aside class="panel inputs">
-      <h2>Plan Setup</h2>
+  <main class="layout planner-layout">
+    <aside class="panel inputs planner-inputs">
+      <div class="panel-title-row">
+        <h2>Setup</h2>
+        <span class="soft-pill">Guided Plan</span>
+      </div>
 
       <section class="setup-step">
         <div class="step-head">
-          <span class="step-num">1</span>
           <label class="label" for="storeSearch">Select Store</label>
         </div>
         <div class="store-search-row">
@@ -47,35 +49,31 @@
             <option value="all" selected>All History</option>
           </select>
         </div>
-        <select id="storeSelect" size="8"></select>
+        <select id="storeSelect" size="5"></select>
         <div id="storeSelectMeta" class="help muted">Showing 0 stores.</div>
-        <div id="storeStats" class="stats muted">Select a store to view schedule and historical context.</div>
+        <div id="storeStats" class="stats selected-store-summary">Select a store to view schedule and history.</div>
       </section>
 
       <section class="setup-step">
         <div class="step-head">
-          <span class="step-num">2</span>
           <label class="label" for="targetValue">Goal</label>
         </div>
-        <div>
-          <label class="field-label" for="targetValue">Goal Value</label>
+        <div class="custom-goal-row">
+          <label class="field-label" for="targetValue">Custom Target</label>
           <input id="targetValue" type="number" min="0" step="0.25" placeholder="Optional" />
+          <select id="planningMode" aria-label="Goal type">
+            <option value="duration">In-Store Time</option>
+            <option value="manhours">Man-Hours</option>
+          </select>
         </div>
-
-        <label class="field-label" for="planningMode">Goal Type</label>
-        <select id="planningMode">
-          <option value="duration">In-Store Time</option>
-          <option value="manhours">Man-Hours</option>
-        </select>
         <div id="goalHint" class="meta muted context-hint">Schedule-based duration hints will appear here when available.</div>
       </section>
 
       <section class="setup-step">
         <div class="step-head">
-          <span class="step-num">3</span>
           <label class="label" for="employeeFilter">Choose Crew</label>
         </div>
-        <p class="help">Select people assigned to this store.</p>
+        <div id="selectedCrewChips" class="selected-crew-chips muted">No crew selected.</div>
         <input id="employeeFilter" type="text" placeholder="Search crew member" />
         <div id="employeeBulkStatus" class="meta muted"></div>
         <div class="actions">
@@ -87,101 +85,132 @@
 
       <section class="setup-step">
         <div class="step-head">
-          <span class="step-num">4</span>
           <label class="label">Assign Roles</label>
         </div>
-        <p class="help">Supervisor is required and must be one selected crew member. Other roles are optional.</p>
+        <details class="accordion" open>
+          <summary>Supervisor</summary>
+          <div class="role-card">
+            <label class="field-label" for="supervisorEmployee">Supervisor</label>
+            <select id="supervisorEmployee"></select>
+            <select id="supervisorMode">
+              <option value="full">Full Contribution</option>
+              <option value="p70">70% Contribution</option>
+              <option value="p50">50% Contribution</option>
+              <option value="p30">30% Contribution</option>
+              <option value="none">None (0%)</option>
+            </select>
+          </div>
+        </details>
 
-        <div class="role-card">
-          <label class="field-label" for="supervisorEmployee">Supervisor</label>
-          <select id="supervisorEmployee"></select>
-          <select id="supervisorMode">
-            <option value="full">Full Contribution</option>
-            <option value="p70">70% Contribution</option>
-            <option value="p50">50% Contribution</option>
-            <option value="p30">30% Contribution</option>
-            <option value="none">None (0%)</option>
-          </select>
-        </div>
+        <details id="rxRoleCard" class="accordion">
+          <summary>RX</summary>
+          <div class="role-card">
+            <div id="rxEmployee" class="role-checklist"></div>
+            <select id="rxMode">
+              <option value="p70">70% Contribution</option>
+              <option value="p50">50% Contribution</option>
+              <option value="p30">30% Contribution</option>
+            </select>
+          </div>
+        </details>
 
-        <div id="rxRoleCard" class="role-card">
-          <label class="field-label" for="rxEmployee">RX (optional)</label>
-          <div id="rxEmployee" class="role-checklist"></div>
-          <select id="rxMode">
-            <option value="p70">70% Contribution</option>
-            <option value="p50">50% Contribution</option>
-            <option value="p30">30% Contribution</option>
-          </select>
-        </div>
+        <details class="accordion">
+          <summary>Training Adjustments</summary>
+          <div class="role-card">
+            <div id="trainingEmployee" class="role-checklist"></div>
+            <select id="trainingMode">
+              <option value="p70">70% Contribution</option>
+              <option value="p50">50% Contribution</option>
+              <option value="p30">30% Contribution</option>
+            </select>
+          </div>
+        </details>
 
-        <div class="role-card">
-          <label class="field-label" for="trainingEmployee">Training (optional)</label>
-          <div id="trainingEmployee" class="role-checklist"></div>
-          <select id="trainingMode">
-            <option value="p70">70% Contribution</option>
-            <option value="p50">50% Contribution</option>
-            <option value="p30">30% Contribution</option>
-          </select>
-        </div>
-
-        <div class="role-card">
-          <label class="field-label" for="earlyLateEmployee">Leaving Early / Arriving Late (optional)</label>
-          <div id="earlyLateEmployee" class="role-checklist"></div>
-          <select id="earlyLateMode">
-            <option value="p70">70% Contribution</option>
-            <option value="p50">50% Contribution</option>
-            <option value="p30">30% Contribution</option>
-          </select>
-        </div>
+        <details class="accordion">
+          <summary>Early Leave / Late Arrival</summary>
+          <div class="role-card">
+            <div id="earlyLateEmployee" class="role-checklist"></div>
+            <select id="earlyLateMode">
+              <option value="p70">70% Contribution</option>
+              <option value="p50">50% Contribution</option>
+              <option value="p30">30% Contribution</option>
+            </select>
+          </div>
+        </details>
       </section>
     </aside>
 
-    <section class="panel results">
-      <h2>Plan Preview</h2>
+    <section class="panel results planner-results">
+      <div class="results-hero">
+        <div>
+          <p class="eyebrow">Review</p>
+          <h2>Plan Preview</h2>
+        </div>
+        <div class="results-actions">
+          <button id="detailModeBtn" type="button" class="btn subtle">Detailed View</button>
+          <div id="recommendationStatus" class="recommendation-status info">Select Store</div>
+        </div>
+      </div>
 
       <div class="cards">
-        <article class="card">
-          <h3>Estimated In-Store Time</h3>
+        <article class="card metric-card">
+          <h3>Estimated Time</h3>
           <p id="predDuration" class="value">-</p>
         </article>
-        <article class="card">
-          <h3>Estimated Man-Hours</h3>
+        <article class="card metric-card">
+          <h3>Labor Hours</h3>
           <p id="predManHours" class="value">-</p>
         </article>
-        <article class="card">
-          <h3>Likely On-Site Range</h3>
+        <article class="card metric-card">
+          <h3>Likely Range</h3>
           <p id="predBand" class="value">-</p>
         </article>
-        <article class="card">
-          <h3>Difference From Goal</h3>
+        <article class="card metric-card">
+          <h3>Recommendation</h3>
           <p id="predDelta" class="value">-</p>
         </article>
       </div>
 
-      <div id="predictionMeta" class="meta muted">Load data, choose a store, select your crew, and assign a supervisor.</div>
-
-      <section class="surface">
-        <h3>Selected Store Accuracy</h3>
-        <div id="storeAccuracySummary" class="summary-lines">Choose a store to view its historical prediction error.</div>
+      <section class="surface confidence-surface">
+        <h3>Confidence</h3>
+        <div id="storeAccuracySummary" class="summary-lines">Choose a store to view confidence.</div>
       </section>
 
-      <section class="surface">
-        <h3>Staffing Options</h3>
+      <section class="surface why-surface">
+        <h3>Why this estimate?</h3>
+        <div id="predictionMeta" class="meta muted">Load data, choose a store, select your crew, and assign a supervisor.</div>
+      </section>
+
+      <section id="detailBackgroundPanel" class="surface detail-background is-hidden">
+        <h3>Detailed Background</h3>
+        <div id="detailBackgroundContent" class="detail-background-content muted">Select a store and crew to view source details.</div>
+      </section>
+
+      <section class="surface recommendations-surface">
+        <div class="surface-head">
+          <h3>Crew Production View</h3>
+        </div>
         <table>
           <thead>
             <tr>
               <th>Rank</th>
               <th>Employee</th>
-              <th>Predicted Production (pieces/hr)</th>
-              <th>Predicted Total Pieces</th>
+              <th>Pieces/hr</th>
+              <th>Most Recent Account Production</th>
+              <th>Predicted Pieces</th>
             </tr>
           </thead>
           <tbody id="scenarioBody"></tbody>
         </table>
       </section>
 
-      <section class="surface">
-        <h3>Accuracy Snapshot</h3>
+      <section class="surface last-crew-surface">
+        <h3>Last Crew</h3>
+        <div id="lastCrewSummary" class="summary-lines">Select a store to view the last crew.</div>
+      </section>
+
+      <details class="surface insights-details">
+        <summary>Insights</summary>
         <div class="accuracy-controls">
           <label class="field-label" for="accuracyAccountFilter">Account View</label>
           <select id="accuracyAccountFilter">
@@ -201,7 +230,7 @@
           </thead>
           <tbody id="accuracyWorstBody"></tbody>
         </table>
-      </section>
+      </details>
 
       <section id="compareSection" class="surface compare-surface is-collapsed">
         <div class="surface-head">
@@ -349,6 +378,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
   <script src="runtime-config.js?v=20260501-1"></script>
-  <script src="scheduleplanningapp.js?v=20260506-1"></script>
+  <script src="scheduleplanningapp.js?v=20260506-3"></script>
 </body>
 </html>
