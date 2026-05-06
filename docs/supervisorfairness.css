@@ -4,7 +4,7 @@
   --muted: #536067;
   --line: #c8d1ce;
   --panel: #ffffff;
-  --brand: #0f6d6c;
+  --brand: #d76d1f;
   --brand-soft: #d7ece9;
   --accent: #d76d1f;
   --good: #1b7f4b;
@@ -19,7 +19,9 @@
 
 body {
   margin: 0;
-  font-family: "Bahnschrift", "Segoe UI Variable Display", "Franklin Gothic Medium", sans-serif;
+  font-family:
+    "Bahnschrift", "Segoe UI Variable Display", "Franklin Gothic Medium",
+    sans-serif;
   color: var(--ink);
   background:
     radial-gradient(circle at 10% 0%, #fcf2dd 0%, rgba(252, 242, 221, 0) 30%),

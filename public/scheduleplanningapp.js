@@ -253,11 +253,55 @@ const state = {
 };
 
 const STORAGE_KEY = "crew_predictor_v2";
-const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v1";
+const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v2";
 const HISTORY_JSON_PATH = "data/EmployeeProductionExport.json";
 const ACTIVE_EMPLOYEE_JSON_PATH = "data/EmployeeProductionExport.json";
 const SCHEDULE_JSON_PATH = "data/ScheduleFinalFull.json";
 const runtimeConfig = window.__BADGER_RUNTIME_CONFIG__ || {};
+
+const ACCOUNT_GROUPS = {
+  kroger: ["kroger", "mariano's"],
+  "piggly wiggly": [
+    "piggly wiggly",
+    "piggly wiggly - franchise",
+    "pigs coporate",
+    "pigs dave s",
+    "pigs fox brothers",
+    "pigs jake b",
+    "pigs malicki",
+    "pigs migel",
+    "pigs mike day",
+    "pigs red",
+    "pigs ryan o",
+    "pigs stinebrinks",
+    "pigs stoneridge",
+    "pigs teagan counihan",
+    "pigs tietz",
+  ],
+  "ascension rx": [
+    "ascension rx",
+    "ascension rx - per k",
+    "ascension rx - man hr",
+  ],
+  "fuel on": [
+    "fuel on",
+    "relaince fuel, llc",
+    "reliance fuel, llc",
+    "schierl",
+  ],
+  "single c-stores": [
+    "single c-stores",
+    "*single c-stores $-check",
+    "*single c-stores $ cash",
+  ],
+};
+
+const accountGroupMap = new Map();
+Object.keys(ACCOUNT_GROUPS).forEach((groupKey) => {
+  ACCOUNT_GROUPS[groupKey].forEach((account) => {
+    accountGroupMap.set(account.toLowerCase(), groupKey);
+  });
+});
 const scheduleDataApiConfig = runtimeConfig.scheduleDataApi || {};
 const BOARD_ALLOWED_USERS = ["lclark@badgerinventory.com"];
 const DEFAULT_EMPLOYEE_RENDER_LIMIT = 150;
@@ -538,14 +582,14 @@ function clearBoardPrefillFromUrl() {
 function resolveBoardPrefillStoreKey(prefill) {
   const directKey = cleanText(prefill?.storeKey);
   if (directKey && state.stores.has(directKey)) return directKey;
-  const targetAccount = cleanText(prefill?.account).toLowerCase();
+  const targetAccount = getLinkedAccountKey(prefill?.account);
   const targetStore = cleanText(prefill?.storeName).toLowerCase();
   if (!targetStore) return null;
   const matched = state.storesList.find((store) => {
     const sameStore = cleanText(store.storeName).toLowerCase() === targetStore;
     const sameAccount =
       !targetAccount ||
-      cleanText(store.account).toLowerCase() === targetAccount;
+      getLinkedAccountKey(store.account) === targetAccount;
     return sameStore && sameAccount;
   });
   return matched?.storeKey || null;
@@ -1589,6 +1633,7 @@ function normalizeRow(row) {
   const account =
     cleanText(firstValue(normalized, ["account", "accountname"])) ||
     "Unknown Account";
+  const accountKey = getLinkedAccountKey(account);
   const employee = cleanText(firstValue(normalized, ["employee"]));
   const firstName = cleanText(firstValue(normalized, ["firstname"]));
   const lastName = cleanText(firstValue(normalized, ["lastname"]));
@@ -1620,6 +1665,7 @@ function normalizeRow(row) {
     valid,
     date,
     account,
+    accountKey,
     store,
     storeKey,
     employee,
@@ -1643,6 +1689,7 @@ function buildJobs(rows) {
       jobs.set(row.jobKey, {
         date: row.date,
         account: row.account,
+        accountKey: row.accountKey,
         storeName: row.store,
         storeKey: row.storeKey,
         typeOfInv: row.type,
@@ -1696,6 +1743,7 @@ function buildStoreStats(jobs) {
       grouped.set(job.storeKey, {
         storeKey: job.storeKey,
         account: job.account,
+        accountKey: job.accountKey,
         storeName: job.storeName,
         jobs: [],
         typeCounts: new Map(),
@@ -1721,6 +1769,7 @@ function buildStoreStats(jobs) {
     stores.set(storeKey, {
       storeKey,
       account: bucket.account,
+      accountKey: bucket.accountKey,
       storeName: bucket.storeName,
       officeName: bucket.jobs[0]?.officeName || "Unknown",
       avgPieces: summary.avgPieces,
@@ -1744,8 +1793,9 @@ function buildStoreStats(jobs) {
 function buildStoreSegments(stores) {
   const byAccount = new Map();
   stores.forEach((store, storeKey) => {
-    if (!byAccount.has(store.account)) byAccount.set(store.account, []);
-    byAccount.get(store.account).push({
+    const accountKey = store.accountKey || getLinkedAccountKey(store.account);
+    if (!byAccount.has(accountKey)) byAccount.set(accountKey, []);
+    byAccount.get(accountKey).push({
       storeKey,
       sizeSignal: getStoreSizeSignal(store),
     });
@@ -1787,7 +1837,7 @@ function applySegmentsToStores(stores, storeSegmentByStoreKey) {
   stores.forEach((store, storeKey) => {
     const segment = storeSegmentByStoreKey.get(storeKey) || {
       segmentId: "S1",
-      segmentKey: `${store.account}||S1`,
+      segmentKey: `${store.accountKey || getLinkedAccountKey(store.account)}||S1`,
     };
     store.segmentId = segment.segmentId;
     store.segmentKey = segment.segmentKey;
@@ -1826,7 +1876,7 @@ function buildAccountTypeStats(jobs) {
   const map = new Map();
 
   jobs.forEach((job) => {
-    const key = `${job.account}||${job.typeOfInv || "Unknown"}`;
+    const key = `${job.accountKey || getLinkedAccountKey(job.account)}||${job.typeOfInv || "Unknown"}`;
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(job);
   });
@@ -1852,7 +1902,7 @@ function buildAccountOfficeStats(jobs) {
   const map = new Map();
 
   jobs.forEach((job) => {
-    const key = `${job.account}||${job.officeName || "Unknown"}`;
+    const key = `${job.accountKey || getLinkedAccountKey(job.account)}||${job.officeName || "Unknown"}`;
     if (!map.has(key)) map.set(key, []);
     map.get(key).push(job);
   });
@@ -1878,8 +1928,9 @@ function buildAccountGlobalStats(jobs) {
   const map = new Map();
 
   jobs.forEach((job) => {
-    if (!map.has(job.account)) map.set(job.account, []);
-    map.get(job.account).push(job);
+    const accountKey = job.accountKey || getLinkedAccountKey(job.account);
+    if (!map.has(accountKey)) map.set(accountKey, []);
+    map.get(accountKey).push(job);
   });
 
   const stats = new Map();
@@ -1950,8 +2001,9 @@ function buildEmployeeStats(rows) {
 
     bucket.jobKeysGlobal.add(row.jobKey);
 
-    if (!bucket.accountBuckets.has(row.account)) {
-      bucket.accountBuckets.set(row.account, {
+    const accountKey = row.accountKey || getLinkedAccountKey(row.account);
+    if (!bucket.accountBuckets.has(accountKey)) {
+      bucket.accountBuckets.set(accountKey, {
         weightedSpeedSum: 0,
         weightSum: 0,
         recentWeightedSpeedSum: 0,
@@ -1959,7 +2011,7 @@ function buildEmployeeStats(rows) {
         jobKeys: new Set(),
       });
     }
-    const accountBucket = bucket.accountBuckets.get(row.account);
+    const accountBucket = bucket.accountBuckets.get(accountKey);
     if (speed > 0 && weight > 0) {
       accountBucket.weightedSpeedSum += speed * weight;
       accountBucket.weightSum += weight;
@@ -4249,13 +4301,14 @@ function resolveBaselinePieces(
   const storeCandidate = pickBaselineCandidate(store, storeMode);
   const segmentKey =
     state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
-    `${store.account}||S1`;
+    `${store.accountKey || getLinkedAccountKey(store.account)}||S1`;
   const segmentStats = state.accountSegmentStats.get(segmentKey);
-  const typeKey = `${store.account}||${typeOverride || store.primaryType || "Unknown"}`;
+  const accountKey = store.accountKey || getLinkedAccountKey(store.account);
+  const typeKey = `${accountKey}||${typeOverride || store.primaryType || "Unknown"}`;
   const typeStats = state.accountTypeStats.get(typeKey);
-  const officeKey = `${store.account}||${store.officeName || "Unknown"}`;
+  const officeKey = `${accountKey}||${store.officeName || "Unknown"}`;
   const officeStats = state.accountOfficeStats.get(officeKey);
-  const accountStats = state.accountGlobalStats.get(store.account);
+  const accountStats = state.accountGlobalStats.get(accountKey);
   const context = resolveContextBaseline(
     segmentStats,
     typeStats,
@@ -4387,7 +4440,7 @@ function resolveOverheadHours(
 
   const segmentKey =
     state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
-    `${store.account}||S1`;
+    `${store.accountKey || getLinkedAccountKey(store.account)}||S1`;
   const segmentStats = state.accountSegmentStats.get(segmentKey);
   if (segmentStats?.overheadBaseP20 > 0)
     return {
@@ -4395,7 +4448,8 @@ function resolveOverheadHours(
       source: "account segment overhead",
     };
 
-  const typeKey = `${store.account}||${store.primaryType || "Unknown"}`;
+  const accountKey = store.accountKey || getLinkedAccountKey(store.account);
+  const typeKey = `${accountKey}||${store.primaryType || "Unknown"}`;
   const typeStats = state.accountTypeStats.get(typeKey);
   if (typeStats?.overheadBaseP20 > 0)
     return {
@@ -4403,7 +4457,7 @@ function resolveOverheadHours(
       source: "account type overhead",
     };
 
-  const officeKey = `${store.account}||${store.officeName || "Unknown"}`;
+  const officeKey = `${accountKey}||${store.officeName || "Unknown"}`;
   const officeStats = state.accountOfficeStats.get(officeKey);
   if (officeStats?.overheadBaseP20 > 0)
     return {
@@ -4411,7 +4465,7 @@ function resolveOverheadHours(
       source: "account office overhead",
     };
 
-  const accountStats = state.accountGlobalStats.get(store.account);
+  const accountStats = state.accountGlobalStats.get(accountKey);
   if (accountStats?.overheadBaseP20 > 0)
     return {
       value: Math.max(0, accountStats.overheadBaseP20 * overheadScale),
@@ -4689,6 +4743,7 @@ async function buildAccuracyCache(jobsSubset) {
       storeAgg.set(job.storeKey, {
         storeKey: job.storeKey,
         account: job.account,
+        accountKey: job.accountKey || getLinkedAccountKey(job.account),
         label: `${job.account} | ${job.storeName}`,
         absErrWeightedSum: 0,
         pctErrWeightedSum: 0,
@@ -4716,6 +4771,7 @@ async function buildAccuracyCache(jobsSubset) {
   const allRows = Array.from(storeAgg.values()).map((b) => ({
     storeKey: b.storeKey,
     account: b.account,
+    accountKey: b.accountKey,
     label: b.label,
     mae: b.weightSum > 0 ? b.absErrWeightedSum / b.weightSum : 0,
     mape: b.weightSum > 0 ? b.pctErrWeightedSum / b.weightSum : 0,
@@ -4778,12 +4834,17 @@ function renderAccuracyReport() {
   const mae = safeNumber(accuracy.mae);
   const mape = safeNumber(accuracy.mape);
   const selectedAccount = dom.accuracyAccountFilter.value || "__all__";
+  const selectedAccountKey = getLinkedAccountKey(selectedAccount);
   const allRows = accuracy.allRows || [];
 
   const filteredRows =
     selectedAccount === "__all__"
       ? allRows
-      : allRows.filter((r) => r.account === selectedAccount);
+      : allRows.filter(
+          (r) =>
+            (r.accountKey || getLinkedAccountKey(r.account)) ===
+            selectedAccountKey,
+        );
 
   const filteredWeight = filteredRows.reduce(
     (sum, row) => sum + safeNumber(row.weightSum),
@@ -4880,10 +4941,11 @@ async function calibrateModelParameters() {
   const jobsByAccountSegment = new Map();
   for (let i = 0; i < state.jobs.length; i += 1) {
     const job = state.jobs[i];
-    if (!jobsByAccount.has(job.account)) jobsByAccount.set(job.account, []);
-    jobsByAccount.get(job.account).push(job);
+    const accountKey = job.accountKey || getLinkedAccountKey(job.account);
+    if (!jobsByAccount.has(accountKey)) jobsByAccount.set(accountKey, []);
+    jobsByAccount.get(accountKey).push(job);
 
-    const typeKey = `${job.account}||${job.typeOfInv || "Unknown"}`;
+    const typeKey = `${accountKey}||${job.typeOfInv || "Unknown"}`;
     if (!jobsByAccountType.has(typeKey)) jobsByAccountType.set(typeKey, []);
     jobsByAccountType.get(typeKey).push(job);
 
@@ -5218,14 +5280,15 @@ async function buildResidualStats(jobsSubset) {
     const segmentKey = state.storeSegmentByStoreKey.get(
       job.storeKey,
     )?.segmentKey;
-    const typeKey = `${job.account}||${job.typeOfInv || "Unknown"}`;
-    const officeKey = `${job.account}||${job.officeName || "Unknown"}`;
+    const accountKey = job.accountKey || getLinkedAccountKey(job.account);
+    const typeKey = `${accountKey}||${job.typeOfInv || "Unknown"}`;
+    const officeKey = `${accountKey}||${job.officeName || "Unknown"}`;
     const supervisorKey = cleanText(job.supervisorNumber || "").toLowerCase();
     const crewBand = getCrewBand(Math.max(1, safeNumber(job.crewSize)));
     const storeCrewKey = `${job.storeKey}||${crewBand}`;
-    const segmentCrewKey = `${segmentKey || `${job.account}||S1`}||${crewBand}`;
+    const segmentCrewKey = `${segmentKey || `${accountKey}||S1`}||${crewBand}`;
     const typeCrewKey = `${typeKey}||${crewBand}`;
-    const accountCrewKey = `${job.account}||${crewBand}`;
+    const accountCrewKey = `${accountKey}||${crewBand}`;
 
     pushResidual(byStore, job.storeKey, residual);
     pushResidual(byStoreCrewBand, storeCrewKey, residual);
@@ -5237,7 +5300,7 @@ async function buildResidualStats(jobsSubset) {
       );
       pushResidual(
         byAccountSupervisor,
-        `${job.account}||${supervisorKey}`,
+        `${accountKey}||${supervisorKey}`,
         residual,
       );
     }
@@ -5247,7 +5310,7 @@ async function buildResidualStats(jobsSubset) {
     pushResidual(byAccountType, typeKey, residual);
     pushResidual(byAccountOffice, officeKey, residual);
     pushResidual(byAccountTypeCrewBand, typeCrewKey, residual);
-    pushResidual(byAccount, job.account, residual);
+    pushResidual(byAccount, accountKey, residual);
     pushResidual(byAccountCrewBand, accountCrewKey, residual);
     pushResidual(globalCrewBand, crewBand, residual);
     globalResiduals.push(residual);
@@ -5263,7 +5326,7 @@ async function buildResidualStats(jobsSubset) {
         );
         pushResidual(
           manByAccountSupervisor,
-          `${job.account}||${supervisorKey}`,
+          `${accountKey}||${supervisorKey}`,
           manResidual,
         );
       }
@@ -5274,7 +5337,7 @@ async function buildResidualStats(jobsSubset) {
       pushResidual(manByAccountType, typeKey, manResidual);
       pushResidual(manByAccountOffice, officeKey, manResidual);
       pushResidual(manByAccountTypeCrewBand, typeCrewKey, manResidual);
-      pushResidual(manByAccount, job.account, manResidual);
+      pushResidual(manByAccount, accountKey, manResidual);
       pushResidual(manByAccountCrewBand, accountCrewKey, manResidual);
       pushResidual(manGlobalCrewBand, crewBand, manResidual);
       manGlobalResiduals.push(manResidual);
@@ -5446,10 +5509,10 @@ function resolveScopedResidualAdjustment(config) {
   };
   const segmentKey =
     state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
-    `${store.account}||S1`;
-  const typeKey = `${store.account}||${store.primaryType || "Unknown"}`;
-  const officeKey = `${store.account}||${store.officeName || "Unknown"}`;
-  const accountKey = store.account;
+    `${store.accountKey || getLinkedAccountKey(store.account)}||S1`;
+  const accountKey = store.accountKey || getLinkedAccountKey(store.account);
+  const typeKey = `${accountKey}||${store.primaryType || "Unknown"}`;
+  const officeKey = `${accountKey}||${store.officeName || "Unknown"}`;
   const storeKey = store.storeKey;
   const supervisorKey = cleanText(config.supervisorId || "").toLowerCase();
   const profileDensity = getResidualProfileDensity(store);
@@ -5742,7 +5805,7 @@ function getTuningForStore(store) {
 
   const segmentKey =
     state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
-    `${store.account}||S1`;
+    `${store.accountKey || getLinkedAccountKey(store.account)}||S1`;
   if (state.modelTuningByAccountSegment.has(segmentKey)) {
     return {
       tuning: state.modelTuningByAccountSegment.get(segmentKey),
@@ -5751,7 +5814,8 @@ function getTuningForStore(store) {
     };
   }
 
-  const typeKey = `${store.account}||${store.primaryType || "Unknown"}`;
+  const accountKey = store.accountKey || getLinkedAccountKey(store.account);
+  const typeKey = `${accountKey}||${store.primaryType || "Unknown"}`;
   if (state.modelTuningByAccountType.has(typeKey)) {
     return {
       tuning: state.modelTuningByAccountType.get(typeKey),
@@ -5760,9 +5824,9 @@ function getTuningForStore(store) {
     };
   }
 
-  if (state.modelTuningByAccount.has(store.account)) {
+  if (state.modelTuningByAccount.has(accountKey)) {
     return {
-      tuning: state.modelTuningByAccount.get(store.account),
+      tuning: state.modelTuningByAccount.get(accountKey),
       scope: "account",
       label: `Account tuned (${store.account})`,
     };
@@ -5786,7 +5850,7 @@ function getBaselineTuningForStore(store) {
 
   const segmentKey =
     state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
-    `${store.account}||S1`;
+    `${store.accountKey || getLinkedAccountKey(store.account)}||S1`;
   if (state.baselineTuningByAccountSegment.has(segmentKey)) {
     return {
       tuning: state.baselineTuningByAccountSegment.get(segmentKey),
@@ -5795,7 +5859,8 @@ function getBaselineTuningForStore(store) {
     };
   }
 
-  const typeKey = `${store.account}||${store.primaryType || "Unknown"}`;
+  const accountKey = store.accountKey || getLinkedAccountKey(store.account);
+  const typeKey = `${accountKey}||${store.primaryType || "Unknown"}`;
   if (state.baselineTuningByAccountType.has(typeKey)) {
     return {
       tuning: state.baselineTuningByAccountType.get(typeKey),
@@ -5804,9 +5869,9 @@ function getBaselineTuningForStore(store) {
     };
   }
 
-  if (state.baselineTuningByAccount.has(store.account)) {
+  if (state.baselineTuningByAccount.has(accountKey)) {
     return {
-      tuning: state.baselineTuningByAccount.get(store.account),
+      tuning: state.baselineTuningByAccount.get(accountKey),
       scope: "account",
       label: `Account baseline (${store.account})`,
     };
@@ -5824,11 +5889,12 @@ function getTuningForJob(job, store) {
   const segmentKey = state.storeSegmentByStoreKey.get(job.storeKey)?.segmentKey;
   if (segmentKey && state.modelTuningByAccountSegment.has(segmentKey))
     return state.modelTuningByAccountSegment.get(segmentKey);
-  const typeKey = `${job.account}||${job.typeOfInv || "Unknown"}`;
+  const accountKey = job.accountKey || getLinkedAccountKey(job.account);
+  const typeKey = `${accountKey}||${job.typeOfInv || "Unknown"}`;
   if (state.modelTuningByAccountType.has(typeKey))
     return state.modelTuningByAccountType.get(typeKey);
-  if (state.modelTuningByAccount.has(job.account))
-    return state.modelTuningByAccount.get(job.account);
+  if (state.modelTuningByAccount.has(accountKey))
+    return state.modelTuningByAccount.get(accountKey);
   return state.modelTuning;
 }
 
@@ -5838,12 +5904,13 @@ function getBaselineTuningForJob(job, store) {
   if (segmentKey && state.baselineTuningByAccountSegment.has(segmentKey)) {
     return state.baselineTuningByAccountSegment.get(segmentKey);
   }
-  const typeKey = `${job.account}||${job.typeOfInv || "Unknown"}`;
+  const accountKey = job.accountKey || getLinkedAccountKey(job.account);
+  const typeKey = `${accountKey}||${job.typeOfInv || "Unknown"}`;
   if (state.baselineTuningByAccountType.has(typeKey)) {
     return state.baselineTuningByAccountType.get(typeKey);
   }
-  if (state.baselineTuningByAccount.has(job.account)) {
-    return state.baselineTuningByAccount.get(job.account);
+  if (state.baselineTuningByAccount.has(accountKey)) {
+    return state.baselineTuningByAccount.get(accountKey);
   }
   return state.baselineTuning;
 }
@@ -6136,7 +6203,8 @@ function displayEmployeeSpeed(employee, account = getSelectedAccount()) {
   const fallback = safeNumber(state.global.medianEmployeeSpeed);
   if (!employee) return fallback;
 
-  const accountStat = account ? employee.accountStats?.[account] : null;
+  const accountKey = getLinkedAccountKey(account);
+  const accountStat = accountKey ? employee.accountStats?.[accountKey] : null;
   if (accountStat && accountStat.jobCount >= 1) {
     const blended = blendRecentAndLongSpeed(
       accountStat.avgPiecesPerHrRecent,
@@ -6212,7 +6280,7 @@ function inferWeight(row) {
 
 function getSelectedAccount() {
   const store = state.stores.get(state.selectedStoreKey);
-  return store?.account || "";
+  return store?.accountKey || getLinkedAccountKey(store?.account) || "";
 }
 
 function isSupervisorRole(roleText) {
@@ -6530,6 +6598,11 @@ function firstValue(obj, keys) {
 
 function cleanText(value) {
   return String(value ?? "").trim();
+}
+
+function getLinkedAccountKey(accountName) {
+  const normalized = cleanText(accountName).toLowerCase();
+  return accountGroupMap.get(normalized) || normalized;
 }
 
 function isRxRoleRequiredForStore(store) {
