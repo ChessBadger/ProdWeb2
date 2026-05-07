@@ -255,6 +255,10 @@ const state = {
 
 const STORAGE_KEY = "crew_predictor_v2";
 const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v2";
+const ANALYTICS_DB_NAME = "crew_predictor_analytics";
+const ANALYTICS_DB_VERSION = 1;
+const ANALYTICS_DB_STORE = "snapshots";
+const ANALYTICS_DB_SNAPSHOT_ID = "latest";
 const HISTORY_JSON_PATH = "data/EmployeeProductionExport.json";
 const ACTIVE_EMPLOYEE_JSON_PATH = "data/EmployeeProductionExport.json";
 const SCHEDULE_JSON_PATH = "data/ScheduleFinalFull.json";
@@ -1229,7 +1233,7 @@ async function loadJsonData() {
     state.externalScheduleRows = extractRowsFromJson(
       externalScheduleResult?.payload,
     );
-    loadRows(rawRows, scheduleRows, fingerprint, activeEmployeeRows);
+    await loadRows(rawRows, scheduleRows, fingerprint, activeEmployeeRows);
   } catch (error) {
     const message = error?.message || "Unknown error";
     setPredictionMeta(`Data load failed: ${message}`, "warning");
@@ -1309,7 +1313,7 @@ function extractRowsFromJson(payload) {
   return [];
 }
 
-function loadRows(
+async function loadRows(
   rawRows,
   scheduleRawRows = [],
   dataFingerprint = "",
@@ -1351,7 +1355,7 @@ function loadRows(
   applyBoardPrefillIfAvailable();
   applyScheduledGoalDefault(false);
   refreshLoadedUi();
-  const restored = restoreAnalyticsCache(state.dataFingerprint);
+  const restored = await restoreAnalyticsCache(state.dataFingerprint);
   if (restored) {
     state.analyticsReady = true;
     if (dom.computeAccuracyBtn) {
@@ -2277,7 +2281,7 @@ async function scheduleDeferredAnalytics() {
     await calibrateModelParameters();
     await buildResidualStats(state.jobs);
     state.accuracyCache = await buildAccuracyCache(state.jobs);
-    persistAnalyticsCache(state.dataFingerprint);
+    await persistAnalyticsCache(state.dataFingerprint);
     state.analyticsReady = true;
     if (dom.computeAccuracyBtn) {
       dom.computeAccuracyBtn.disabled = true;
@@ -5117,8 +5121,8 @@ function getProductionVarianceTone(item) {
   );
   if (!(recentPiecesPerHr > 0)) return "";
   const variance = Math.abs(safeNumber(item.effectiveSpeed) - recentPiecesPerHr);
-  if (variance > 1000) return "production-risk-high";
-  if (variance > 500) return "production-risk-medium";
+  if (variance > 1200) return "production-risk-high";
+  if (variance > 700) return "production-risk-medium";
   return "";
 }
 
@@ -6434,6 +6438,7 @@ function entriesToMap(entries) {
 
 function buildAnalyticsSnapshot(fingerprint) {
   return {
+    id: ANALYTICS_DB_SNAPSHOT_ID,
     version: 1,
     fingerprint: String(fingerprint || ""),
     createdAt: new Date().toISOString(),
@@ -6604,30 +6609,118 @@ function applyAnalyticsSnapshot(snapshot) {
   state.accuracyCache = snapshot.accuracyCache || null;
 }
 
-function persistAnalyticsCache(fingerprint) {
+function isValidAnalyticsSnapshot(snapshot, fingerprint) {
+  return Boolean(
+    snapshot &&
+      snapshot.version === 1 &&
+      String(snapshot.fingerprint || "") === String(fingerprint || ""),
+  );
+}
+
+function openAnalyticsCacheDb() {
+  if (!window.indexedDB) {
+    return Promise.resolve(null);
+  }
+
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(ANALYTICS_DB_NAME, ANALYTICS_DB_VERSION);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(ANALYTICS_DB_STORE)) {
+        db.createObjectStore(ANALYTICS_DB_STORE, { keyPath: "id" });
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+    request.onblocked = () => reject(new Error("Analytics cache database blocked"));
+  });
+}
+
+async function readAnalyticsSnapshotFromIndexedDb() {
+  const db = await openAnalyticsCacheDb();
+  if (!db) return null;
+
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(ANALYTICS_DB_STORE, "readonly");
+    const store = transaction.objectStore(ANALYTICS_DB_STORE);
+    const request = store.get(ANALYTICS_DB_SNAPSHOT_ID);
+
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+    transaction.oncomplete = () => db.close();
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error);
+    };
+  });
+}
+
+async function writeAnalyticsSnapshotToIndexedDb(snapshot) {
+  const db = await openAnalyticsCacheDb();
+  if (!db) return;
+
+  await new Promise((resolve, reject) => {
+    const transaction = db.transaction(ANALYTICS_DB_STORE, "readwrite");
+    const store = transaction.objectStore(ANALYTICS_DB_STORE);
+    store.put(snapshot);
+
+    transaction.oncomplete = () => {
+      db.close();
+      resolve();
+    };
+    transaction.onerror = () => {
+      db.close();
+      reject(transaction.error);
+    };
+  });
+}
+
+async function persistAnalyticsCache(fingerprint) {
   if (!fingerprint) return;
+  const snapshot = buildAnalyticsSnapshot(fingerprint);
+
   try {
-    const snapshot = buildAnalyticsSnapshot(fingerprint);
     localStorage.setItem(ANALYTICS_CACHE_KEY, JSON.stringify(snapshot));
-  } catch (_error) {
-    // Ignore quota/cache write errors; compute will still work without persistence.
+  } catch (error) {
+    console.warn("Analytics localStorage cache write failed:", error);
+  }
+
+  try {
+    await writeAnalyticsSnapshotToIndexedDb(snapshot);
+  } catch (error) {
+    console.warn("Analytics IndexedDB cache write failed:", error);
   }
 }
 
-function restoreAnalyticsCache(fingerprint) {
+async function restoreAnalyticsCache(fingerprint) {
   if (!fingerprint) return false;
+
   try {
     const raw = localStorage.getItem(ANALYTICS_CACHE_KEY);
-    if (!raw) return false;
-    const snapshot = JSON.parse(raw);
-    if (!snapshot || snapshot.version !== 1) return false;
-    if (String(snapshot.fingerprint || "") !== String(fingerprint))
-      return false;
-    applyAnalyticsSnapshot(snapshot);
-    return true;
-  } catch (_error) {
-    return false;
+    if (raw) {
+      const snapshot = JSON.parse(raw);
+      if (isValidAnalyticsSnapshot(snapshot, fingerprint)) {
+        applyAnalyticsSnapshot(snapshot);
+        return true;
+      }
+    }
+  } catch (error) {
+    console.warn("Analytics localStorage cache restore failed:", error);
   }
+
+  try {
+    const snapshot = await readAnalyticsSnapshotFromIndexedDb();
+    if (isValidAnalyticsSnapshot(snapshot, fingerprint)) {
+      applyAnalyticsSnapshot(snapshot);
+      return true;
+    }
+  } catch (error) {
+    console.warn("Analytics IndexedDB cache restore failed:", error);
+  }
+
+  return false;
 }
 
 function displayEmployeeSpeed(employee, account = getSelectedAccount()) {
