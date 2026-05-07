@@ -69,14 +69,18 @@ const state = {
   baseModelTuning: {
     overheadScale: 0.25,
     effSmall: 1.0,
-    effMid: 0.92,
-    effLarge: 0.85,
+    effMid: 0.97,
+    effLarge: 0.93,
+    smallCrewMax: 8,
+    midCrewMax: 15,
   },
   modelTuning: {
     overheadScale: 0.25,
     effSmall: 1.0,
-    effMid: 0.92,
-    effLarge: 0.85,
+    effMid: 0.97,
+    effLarge: 0.93,
+    smallCrewMax: 8,
+    midCrewMax: 15,
   },
   modelTuningByAccount: new Map(),
   modelTuningByAccountType: new Map(),
@@ -1720,9 +1724,12 @@ function buildJobs(rows) {
         supervisorNumber: cleanText(row.supervisorNumber),
         supervisorCounts: new Map(),
         employees: new Set(),
+        employeeStats: new Map(),
         totalPieces: 0,
         totalManHours: 0,
         duration: 0,
+        durationIncludingSupervisor: 0,
+        nonSupervisorDuration: 0,
       });
     }
 
@@ -1741,15 +1748,53 @@ function buildJobs(rows) {
       job.officeName = row.officeName;
     }
     job.employees.add(row.employee);
-    job.totalPieces += safeNumber(row.totalExtQty);
-    job.totalManHours += safeNumber(row.manHours);
-    job.duration = Math.max(job.duration, safeNumber(row.manHours));
+    const employeePieces = safeNumber(row.totalExtQty);
+    const employeeHours = safeNumber(row.manHours);
+    const employeeSpeed = safeNumber(row.piecesPerHr);
+    const employeeId = cleanText(row.employee).toLowerCase();
+    const isDaySupervisor =
+      Boolean(supervisorId && employeeId === supervisorId.toLowerCase()) ||
+      isSupervisorRole(row.role);
+    if (!job.employeeStats.has(row.employee)) {
+      job.employeeStats.set(row.employee, {
+        employee: row.employee,
+        pieces: 0,
+        inStoreHours: 0,
+        speedSamples: [],
+      });
+    }
+    const employeeStat = job.employeeStats.get(row.employee);
+    employeeStat.pieces += employeePieces;
+    employeeStat.inStoreHours += employeeHours;
+    if (employeeSpeed > 0) employeeStat.speedSamples.push(employeeSpeed);
+    job.totalPieces += employeePieces;
+    job.totalManHours += employeeHours;
+    job.durationIncludingSupervisor = Math.max(
+      job.durationIncludingSupervisor,
+      employeeHours,
+    );
+    if (!isDaySupervisor) {
+      job.nonSupervisorDuration = Math.max(
+        job.nonSupervisorDuration,
+        employeeHours,
+      );
+    }
   });
 
   return Array.from(jobs.values()).map((job) => ({
     ...job,
+    duration: job.nonSupervisorDuration || job.durationIncludingSupervisor,
     crewSize: job.employees.size,
     employees: Array.from(job.employees),
+    employeeDetails: Array.from(job.employeeStats.values()).map((stat) => ({
+      ...stat,
+      piecesPerHr:
+        stat.inStoreHours > 0
+          ? stat.pieces / stat.inStoreHours
+          : mean(stat.speedSamples),
+      speedSamples: undefined,
+    })),
+    employeeStats: undefined,
     supervisorNumber: resolveMostFrequentKey(
       job.supervisorCounts,
       job.supervisorNumber,
@@ -3384,15 +3429,16 @@ function predictForAssignedCrew(storeKey, crewIds, rolesConfig, modesConfig) {
     crewSize,
     roles.supervisor,
   );
+  const residualCorrection = -safeNumber(residualAdjustment.biasHours);
   const overlap = getLastCrewOverlapRate(storeKey, crew);
   const lastResidual = state.lastDurationResidualByStore.get(storeKey);
   const lastCrewBias =
     overlap > 0 && Number.isFinite(lastResidual?.durationResidual)
-      ? overlap * 0.15 * safeNumber(lastResidual.durationResidual)
+      ? -overlap * 0.15 * safeNumber(lastResidual.durationResidual)
       : 0;
   const onSiteDuration = Math.max(
     0,
-    rawOnSiteDuration + residualAdjustment.biasHours + lastCrewBias,
+    rawOnSiteDuration + residualCorrection + lastCrewBias,
   );
   const fallbackBand = resolveDurationBand(store) * 0.7;
   const lowOffset =
@@ -3976,24 +4022,74 @@ function renderLastCrewSummary() {
     return;
   }
 
-  const duration = safeNumber(lastJob?.duration);
-  const crewNames = lastCrew.map(getEmployeeDisplayName).sort((a, b) => a.localeCompare(b));
+  const employeeRows = buildLastCrewEmployeeRows(lastJob, lastCrew);
+  const totalPiecesPerHr = employeeRows.reduce(
+    (sum, row) => sum + safeNumber(row.piecesPerHr),
+    0,
+  );
+  const totalPieces = employeeRows.reduce(
+    (sum, row) => sum + safeNumber(row.pieces),
+    0,
+  );
   dom.lastCrewSummary.innerHTML = `
-    <div class="last-crew-grid">
-      <div>
-        <span class="brief-label">People</span>
-        <strong>${formatNumber(lastCrew.length, 0)}</strong>
-      </div>
-      <div>
-        <span class="brief-label">In-Store Time</span>
-        <strong>${duration > 0 ? `${formatNumber(duration, 1)} hrs` : "Not available"}</strong>
-      </div>
-      <div class="last-crew-names">
-        <span class="brief-label">Crew</span>
-        <p>${crewNames.map(escapeHtml).join(", ")}</p>
-      </div>
-    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>Rank</th>
+          <th>Employee</th>
+          <th>Pieces/Hr</th>
+          <th>In-Store Time</th>
+          <th>Pieces</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${employeeRows.map(renderLastCrewEmployeeRow).join("")}
+        <tr>
+          <td></td>
+          <td><strong>Grand Total Available</strong></td>
+          <td><strong>${formatNumber(totalPiecesPerHr, 0)} pieces/hr</strong></td>
+          <td class="muted">Per-employee total</td>
+          <td><strong>${totalPieces > 0 ? formatNumber(totalPieces, 0) : "Not available"}</strong></td>
+        </tr>
+      </tbody>
+    </table>
     ${renderLastCrewDataNotice()}
+  `;
+}
+
+function buildLastCrewEmployeeRows(lastJob, lastCrew) {
+  const details = new Map(
+    (lastJob?.employeeDetails || []).map((detail) => [detail.employee, detail]),
+  );
+  return uniqueStrings(lastCrew || [])
+    .map((employeeId) => {
+      const detail = details.get(employeeId) || {};
+      return {
+        employee: employeeId,
+        displayName: getEmployeeDisplayName(employeeId),
+        piecesPerHr: safeNumber(detail.piecesPerHr),
+        inStoreHours: safeNumber(detail.inStoreHours),
+        pieces: safeNumber(detail.pieces),
+      };
+    })
+    .sort(
+      (a, b) =>
+        safeNumber(b.piecesPerHr) - safeNumber(a.piecesPerHr) ||
+        safeNumber(b.pieces) - safeNumber(a.pieces) ||
+        compareEmployeesByDisplayName(a.employee, b.employee),
+    )
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+}
+
+function renderLastCrewEmployeeRow(row) {
+  return `
+    <tr>
+      <td>${row.rank}</td>
+      <td>${escapeHtml(row.displayName)}</td>
+      <td>${row.piecesPerHr > 0 ? `${formatNumber(row.piecesPerHr, 0)} pieces/hr` : "Not available"}</td>
+      <td>${row.inStoreHours > 0 ? `${formatNumber(row.inStoreHours, 1)} hrs` : "Not available"}</td>
+      <td>${row.pieces > 0 ? formatNumber(row.pieces, 0) : "Not available"}</td>
+    </tr>
   `;
 }
 
@@ -4347,17 +4443,18 @@ function predict() {
     crewSize,
     roles.supervisor,
   );
+  const residualCorrection = -safeNumber(residualAdjustment.biasHours);
   const overlap = getLastCrewOverlapRate(state.selectedStoreKey, selectedRaw);
   const lastResidual = state.lastDurationResidualByStore.get(
     state.selectedStoreKey,
   );
   const lastCrewBias =
     overlap > 0 && Number.isFinite(lastResidual?.durationResidual)
-      ? overlap * 0.15 * safeNumber(lastResidual.durationResidual)
+      ? -overlap * 0.15 * safeNumber(lastResidual.durationResidual)
       : 0;
   const onSiteDuration = Math.max(
     0,
-    rawOnSiteDuration + residualAdjustment.biasHours + lastCrewBias,
+    rawOnSiteDuration + residualCorrection + lastCrewBias,
   );
   const manHours = Math.max(0, onSiteDuration * crewSize);
   const fallbackBand = resolveDurationBand(store) * 0.7;
@@ -4408,7 +4505,7 @@ function predict() {
     crewEfficiency,
     crewSpeed,
     rawOnSiteDuration,
-    biasAdjustmentHours: residualAdjustment.biasHours,
+    biasAdjustmentHours: residualCorrection,
     lastCrewBiasHours: lastCrewBias,
     manHourBiasAdjustment: 0,
     onSiteDuration,
@@ -4673,7 +4770,7 @@ function computePredictionForJob(job, store, options = {}) {
     ? resolveResidualAdjustmentForStore(store, crewSize, job.supervisorNumber)
         .biasHours
     : 0;
-  const onSiteDuration = Math.max(0, rawOnSiteDuration + durationAdj);
+  const onSiteDuration = Math.max(0, rawOnSiteDuration - durationAdj);
   const manHours = Math.max(0, onSiteDuration * crewSize);
 
   return {
@@ -4806,10 +4903,12 @@ function getRecommendationForPrediction(prediction) {
 }
 
 function buildPlainEnglishEstimateReason(prediction) {
+  const historicalCorrection = safeNumber(prediction.biasAdjustmentHours);
+  const correctionVerb = historicalCorrection >= 0 ? "add" : "remove";
   const pieces = [
     `Similar past stores suggest about ${formatNumber(prediction.baselinePieces, 0)} pieces.`,
     `This crew is projected around ${formatNumber(prediction.crewSpeed, 0)} pieces per hour after role adjustments.`,
-    `Store complexity and recent history add ${formatSigned(prediction.biasAdjustmentHours, 1)} hrs to the estimate.`,
+    `Store complexity and recent history ${correctionVerb} ${formatNumber(Math.abs(historicalCorrection), 1)} hrs ${historicalCorrection >= 0 ? "to" : "from"} the estimate.`,
   ];
   if (prediction.roleAssignments?.supervisor) {
     pieces.push(
@@ -4904,6 +5003,30 @@ function renderScenarios(prediction) {
     ].join("");
     dom.scenarioBody.appendChild(tr);
   });
+  dom.scenarioBody.insertAdjacentHTML(
+    "beforeend",
+    renderCurrentCrewTotalRow(ranked, prediction.onSiteDuration),
+  );
+}
+
+function renderCurrentCrewTotalRow(rankedRows, onSiteDuration) {
+  const totalPiecesPerHr = (rankedRows || []).reduce(
+    (sum, item) => sum + safeNumber(item.effectiveSpeed || item.baseSpeed),
+    0,
+  );
+  const totalPredictedPieces = (rankedRows || []).reduce(
+    (sum, item) => sum + safeNumber(item.predictedPieces),
+    0,
+  );
+  return `
+    <tr>
+      <td></td>
+      <td><strong>Grand Total Available</strong></td>
+      <td><strong>${formatNumber(totalPiecesPerHr, 1)}</strong></td>
+      <td class="muted">Role-adjusted total</td>
+      <td><strong>${formatNumber(totalPredictedPieces || totalPiecesPerHr * safeNumber(onSiteDuration), 0)}</strong></td>
+    </tr>
+  `;
 }
 
 function renderDetailedBackground(rankedRows = []) {
@@ -5090,11 +5213,12 @@ function renderPredictionDifferenceImpact(prediction) {
     <p><strong>${formatSigned(totalAdjustment, 1)} hrs</strong> applied to the current estimate.</p>
     <ul>
       <li>Before historical adjustment: ${formatNumber(beforeAdjustment, 1)} hrs</li>
-      <li>Historical prediction difference: ${formatSigned(residualBias, 1)} hrs from ${formatNumber(prediction.residualRangeCount, 0)} jobs at the ${escapeHtml(prediction.residualRangeScope || "global")} scope</li>
+      <li>Historical correction applied: ${formatSigned(residualBias, 1)} hrs from ${formatNumber(prediction.residualRangeCount, 0)} jobs at the ${escapeHtml(prediction.residualRangeScope || "global")} scope</li>
       <li>Last-crew overlap adjustment: ${formatSigned(lastCrewBias, 1)} hrs (${formatNumber(safeNumber(prediction.lastCrewOverlap) * 100, 0)}% overlap)</li>
       <li>After adjustment: ${formatNumber(afterAdjustment, 1)} hrs</li>
     </ul>
-    <p class="muted">Positive values mean past actual time tended to run longer than predicted, so the current estimate is nudged up. Negative values nudge it down.</p>
+    <p class="muted">The Confidence difference is a recency-weighted remaining error after model corrections. The correction above is the current estimate's adjustment, so it may be smaller or larger than the remaining average difference.</p>
+    <p class="muted">Positive correction values mean past predictions were too low, so the current estimate is nudged up. Negative correction values mean past predictions were too high, so the current estimate is nudged down.</p>
   `;
 }
 
@@ -5344,9 +5468,9 @@ function renderAccuracyReport() {
     dom.storeAccuracySummary.innerHTML = [
       `<span class="accuracy-status accuracy-status-${trend.key}">${escapeHtml(trend.label)}</span>`,
       `<strong>Store:</strong> ${escapeHtml(selectedStoreRow.label)}`,
-      `<strong>Based On:</strong> Recency-weighted averages across ${selectedStoreRow.count} past inventories`,
-      `<strong>Avg In-Store Time</strong> | Actual: ${formatNumber(selectedStoreRow.actualAvgDuration, 1)} hrs | Predicted: ${formatNumber(selectedStoreRow.predictedAvgDuration, 1)} hrs | Difference: <span class="accuracy-diff ${durationDiffClass}">${formatSigned(durationDelta, 1)} hrs</span>`,
-      `<strong>Avg Man-Hours</strong> | Actual: ${formatNumber(selectedStoreRow.actualAvgManHours, 1)} | Predicted: ${formatNumber(selectedStoreRow.predictedAvgManHours, 1)} | Difference: <span class="accuracy-diff ${manDiffClass}">${formatSigned(manHoursDelta, 1)}</span>`,
+      `<strong>Based On:</strong> Recency-weighted averages across ${selectedStoreRow.count} past inventories after model corrections`,
+      `<strong>Avg In-Store Time</strong> | Actual: ${formatNumber(selectedStoreRow.actualAvgDuration, 1)} hrs | Predicted: ${formatNumber(selectedStoreRow.predictedAvgDuration, 1)} hrs | Remaining Difference: <span class="accuracy-diff ${durationDiffClass}">${formatSigned(durationDelta, 1)} hrs</span>`,
+      `<strong>Avg Man-Hours</strong> | Actual: ${formatNumber(selectedStoreRow.actualAvgManHours, 1)} | Predicted: ${formatNumber(selectedStoreRow.predictedAvgManHours, 1)} | Remaining Difference: <span class="accuracy-diff ${manDiffClass}">${formatSigned(manHoursDelta, 1)}</span>`,
     ].join("<br>");
   } else {
     dom.storeAccuracySummary.textContent =
@@ -5501,39 +5625,55 @@ function splitJobsForBacktest(jobsSubset) {
 }
 
 async function calibrateTuningForJobs(
-  _trainJobs,
+  trainJobs,
   evalJobs,
   seedTuning,
   baselineTuning,
   maybeYield = async () => {},
 ) {
   const overheadCandidates = [0.1, 0.2, 0.25, 0.3, 0.4, 0.5];
-  const midCandidates = [0.86, 0.9, 0.92, 0.95, 1.0];
-  const largeCandidates = [0.76, 0.82, 0.85, 0.9, 0.94];
+  const midCandidates = [0.94, 0.96, 0.97, 0.98, 1.0];
+  const largeCandidates = [0.88, 0.91, 0.93, 0.95, 0.97, 1.0];
+  const crewThresholdCandidates = buildCrewThresholdCandidates(
+    trainJobs,
+    evalJobs,
+    seedTuning,
+  );
   let best = {
     score: Number.POSITIVE_INFINITY,
     overheadScale: seedTuning.overheadScale,
     effSmall: 1.0,
     effMid: seedTuning.effMid,
     effLarge: seedTuning.effLarge,
+    smallCrewMax: seedTuning.smallCrewMax || 8,
+    midCrewMax: seedTuning.midCrewMax || 15,
   };
 
   for (const overheadScale of overheadCandidates) {
-    for (const effMid of midCandidates) {
-      for (const effLarge of largeCandidates) {
-        if (effLarge > effMid) continue;
+    for (const thresholds of crewThresholdCandidates) {
+      for (const effMid of midCandidates) {
+        for (const effLarge of largeCandidates) {
+          if (effLarge > effMid) continue;
 
-        const tuning = { overheadScale, effSmall: 1.0, effMid, effLarge };
-        const score = await replayScoreForParameters(
-          evalJobs,
-          tuning,
-          baselineTuning,
-          maybeYield,
-        );
-        if (score < best.score) {
-          best = { score, ...tuning };
+          const tuning = {
+            overheadScale,
+            effSmall: 1.0,
+            effMid,
+            effLarge,
+            smallCrewMax: thresholds.smallCrewMax,
+            midCrewMax: thresholds.midCrewMax,
+          };
+          const score = await replayScoreForParameters(
+            evalJobs,
+            tuning,
+            baselineTuning,
+            maybeYield,
+          );
+          if (score < best.score) {
+            best = { score, ...tuning };
+          }
+          await maybeYield();
         }
-        await maybeYield();
       }
     }
   }
@@ -5543,7 +5683,53 @@ async function calibrateTuningForJobs(
     effSmall: best.effSmall,
     effMid: best.effMid,
     effLarge: best.effLarge,
+    smallCrewMax: best.smallCrewMax,
+    midCrewMax: best.midCrewMax,
   };
+}
+
+function buildCrewThresholdCandidates(trainJobs, evalJobs, seedTuning = {}) {
+  const crewSizes = [...(trainJobs || []), ...(evalJobs || [])]
+    .map((job) => Math.round(safeNumber(job?.crewSize)))
+    .filter((n) => n > 0)
+    .sort((a, b) => a - b);
+  const seedSmall = Math.max(3, Math.round(safeNumber(seedTuning.smallCrewMax) || 8));
+  const seedMid = Math.max(seedSmall + 1, Math.round(safeNumber(seedTuning.midCrewMax) || 15));
+  const pairs = [
+    [seedSmall, seedMid],
+    [6, 12],
+    [8, 15],
+    [10, 18],
+    [12, 20],
+  ];
+
+  if (crewSizes.length) {
+    const p33 = Math.round(percentile(crewSizes, 33));
+    const p66 = Math.round(percentile(crewSizes, 66));
+    const p50 = Math.round(percentile(crewSizes, 50));
+    const p80 = Math.round(percentile(crewSizes, 80));
+    pairs.push(
+      [p33, p66],
+      [p50, p80],
+      [Math.max(3, p33 - 2), Math.max(p33 + 1, p66 + 2)],
+    );
+  }
+
+  const seen = new Set();
+  return pairs
+    .map(([smallCrewMax, midCrewMax]) => ({
+      smallCrewMax: Math.max(3, Math.round(safeNumber(smallCrewMax))),
+      midCrewMax: Math.max(
+        Math.max(3, Math.round(safeNumber(smallCrewMax))) + 1,
+        Math.round(safeNumber(midCrewMax)),
+      ),
+    }))
+    .filter((pair) => {
+      const key = `${pair.smallCrewMax}:${pair.midCrewMax}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
 }
 
 async function calibrateBaselineForJobs(
@@ -5723,12 +5909,12 @@ async function buildResidualStats(jobsSubset) {
       continue;
     }
 
-    const residual = safeNumber(job.duration) - predicted.onSiteDuration;
+    const residual = predicted.onSiteDuration - safeNumber(job.duration);
     if (!Number.isFinite(residual)) {
       if (i % 25 === 0) await maybeYield();
       continue;
     }
-    const manResidual = safeNumber(job.totalManHours) - predicted.manHours;
+    const manResidual = predicted.manHours - safeNumber(job.totalManHours);
 
     const segmentKey = state.storeSegmentByStoreKey.get(
       job.storeKey,
@@ -6081,10 +6267,10 @@ function resolveScopedResidualAdjustment(config) {
   if (storeCount > 0 && Math.abs(storeMean) > 0) {
     const desiredRaw = storeMean * anchorShare;
     const desired = Math.max(-anchorMaxAbs, Math.min(anchorMaxAbs, desiredRaw));
-    const needsAnchor =
-      Math.sign(biasHours) !== Math.sign(desired) ||
-      Math.abs(biasHours) < Math.abs(desired);
-    if (needsAnchor) {
+    const oppositeDirection = Math.sign(biasHours) !== Math.sign(desired);
+    if (oppositeDirection) {
+      biasHours = desired;
+    } else if (Math.abs(biasHours) < Math.abs(desired)) {
       const anchorWeight = Math.max(
         anchorWeightFloor,
         storeCount / (storeCount + anchorK),
@@ -6151,8 +6337,8 @@ function resolveScopedResidualAdjustment(config) {
   return {
     biasHours,
     // "Likely" range uses central quartiles instead of 10/90 to reduce interval width.
-    lowOffset: safeNumber(chosen.stats?.p25),
-    highOffset: safeNumber(chosen.stats?.p75),
+    lowOffset: biasHours - safeNumber(chosen.stats?.p75),
+    highOffset: biasHours - safeNumber(chosen.stats?.p25),
     rangeScope: chosen.scope,
     rangeCount: safeNumber(chosen.stats?.count),
     profileDensity,
@@ -6190,10 +6376,10 @@ function crewSizeOrDefault(value) {
 
 function getCrewBand(crewSize) {
   const n = Math.max(1, Math.round(safeNumber(crewSize)));
-  if (n <= 2) return "C1_2";
-  if (n <= 4) return "C3_4";
-  if (n <= 6) return "C5_6";
-  return "C7P";
+  if (n <= 5) return "C1_5";
+  if (n <= 10) return "C6_10";
+  if (n <= 15) return "C11_15";
+  return "C16P";
 }
 
 async function computeHoldoutBacktestMetrics(
@@ -6454,10 +6640,41 @@ function entriesToMap(entries) {
   return new Map(Array.isArray(entries) ? entries : []);
 }
 
+function normalizeModelTuning(tuning, fallback = state.baseModelTuning) {
+  const source = tuning || {};
+  const base = fallback || state.baseModelTuning;
+  const smallCrewMax = Math.max(
+    3,
+    Math.round(safeNumber(source.smallCrewMax) || safeNumber(base.smallCrewMax) || 8),
+  );
+  const midCrewMax = Math.max(
+    smallCrewMax + 1,
+    Math.round(safeNumber(source.midCrewMax) || safeNumber(base.midCrewMax) || 15),
+  );
+  return {
+    overheadScale:
+      safeNumber(source.overheadScale) || safeNumber(base.overheadScale) || 0.25,
+    effSmall: safeNumber(source.effSmall) || safeNumber(base.effSmall) || 1,
+    effMid: safeNumber(source.effMid) || safeNumber(base.effMid) || 0.97,
+    effLarge: safeNumber(source.effLarge) || safeNumber(base.effLarge) || 0.93,
+    smallCrewMax,
+    midCrewMax,
+  };
+}
+
+function normalizeModelTuningMap(map) {
+  const normalized = new Map();
+  if (!(map instanceof Map)) return normalized;
+  map.forEach((value, key) => {
+    normalized.set(key, normalizeModelTuning(value, state.modelTuning));
+  });
+  return normalized;
+}
+
 function buildAnalyticsSnapshot(fingerprint) {
   return {
     id: ANALYTICS_DB_SNAPSHOT_ID,
-    version: 1,
+    version: 5,
     fingerprint: String(fingerprint || ""),
     createdAt: new Date().toISOString(),
     modelTuning: state.modelTuning,
@@ -6536,14 +6753,16 @@ function buildAnalyticsSnapshot(fingerprint) {
 }
 
 function applyAnalyticsSnapshot(snapshot) {
-  state.modelTuning = snapshot.modelTuning || state.modelTuning;
+  state.modelTuning = normalizeModelTuning(snapshot.modelTuning, state.modelTuning);
   state.baselineTuning = snapshot.baselineTuning || state.baselineTuning;
-  state.modelTuningByAccount = entriesToMap(snapshot.modelTuningByAccount);
-  state.modelTuningByAccountType = entriesToMap(
-    snapshot.modelTuningByAccountType,
+  state.modelTuningByAccount = normalizeModelTuningMap(
+    entriesToMap(snapshot.modelTuningByAccount),
   );
-  state.modelTuningByAccountSegment = entriesToMap(
-    snapshot.modelTuningByAccountSegment,
+  state.modelTuningByAccountType = normalizeModelTuningMap(
+    entriesToMap(snapshot.modelTuningByAccountType),
+  );
+  state.modelTuningByAccountSegment = normalizeModelTuningMap(
+    entriesToMap(snapshot.modelTuningByAccountSegment),
   );
   state.baselineTuningByAccount = entriesToMap(
     snapshot.baselineTuningByAccount,
@@ -6630,7 +6849,7 @@ function applyAnalyticsSnapshot(snapshot) {
 function isValidAnalyticsSnapshot(snapshot, fingerprint) {
   return Boolean(
     snapshot &&
-      snapshot.version === 1 &&
+      snapshot.version === 5 &&
       String(snapshot.fingerprint || "") === String(fingerprint || ""),
   );
 }
@@ -6791,9 +7010,13 @@ function shrinkTowardFallback(value, fallback, jobCount, k = 3) {
   const v = safeNumber(value);
   const base = safeNumber(fallback);
   if (!(v > 0)) return base;
-  const n = Math.max(0, safeNumber(jobCount));
-  const weight = n / (n + Math.max(1, safeNumber(k)));
+  const weight = getShrinkWeight(jobCount, k);
   return v * weight + base * (1 - weight);
+}
+
+function getShrinkWeight(jobCount, k = 3) {
+  const n = Math.max(0, safeNumber(jobCount));
+  return n / (n + Math.max(1, safeNumber(k)));
 }
 
 function effectiveEmployeeSpeed(
@@ -6906,9 +7129,10 @@ function chooseRobustBaseline(stats) {
 }
 
 function getCrewEfficiencyFactor(crewSize, tuning = state.modelTuning) {
-  if (crewSize <= 3) return tuning.effSmall;
-  if (crewSize <= 6) return tuning.effMid;
-  return tuning.effLarge;
+  const model = normalizeModelTuning(tuning, state.modelTuning);
+  if (crewSize <= model.smallCrewMax) return model.effSmall;
+  if (crewSize <= model.midCrewMax) return model.effMid;
+  return model.effLarge;
 }
 
 function summarizeJobGroup(jobGroup) {

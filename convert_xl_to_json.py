@@ -17,6 +17,8 @@ DEFAULT_WORKBOOK_NAMES = (
 )
 DEFAULT_COPY_TARGETS = ["public/data", "docs/data", "data"]
 EXCEL_EXTENSIONS = (".xlsx", ".xlsm", ".xls")
+MODE_LOCAL_ONLY = "local"
+MODE_FULL = "full"
 
 
 def get_excel_engine(excel_path: Path) -> str | None:
@@ -183,9 +185,30 @@ def format_missing_workbook_error(excel_path: Path) -> str:
     return message
 
 
+def choose_run_mode(args: argparse.Namespace) -> str:
+    if args.local_only:
+        return MODE_LOCAL_ONLY
+    if args.full:
+        return MODE_FULL
+    if not sys.stdin.isatty():
+        logging.info("No interactive input available; running full workflow.")
+        return MODE_FULL
+
+    print("Choose what to run:")
+    print("  1) Local update: convert, copy JSON, and build without git")
+    print("  2) Full workflow: convert, copy JSON, build, commit, and push")
+    while True:
+        choice = input("Enter 1 or 2 [1]: ").strip().lower()
+        if choice in {"", "1", "local", "local-only", "no-git"}:
+            return MODE_LOCAL_ONLY
+        if choice in {"2", "full", "all"}:
+            return MODE_FULL
+        print("Please enter 1 for local update without git or 2 for the full workflow.")
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert one or more Excel workbooks to JSON, copy to data dirs, build, and push."
+        description="Convert one or more Excel workbooks to JSON, copy to data dirs, build, and optionally push."
     )
     parser.add_argument(
         "paths",
@@ -208,6 +231,17 @@ def main():
         default="Auto-update: Excel to JSON, copied, built & pushed",
         help="Git commit message"
     )
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--local-only",
+        action="store_true",
+        help="Convert, copy JSON, and build; do not run git add, commit, or push."
+    )
+    mode_group.add_argument(
+        "--full",
+        action="store_true",
+        help="Run the full workflow without prompting."
+    )
     args = parser.parse_args()
 
     logging.basicConfig(
@@ -226,6 +260,8 @@ def main():
             logging.error(format_missing_workbook_error(excel_path))
             return 1
 
+    run_mode = choose_run_mode(args)
+
     for excel_path in excel_paths:
         json_path = args.output or (repo_root / f"{excel_path.stem}.json")
         convert_excel_to_json(excel_path, json_path)
@@ -237,6 +273,9 @@ def main():
 
     if not run_npm_build(repo_root):
         return 1
+    if run_mode == MODE_LOCAL_ONLY:
+        logging.info("Local-only mode complete; skipped git add, commit, and push.")
+        return 0
     if not git_add_commit_push(repo_root, args.message):
         return 1
     return 0
