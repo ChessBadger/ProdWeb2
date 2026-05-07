@@ -3431,11 +3431,7 @@ function predictForAssignedCrew(storeKey, crewIds, rolesConfig, modesConfig) {
   );
   const residualCorrection = -safeNumber(residualAdjustment.biasHours);
   const overlap = getLastCrewOverlapRate(storeKey, crew);
-  const lastResidual = state.lastDurationResidualByStore.get(storeKey);
-  const lastCrewBias =
-    overlap > 0 && Number.isFinite(lastResidual?.durationResidual)
-      ? -overlap * 0.15 * safeNumber(lastResidual.durationResidual)
-      : 0;
+  const lastCrewBias = 0;
   const onSiteDuration = Math.max(
     0,
     rawOnSiteDuration + residualCorrection + lastCrewBias,
@@ -4448,10 +4444,7 @@ function predict() {
   const lastResidual = state.lastDurationResidualByStore.get(
     state.selectedStoreKey,
   );
-  const lastCrewBias =
-    overlap > 0 && Number.isFinite(lastResidual?.durationResidual)
-      ? -overlap * 0.15 * safeNumber(lastResidual.durationResidual)
-      : 0;
+  const lastCrewBias = 0;
   const onSiteDuration = Math.max(
     0,
     rawOnSiteDuration + residualCorrection + lastCrewBias,
@@ -5005,25 +4998,31 @@ function renderScenarios(prediction) {
   });
   dom.scenarioBody.insertAdjacentHTML(
     "beforeend",
-    renderCurrentCrewTotalRow(ranked, prediction.onSiteDuration),
+    renderCurrentCrewTotalRow(ranked, prediction.onSiteDuration, prediction),
   );
 }
 
-function renderCurrentCrewTotalRow(rankedRows, onSiteDuration) {
-  const totalPiecesPerHr = (rankedRows || []).reduce(
+function renderCurrentCrewTotalRow(rankedRows, onSiteDuration, prediction = null) {
+  const rawTotalPiecesPerHr = (rankedRows || []).reduce(
     (sum, item) => sum + safeNumber(item.effectiveSpeed || item.baseSpeed),
     0,
   );
+  const totalPiecesPerHr = safeNumber(prediction?.crewSpeed) || rawTotalPiecesPerHr;
   const totalPredictedPieces = (rankedRows || []).reduce(
     (sum, item) => sum + safeNumber(item.predictedPieces),
     0,
   );
+  const efficiency = safeNumber(prediction?.crewEfficiency);
+  const efficiencyNote =
+    efficiency > 0 && efficiency < 1
+      ? `after ${formatNumber(efficiency * 100, 0)}% crew-size efficiency`
+      : "role-adjusted total";
   return `
     <tr>
       <td></td>
       <td><strong>Grand Total Available</strong></td>
       <td><strong>${formatNumber(totalPiecesPerHr, 1)}</strong></td>
-      <td class="muted">Role-adjusted total</td>
+      <td class="muted">${escapeHtml(efficiencyNote)}</td>
       <td><strong>${formatNumber(totalPredictedPieces || totalPiecesPerHr * safeNumber(onSiteDuration), 0)}</strong></td>
     </tr>
   `;
@@ -6220,24 +6219,6 @@ function resolveScopedResidualAdjustment(config) {
     biasHours,
     kOf("storeSupervisor", 6),
   );
-  biasHours = blendFromScope(
-    scoped.globalBand,
-    biasHours,
-    kOf("globalBand", 18),
-  );
-  biasHours = blendFromScope(
-    scoped.accountBand,
-    biasHours,
-    kOf("accountBand", 14),
-  );
-  biasHours = blendFromScope(
-    scoped.segmentBand,
-    biasHours,
-    kOf("segmentBand", 12),
-  );
-  biasHours = blendFromScope(scoped.typeBand, biasHours, kOf("typeBand", 12));
-  biasHours = blendFromScope(scoped.storeBand, biasHours, kOf("storeBand", 8));
-
   // Keep final bias direction anchored to known store tendency (high/low)
   // so live estimates reflect the Selected Store Accuracy trend more clearly.
   const storeCount = Math.max(0, safeNumber(scoped.store?.count));
@@ -6674,7 +6655,7 @@ function normalizeModelTuningMap(map) {
 function buildAnalyticsSnapshot(fingerprint) {
   return {
     id: ANALYTICS_DB_SNAPSHOT_ID,
-    version: 5,
+    version: 7,
     fingerprint: String(fingerprint || ""),
     createdAt: new Date().toISOString(),
     modelTuning: state.modelTuning,
@@ -6849,7 +6830,7 @@ function applyAnalyticsSnapshot(snapshot) {
 function isValidAnalyticsSnapshot(snapshot, fingerprint) {
   return Boolean(
     snapshot &&
-      snapshot.version === 5 &&
+      snapshot.version === 7 &&
       String(snapshot.fingerprint || "") === String(fingerprint || ""),
   );
 }
