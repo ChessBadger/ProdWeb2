@@ -747,6 +747,7 @@ function parseBulkEmployeeNoteFlags(noteText) {
   const note = cleanText(noteText).toLowerCase();
   return {
     rx: /\brx\b/.test(note),
+    training: /\btrain|\btrainer\b|\bwork\s+(?:with|w\/)\b/.test(note),
     earlyLate: /\b(until|after)\b/.test(note),
   };
 }
@@ -792,6 +793,7 @@ function resolveBulkEmployeeSelection(rawText, candidateIds) {
     .filter(Boolean);
   const matchedIds = new Set();
   const rxIds = new Set();
+  const trainingIds = new Set();
   const earlyLateIds = new Set();
   const ambiguousEntries = [];
   const unmatchedEntries = [];
@@ -805,6 +807,7 @@ function resolveBulkEmployeeSelection(rawText, candidateIds) {
     const markMatched = (employeeId) => {
       matchedIds.add(employeeId);
       if (noteFlags.rx) rxIds.add(employeeId);
+      if (noteFlags.training) trainingIds.add(employeeId);
       if (noteFlags.earlyLate) earlyLateIds.add(employeeId);
     };
 
@@ -875,6 +878,7 @@ function resolveBulkEmployeeSelection(rawText, candidateIds) {
     entries,
     matchedIds: Array.from(matchedIds),
     rxIds: Array.from(rxIds),
+    trainingIds: Array.from(trainingIds),
     earlyLateIds: Array.from(earlyLateIds),
     ambiguousEntries,
     unmatchedEntries,
@@ -887,6 +891,8 @@ function formatBulkSelectionMessage(result, label = "employees") {
   const fragments = [`Processed ${total} ${label}; added ${added}.`];
   const roleHints = [];
   if (result.rxIds?.length) roleHints.push(`RX ${result.rxIds.length}`);
+  if (result.trainingIds?.length)
+    roleHints.push(`Training ${result.trainingIds.length}`);
   if (result.earlyLateIds?.length)
     roleHints.push(`Early/Late ${result.earlyLateIds.length}`);
   if (roleHints.length) fragments.push(`Auto roles: ${roleHints.join(", ")}.`);
@@ -1660,6 +1666,9 @@ function normalizeRow(row) {
   const role = cleanText(
     firstValue(normalized, ["role", "employeerole", "position", "jobtitle"]),
   ).toLowerCase();
+  const isRx = parseBooleanFlag(
+    firstValue(normalized, ["rx", "isrx", "rxvalue"]),
+  );
   const supervisorNumber = cleanText(
     firstValue(normalized, ["supervisornumber"]),
   );
@@ -1686,6 +1695,7 @@ function normalizeRow(row) {
     type,
     officeName,
     role,
+    isRx,
     supervisorNumber,
     manHours,
     totalExtQty,
@@ -2036,7 +2046,11 @@ function buildEmployeeStats(rows) {
       accountBucket.recentWeightedSpeedSum += speed * recencyWeight;
       accountBucket.recentWeightSum += recencyWeight;
     }
-    if (speed > 0 && rowTimestamp > accountBucket.mostRecentTimestamp) {
+    if (
+      speed > 0 &&
+      !row.isRx &&
+      rowTimestamp > accountBucket.mostRecentTimestamp
+    ) {
       accountBucket.mostRecentSpeed = speed;
       accountBucket.mostRecentTimestamp = rowTimestamp;
       accountBucket.mostRecentStoreName = row.store;
@@ -4197,6 +4211,10 @@ function applyBulkRoleHintsToSelectedStore(bulk) {
   const selectedSet = new Set(Array.from(state.selectedEmployees));
   roles.rx = filterToSelected(
     [...roles.rx, ...(bulk?.rxIds || [])],
+    selectedSet,
+  );
+  roles.training = filterToSelected(
+    [...roles.training, ...(bulk?.trainingIds || [])],
     selectedSet,
   );
   roles.earlyLate = filterToSelected(
@@ -7015,6 +7033,13 @@ function toNumber(value) {
   if (!cleaned) return 0;
   const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseBooleanFlag(value) {
+  if (value === true) return true;
+  if (value === false || value == null) return false;
+  const text = cleanText(value).toLowerCase();
+  return ["1", "true", "yes", "y", "x"].includes(text);
 }
 
 function cleanScheduleText(value) {
