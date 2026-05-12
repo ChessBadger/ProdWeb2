@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { EmployeeRecord, Metric } from "../types";
 import { METRIC_OPTIONS } from "../constants";
 import { SortAscIcon, SortDescIcon } from "./icons/Icons";
+import ModasBadge from "./ModasBadge";
 import RxBadge from "./RxBadge";
 
 interface AveragesTableProps {
@@ -194,6 +195,15 @@ const AveragesTable: React.FC<AveragesTableProps> = ({
     );
   }, [attendanceData, data]);
 
+  const modasEmployees = useMemo(() => {
+    const sourceData = attendanceData ?? data;
+    return new Set(
+      sourceData
+        .filter((record) => Number(record.avg_delta) > 0)
+        .map((record) => record.employee)
+    );
+  }, [attendanceData, data]);
+
   const overallAverages = useMemo(() => {
     if (!dataForOverall.length) return null;
 
@@ -376,6 +386,9 @@ const AveragesTable: React.FC<AveragesTableProps> = ({
                   <span className="inline-flex items-center gap-2">
                     <span>{row.employee}</span>
                     {showRxBadges && rxEmployees.has(row.employee) && <RxBadge />}
+                    {showRxBadges && modasEmployees.has(row.employee) && (
+                      <ModasBadge />
+                    )}
                   </span>
                 </td>
                 <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400 font-semibold">

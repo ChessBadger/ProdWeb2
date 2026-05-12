@@ -160,7 +160,7 @@ const TypeOfInvComparisonPage: React.FC<{
     [availableTypes]
   );
 
-  const scopedData = accountScopedData;
+  const baseScopedData = accountScopedData;
 
   const getBreakdownMember = useMemo(
     () => (record: EmployeeRecord) => {
@@ -181,7 +181,7 @@ const TypeOfInvComparisonPage: React.FC<{
   const aggregatesByMember = useMemo(() => {
     const byMember = new Map<string, Map<string, Aggregate>>();
 
-    scopedData.forEach((record) => {
+    baseScopedData.forEach((record) => {
       const memberKey = getBreakdownMember(record);
       const typeKey = getModasBucket(record);
 
@@ -199,7 +199,15 @@ const TypeOfInvComparisonPage: React.FC<{
     });
 
     return byMember;
-  }, [scopedData, getBreakdownMember, metric]);
+  }, [baseScopedData, getBreakdownMember, metric]);
+
+  const scopedData = useMemo(() => {
+    if (selectedMember === "all") return baseScopedData;
+
+    return baseScopedData.filter(
+      (record) => getBreakdownMember(record) === selectedMember
+    );
+  }, [baseScopedData, selectedMember, getBreakdownMember]);
 
   const memberAverages = useMemo(() => {
     const rows = Array.from(aggregatesByMember.entries()).map(
@@ -294,9 +302,14 @@ const TypeOfInvComparisonPage: React.FC<{
     [displayedChartMembers, aggregatesByMember, compareBuckets]
   );
 
+  const tableMembers = useMemo(
+    () => (selectedMember === "all" ? availableMembers : [selectedMember]),
+    [availableMembers, selectedMember]
+  );
+
   const tableRows = useMemo(
-    () => buildComparisonRows(availableMembers),
-    [availableMembers, aggregatesByMember, compareBuckets]
+    () => buildComparisonRows(tableMembers),
+    [tableMembers, aggregatesByMember, compareBuckets]
   );
 
   const typeSummary = useMemo(() => {
@@ -338,6 +351,10 @@ const TypeOfInvComparisonPage: React.FC<{
   const bestType = typeSummary.find((row) => row.average !== null) ?? null;
   const selectedAccountHasMultipleTypes =
     (selectedAccountOption?.typeCount ?? 0) >= 2;
+  const comparisonScopeLabel =
+    selectedMember === "all"
+      ? selectedAccount
+      : `${selectedAccount} / ${breakdownLabel}: ${selectedMember}`;
 
   const overallComparisonData = useMemo(
     () =>
@@ -551,9 +568,10 @@ const TypeOfInvComparisonPage: React.FC<{
             Breakdown
             <select
               value={breakdownBy}
-              onChange={(event) =>
-                setBreakdownBy(event.target.value as BreakdownDimension)
-              }
+              onChange={(event) => {
+                setBreakdownBy(event.target.value as BreakdownDimension);
+                setSelectedMember("all");
+              }}
               className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm"
             >
               <option value="store">Store</option>
@@ -697,7 +715,7 @@ const TypeOfInvComparisonPage: React.FC<{
             </div>
           ) : (
             <div className="rounded-md border border-emerald-200 bg-emerald-50 text-emerald-800 px-4 py-3 text-sm dark:border-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
-              Comparing Modas vs Non-Modas for {selectedAccount}.
+              Comparing Modas vs Non-Modas for {comparisonScopeLabel}.
             </div>
           )}
         </div>

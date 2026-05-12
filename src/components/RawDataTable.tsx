@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { EmployeeRecord } from '../types';
 import { METRIC_OPTIONS } from '../constants';
 import { SortAscIcon, SortDescIcon, ChevronLeftIcon, ChevronRightIcon } from './icons/Icons';
+import ModasBadge from './ModasBadge';
 import RxBadge from './RxBadge';
 
 interface RawDataTableProps {
@@ -87,6 +88,7 @@ const RawDataTable: React.FC<RawDataTableProps> = ({ data, showRxBadges = false 
                                     <span className="inline-flex items-center gap-2">
                                         <span>{row.employee}</span>
                                         {showRxBadges && row.rx && <RxBadge />}
+                                        {showRxBadges && Number(row.avg_delta) > 0 && <ModasBadge />}
                                     </span>
                                 </td>
                                 <td className="px-4 py-3 whitespace-nowrap text-sm text-slate-500 dark:text-slate-400">{row.office}</td>

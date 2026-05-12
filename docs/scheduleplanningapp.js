@@ -4989,7 +4989,7 @@ function renderScenarios(prediction) {
     if (varianceTone) tr.classList.add(varianceTone);
     tr.innerHTML = [
       `<td>${index + 1}</td>`,
-      `<td>${escapeHtml(getEmployeeDisplayName(item.id))}${renderProductionVarianceArrow(item, varianceTone)}</td>`,
+      `<td>${escapeHtml(getEmployeeDisplayName(item.id))}${renderProductionVarianceArrow(item)}</td>`,
       `<td>${formatNumber(item.baseSpeed, 1)}</td>`,
       `<td>${escapeHtml(formatMostRecentAccountProduction(item.mostRecentAccountProduction))}</td>`,
       `<td>${formatNumber(item.predictedPieces, 0)}</td>`,
@@ -5240,20 +5240,25 @@ function formatMostRecentAccountProduction(production) {
   return `${formatNumber(piecesPerHr, 0)} pieces/hr`;
 }
 
-function renderProductionVarianceArrow(item, varianceTone) {
-  if (!varianceTone) return "";
+function renderProductionVarianceArrow(item) {
   const recentPiecesPerHr = safeNumber(
     item?.mostRecentAccountProduction?.piecesPerHr,
   );
-  const predictedPiecesPerHr = safeNumber(item?.effectiveSpeed);
-  if (!(recentPiecesPerHr > 0) || !(predictedPiecesPerHr > 0)) return "";
-  const isHigher = predictedPiecesPerHr > recentPiecesPerHr;
+  const displayedPiecesPerHr = safeNumber(item?.baseSpeed);
+  if (
+    !(recentPiecesPerHr > 0) ||
+    !(displayedPiecesPerHr > 0) ||
+    displayedPiecesPerHr === recentPiecesPerHr
+  )
+    return "";
+  const isHigher = displayedPiecesPerHr > recentPiecesPerHr;
   const className = isHigher ? "variance-arrow up" : "variance-arrow down";
   const symbol = isHigher ? "↑" : "↓";
   const label = isHigher
-    ? "Predicted production is higher than most recent account production"
-    : "Predicted production is lower than most recent account production";
-  return ` <span class="${className}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${symbol}</span>`;
+    ? "Pieces/hr is higher than most recent account production"
+    : "Pieces/hr is lower than most recent account production";
+  const symbolHtml = isHigher ? "&uarr;" : "&darr;";
+  return ` <span class="${className}" title="${escapeHtml(label)}" aria-label="${escapeHtml(label)}">${symbolHtml}</span>`;
 }
 
 function getProductionVarianceTone(item) {
@@ -5261,7 +5266,7 @@ function getProductionVarianceTone(item) {
     item?.mostRecentAccountProduction?.piecesPerHr,
   );
   if (!(recentPiecesPerHr > 0)) return "";
-  const variance = Math.abs(safeNumber(item.effectiveSpeed) - recentPiecesPerHr);
+  const variance = Math.abs(safeNumber(item.baseSpeed) - recentPiecesPerHr);
   if (variance > 1200) return "production-risk-high";
   if (variance > 700) return "production-risk-medium";
   return "";
