@@ -66,6 +66,7 @@ const state = {
   },
   planningMode: "duration",
   targetValue: 0,
+  productionShrinkPercent: 0,
   baseModelTuning: {
     overheadScale: 0.25,
     effSmall: 1.0,
@@ -355,6 +356,7 @@ const dom = {
   storeStats: document.getElementById("storeStats"),
   planningMode: document.getElementById("planningMode"),
   targetValue: document.getElementById("targetValue"),
+  productionShrinkPercent: document.getElementById("productionShrinkPercent"),
   goalHint: document.getElementById("goalHint"),
   supervisorEmployee: document.getElementById("supervisorEmployee"),
   supervisorMode: document.getElementById("supervisorMode"),
@@ -653,9 +655,11 @@ function applyBoardPrefillIfAvailable() {
   };
   state.planningMode = "duration";
   state.targetValue = Math.max(0, toNumber(prefill.plannedDurationHours));
+  state.productionShrinkPercent = 0;
   if (dom.planningMode) dom.planningMode.value = state.planningMode;
   if (dom.targetValue)
     dom.targetValue.value = state.targetValue > 0 ? state.targetValue : "";
+  if (dom.productionShrinkPercent) dom.productionShrinkPercent.value = "";
 
   syncRoleAssignmentsToSelectedCrew();
   pendingBoardPrefill = null;
@@ -1167,6 +1171,7 @@ function bindEvents() {
   dom.storeSelect.addEventListener("change", onStoreChange);
   dom.planningMode.addEventListener("change", onPlanningInputChange);
   dom.targetValue.addEventListener("input", onPlanningInputChange);
+  dom.productionShrinkPercent?.addEventListener("input", onPlanningInputChange);
   dom.detailModeBtn?.addEventListener("click", toggleDetailedView);
   dom.supervisorEmployee.addEventListener("change", onRoleConfigChange);
   dom.supervisorMode.addEventListener("change", onRoleConfigChange);
@@ -2490,8 +2495,10 @@ function resetPlanInputsForNewStore() {
 
   state.planningMode = "duration";
   state.targetValue = 0;
+  state.productionShrinkPercent = 0;
   dom.planningMode.value = state.planningMode;
   dom.targetValue.value = "";
+  if (dom.productionShrinkPercent) dom.productionShrinkPercent.value = "";
   applyScheduledGoalDefault(true);
 
   if (
@@ -4320,6 +4327,9 @@ function onPlanningInputChange() {
   state.planningMode =
     dom.planningMode.value === "manhours" ? "manhours" : "duration";
   state.targetValue = Math.max(0, toNumber(dom.targetValue.value));
+  state.productionShrinkPercent = normalizeProductionShrinkPercent(
+    dom.productionShrinkPercent?.value,
+  );
   persistToStorage();
   updateResults();
 }
@@ -4414,6 +4424,10 @@ function predict() {
     baselineTuningCtx.tuning,
     store.primaryType,
   );
+  const productionShrinkPercent = state.productionShrinkPercent;
+  const productionShrinkFactor = getProductionShrinkFactor(
+    productionShrinkPercent,
+  );
   const overhead = resolveOverheadHours(store, tuning.overheadScale);
   const selectedRaw = Array.from(state.selectedEmployees);
   const crewSpeeds = selectedRaw
@@ -4429,9 +4443,11 @@ function predict() {
   const crewSpeedRaw = crewSpeeds.reduce((sum, n) => sum + n, 0);
   const crewSize = crewSpeeds.length;
   const crewEfficiency = getCrewEfficiencyFactor(crewSize, tuning);
-  const crewSpeed = crewSpeedRaw * crewEfficiency;
+  const crewSpeedBeforeShrink = crewSpeedRaw * crewEfficiency;
+  const crewSpeed = crewSpeedBeforeShrink * productionShrinkFactor;
 
-  if (!(baseline.value > 0) || !(crewSpeed > 0) || crewSize === 0) return null;
+  if (!(baseline.value > 0) || !(crewSpeedBeforeShrink > 0) || crewSize === 0)
+    return null;
 
   const rawOnSiteDuration = overhead.value + baseline.value / crewSpeed;
   const residualAdjustment = resolveResidualAdjustmentForStore(
@@ -4482,6 +4498,9 @@ function predict() {
       ),
     })),
     baselinePieces: baseline.value,
+    productionShrinkPercent,
+    productionShrinkFactor,
+    crewSpeedBeforeShrink,
     baselineSource: baseline.source,
     baselineMode: baseline.modeLabel,
     baselineBlend: baseline.blendLabel,
@@ -4525,6 +4544,15 @@ function computeDelta(inStoreDuration, manHours) {
       : inStoreDuration - state.targetValue;
 
   return { available: true, mode: state.planningMode, value };
+}
+
+function normalizeProductionShrinkPercent(value) {
+  const percent = toNumber(value);
+  return Math.max(0, Math.min(100, percent));
+}
+
+function getProductionShrinkFactor(percent) {
+  return Math.max(0.01, 1 - normalizeProductionShrinkPercent(percent) / 100);
 }
 
 function resolveBaselinePieces(
@@ -4903,6 +4931,13 @@ function buildPlainEnglishEstimateReason(prediction) {
     `This crew is projected around ${formatNumber(prediction.crewSpeed, 0)} pieces per hour after role adjustments.`,
     `Store complexity and recent history ${correctionVerb} ${formatNumber(Math.abs(historicalCorrection), 1)} hrs ${historicalCorrection >= 0 ? "to" : "from"} the estimate.`,
   ];
+  if (safeNumber(prediction.productionShrinkPercent) > 0) {
+    pieces.splice(
+      1,
+      0,
+      `A ${formatNumber(prediction.productionShrinkPercent, 0)}% production filter reduced crew output from ${formatNumber(prediction.crewSpeedBeforeShrink, 0)} pieces per hour.`,
+    );
+  }
   if (prediction.roleAssignments?.supervisor) {
     pieces.push(
       `Supervisor impact is included for ${getEmployeeDisplayName(prediction.roleAssignments.supervisor)}.`,
@@ -6552,6 +6587,7 @@ function persistToStorage() {
   snapshot.settings = {
     planningMode: state.planningMode,
     targetValue: state.targetValue,
+    productionShrinkPercent: state.productionShrinkPercent,
     selectedRolesByStore: state.selectedRolesByStore,
     roleModesByStore: state.roleModesByStore,
   };
@@ -6577,6 +6613,9 @@ function restoreSettingsFromStorage() {
   state.planningMode =
     settings.planningMode === "manhours" ? "manhours" : "duration";
   state.targetValue = Math.max(0, toNumber(settings.targetValue));
+  state.productionShrinkPercent = normalizeProductionShrinkPercent(
+    settings.productionShrinkPercent,
+  );
   state.storeScheduleFilter = "all";
   state.selectedRolesByStore =
     settings.selectedRolesByStore &&
@@ -6590,6 +6629,10 @@ function restoreSettingsFromStorage() {
 
   dom.planningMode.value = state.planningMode;
   dom.targetValue.value = state.targetValue > 0 ? state.targetValue : "";
+  if (dom.productionShrinkPercent) {
+    dom.productionShrinkPercent.value =
+      state.productionShrinkPercent > 0 ? state.productionShrinkPercent : "";
+  }
   renderRoleSelectors();
 }
 

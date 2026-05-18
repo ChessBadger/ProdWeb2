@@ -40,6 +40,26 @@ const BREAKDOWN_LABELS: Record<BreakdownDimension, string> = {
 const getModasBucket = (record: EmployeeRecord): "Modas" | "Non-Modas" =>
   Number(record.avg_delta) > 0 ? "Modas" : "Non-Modas";
 
+const getModasDirectionalDiffStats = (row: ChartRow) => {
+  const modasValue = row["Modas"];
+  const nonModasValue = row["Non-Modas"];
+
+  if (typeof modasValue !== "number" || typeof nonModasValue !== "number") {
+    return { delta: null as number | null, percentDiff: null as number | null };
+  }
+
+  const delta = modasValue - nonModasValue;
+  const percentDiff =
+    nonModasValue === 0 ? null : (delta / Math.abs(nonModasValue)) * 100;
+
+  return { delta, percentDiff };
+};
+
+const formatDirectionalPercentDiff = (value: number | null) => {
+  if (value === null) return "-";
+  return `${value.toFixed(2)}%`;
+};
+
 const TypeOfInvComparisonPage: React.FC<{
   data: EmployeeRecord[];
   isDarkMode: boolean;
@@ -289,7 +309,11 @@ const TypeOfInvComparisonPage: React.FC<{
         numericValues.push(average);
       });
 
-      const diffStats = getDiffStats(numericValues);
+      const directionalDiffStats = getModasDirectionalDiffStats(row);
+      const diffStats =
+        directionalDiffStats.delta === null
+          ? getDiffStats(numericValues)
+          : directionalDiffStats;
       row.delta = diffStats.delta;
       row.percentDiff = diffStats.percentDiff;
 
@@ -366,11 +390,22 @@ const TypeOfInvComparisonPage: React.FC<{
   );
 
   const overallComparisonStats = useMemo(() => {
+    const directionalRow: ChartRow = {
+      label: "Overall",
+      delta: null,
+      percentDiff: null,
+    };
     const values = typeSummary
-      .map((row) => row.average)
+      .map((row) => {
+        directionalRow[row.entity] = row.average;
+        return row.average;
+      })
       .filter((value): value is number => value !== null);
 
-    return getDiffStats(values);
+    const directionalDiffStats = getModasDirectionalDiffStats(directionalRow);
+    return directionalDiffStats.delta === null
+      ? getDiffStats(values)
+      : directionalDiffStats;
   }, [typeSummary]);
 
   const typeSummaryMap = useMemo(
@@ -395,7 +430,11 @@ const TypeOfInvComparisonPage: React.FC<{
       }
     });
 
-    const diffStats = getDiffStats(numericValues);
+    const directionalDiffStats = getModasDirectionalDiffStats(row);
+    const diffStats =
+      directionalDiffStats.delta === null
+        ? getDiffStats(numericValues)
+        : directionalDiffStats;
     row.delta = diffStats.delta;
     row.percentDiff = diffStats.percentDiff;
 
@@ -871,7 +910,9 @@ const TypeOfInvComparisonPage: React.FC<{
                 Avg/hr delta across Modas buckets:{" "}
                 {overallComparisonStats.delta.toFixed(2)}
                 {typeof overallComparisonStats.percentDiff === "number"
-                  ? ` (${overallComparisonStats.percentDiff.toFixed(2)}%)`
+                  ? ` (${formatDirectionalPercentDiff(
+                      overallComparisonStats.percentDiff
+                    )})`
                   : ""}
               </p>
             )}
@@ -1096,9 +1137,7 @@ const TypeOfInvComparisonPage: React.FC<{
                         : "-"}
                     </td>
                     <td className="px-4 py-3 text-right text-sm font-semibold text-slate-800 dark:text-slate-100">
-                      {typeof totalTableRow.percentDiff === "number"
-                        ? `${totalTableRow.percentDiff.toFixed(2)}%`
-                        : "-"}
+                      {formatDirectionalPercentDiff(totalTableRow.percentDiff)}
                     </td>
                   </tr>
 
@@ -1127,9 +1166,7 @@ const TypeOfInvComparisonPage: React.FC<{
                           : "-"}
                       </td>
                       <td className="px-4 py-3 text-right text-sm font-semibold text-slate-700 dark:text-slate-200">
-                        {typeof row.percentDiff === "number"
-                          ? `${row.percentDiff.toFixed(2)}%`
-                          : "-"}
+                        {formatDirectionalPercentDiff(row.percentDiff)}
                       </td>
                     </tr>
                   ))}

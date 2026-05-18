@@ -1083,6 +1083,15 @@ th {
   grid-column: 1 / -1;
 }
 
+.production-shrink-row {
+  margin-top: 0.6rem;
+}
+
+.production-shrink-row .help {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
 .selected-crew-chips {
   display: flex;
   flex-wrap: wrap;
