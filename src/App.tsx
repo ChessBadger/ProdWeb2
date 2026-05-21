@@ -12,6 +12,7 @@ import AveragesTable, {
 } from "./components/AveragesTable";
 import RawDataTable from "./components/RawDataTable";
 import AccountDateInstancesTable from "./components/AccountDateInstancesTable";
+import ModasUsageReportTable from "./components/ModasUsageReportTable";
 import AnomalyDetection from "./components/AnomalyDetection";
 import KPI from "./components/KPI";
 import Tabs from "./components/Tabs";
@@ -690,6 +691,10 @@ const Dashboard: React.FC = () => {
                     content: (
                       <AccountDateInstancesTable data={productionData} />
                     ),
+                  },
+                  {
+                    label: "Modas Usage",
+                    content: <ModasUsageReportTable data={filteredData} />,
                   },
                 ]}
               />
