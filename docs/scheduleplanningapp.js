@@ -268,7 +268,11 @@ const ANALYTICS_DB_SNAPSHOT_ID = "latest";
 const HISTORY_JSON_PATH = "data/EmployeeProductionExport.json";
 const ACTIVE_EMPLOYEE_JSON_PATH = "data/EmployeeProductionExport.json";
 const SCHEDULE_JSON_PATH = "data/ScheduleFinalFull.json";
+const PRECOMPUTED_ANALYTICS_JSON_PATH = "data/ScheduleAnalyticsSnapshot.json";
 const runtimeConfig = window.__BADGER_RUNTIME_CONFIG__ || {};
+const PRECOMPUTE_ANALYTICS_MODE = new URLSearchParams(
+  window.location.search || "",
+).get("precomputeAnalytics") === "1";
 
 const ACCOUNT_GROUPS = {
   kroger: ["kroger", "mariano's"],
@@ -435,6 +439,12 @@ let pendingBoardPrefill = readBoardPrefillFromUrl();
 bootstrapAuth();
 
 function bootstrapAuth() {
+  if (PRECOMPUTE_ANALYTICS_MODE) {
+    initialize();
+    appInitialized = true;
+    return;
+  }
+
   if (typeof firebase === "undefined") {
     console.error("Firebase SDK was not loaded.");
     showAuthOverlay("Authentication is unavailable right now. Please refresh.");
@@ -1251,12 +1261,16 @@ async function loadJsonData() {
       activeEmployeeResult,
       scheduleResult,
       externalScheduleResult,
+      precomputedAnalyticsResult,
     ] =
       await Promise.all([
         fetchRequiredJson(HISTORY_JSON_PATH),
         fetchOptionalJson(ACTIVE_EMPLOYEE_JSON_PATH),
         fetchOptionalJson(SCHEDULE_JSON_PATH),
         fetchOptionalScheduleDataApi(),
+        PRECOMPUTE_ANALYTICS_MODE
+          ? Promise.resolve(null)
+          : fetchOptionalJsonQuiet(PRECOMPUTED_ANALYTICS_JSON_PATH),
       ]);
     const fingerprint = buildDataFingerprintFromJsonText(
       historyResult.rawJsonText,
@@ -1269,11 +1283,20 @@ async function loadJsonData() {
     state.externalScheduleRows = extractRowsFromJson(
       externalScheduleResult?.payload,
     );
-    await loadRows(rawRows, scheduleRows, fingerprint, activeEmployeeRows);
+    await loadRows(
+      rawRows,
+      scheduleRows,
+      fingerprint,
+      activeEmployeeRows,
+      precomputedAnalyticsResult?.payload || null,
+    );
   } catch (error) {
     const message = error?.message || "Unknown error";
     setPredictionMeta(`Data load failed: ${message}`, "warning");
     hideComputeWaitOverlay();
+    if (PRECOMPUTE_ANALYTICS_MODE) {
+      finishAnalyticsPrecompute(false, { message });
+    }
   }
 }
 
@@ -1332,6 +1355,14 @@ async function fetchOptionalJson(path) {
   }
 }
 
+async function fetchOptionalJsonQuiet(path) {
+  try {
+    return await fetchRequiredJson(path);
+  } catch (_error) {
+    return null;
+  }
+}
+
 function extractRowsFromJson(payload) {
   if (Array.isArray(payload)) {
     return payload;
@@ -1354,6 +1385,7 @@ async function loadRows(
   scheduleRawRows = [],
   dataFingerprint = "",
   activeEmployeeRawRows = [],
+  precomputedAnalyticsSnapshot = null,
 ) {
   const normalizedRows = rawRows.map(normalizeRow).filter((r) => r.valid);
 
@@ -1391,6 +1423,22 @@ async function loadRows(
   applyBoardPrefillIfAvailable();
   applyScheduledGoalDefault(false);
   refreshLoadedUi();
+  if (
+    !PRECOMPUTE_ANALYTICS_MODE &&
+    isValidAnalyticsSnapshot(precomputedAnalyticsSnapshot, state.dataFingerprint)
+  ) {
+    applyAnalyticsSnapshot(precomputedAnalyticsSnapshot);
+    await persistAnalyticsCache(state.dataFingerprint);
+    state.analyticsReady = true;
+    if (dom.computeAccuracyBtn) {
+      dom.computeAccuracyBtn.disabled = true;
+      dom.computeAccuracyBtn.textContent = "Accuracy Ready (Precomputed)";
+    }
+    renderAccuracyReport();
+    updateResults();
+    hideComputeWaitOverlay();
+    return;
+  }
   const restored = await restoreAnalyticsCache(state.dataFingerprint);
   if (restored) {
     state.analyticsReady = true;
@@ -1401,6 +1449,12 @@ async function loadRows(
     renderAccuracyReport();
     updateResults();
     hideComputeWaitOverlay();
+    if (PRECOMPUTE_ANALYTICS_MODE) {
+      finishAnalyticsPrecompute(
+        true,
+        buildAnalyticsSnapshot(state.dataFingerprint),
+      );
+    }
     return;
   }
   scheduleDeferredAnalytics();
@@ -2350,6 +2404,12 @@ async function scheduleDeferredAnalytics() {
   if (state.analyticsReady || state.analyticsScheduled || !state.jobs.length) {
     hideComputeWaitOverlay();
     renderAccuracyReport();
+    if (PRECOMPUTE_ANALYTICS_MODE && state.analyticsReady) {
+      finishAnalyticsPrecompute(
+        true,
+        buildAnalyticsSnapshot(state.dataFingerprint),
+      );
+    }
     return;
   }
   state.analyticsScheduled = true;
@@ -2374,6 +2434,12 @@ async function scheduleDeferredAnalytics() {
     }
     renderAccuracyReport();
     updateResults();
+    if (PRECOMPUTE_ANALYTICS_MODE) {
+      finishAnalyticsPrecompute(
+        true,
+        buildAnalyticsSnapshot(state.dataFingerprint),
+      );
+    }
   } catch (_error) {
     state.analyticsReady = false;
     if (dom.computeAccuracyBtn) {
@@ -2384,10 +2450,27 @@ async function scheduleDeferredAnalytics() {
       "Accuracy processing failed. Predictions remain available.";
     dom.storeAccuracySummary.textContent =
       "Accuracy details are unavailable right now.";
+    if (PRECOMPUTE_ANALYTICS_MODE) {
+      finishAnalyticsPrecompute(false, {
+        message: _error?.message || "Accuracy processing failed.",
+      });
+    }
   } finally {
     state.analyticsScheduled = false;
     hideComputeWaitOverlay();
   }
+}
+
+function finishAnalyticsPrecompute(ok, payload) {
+  const body = document.body || document.documentElement;
+  const output = {
+    ok: Boolean(ok),
+    payload: payload || null,
+  };
+  body.innerHTML = `<pre id="analyticsPrecomputeOutput">${escapeHtml(
+    JSON.stringify(output),
+  )}</pre>`;
+  window.__ANALYTICS_PRECOMPUTE_DONE__ = output;
 }
 
 function onAccuracyFilterChange() {
