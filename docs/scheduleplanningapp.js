@@ -67,6 +67,7 @@ const state = {
   planningMode: "duration",
   targetValue: 0,
   productionShrinkPercent: 0,
+  useRecentAccountProduction: false,
   baseModelTuning: {
     overheadScale: 0.25,
     effSmall: 1.0,
@@ -357,6 +358,9 @@ const dom = {
   planningMode: document.getElementById("planningMode"),
   targetValue: document.getElementById("targetValue"),
   productionShrinkPercent: document.getElementById("productionShrinkPercent"),
+  useRecentAccountProduction: document.getElementById(
+    "useRecentAccountProduction",
+  ),
   goalHint: document.getElementById("goalHint"),
   supervisorEmployee: document.getElementById("supervisorEmployee"),
   supervisorMode: document.getElementById("supervisorMode"),
@@ -656,10 +660,13 @@ function applyBoardPrefillIfAvailable() {
   state.planningMode = "duration";
   state.targetValue = Math.max(0, toNumber(prefill.plannedDurationHours));
   state.productionShrinkPercent = 0;
+  state.useRecentAccountProduction = false;
   if (dom.planningMode) dom.planningMode.value = state.planningMode;
   if (dom.targetValue)
     dom.targetValue.value = state.targetValue > 0 ? state.targetValue : "";
   if (dom.productionShrinkPercent) dom.productionShrinkPercent.value = "";
+  if (dom.useRecentAccountProduction)
+    dom.useRecentAccountProduction.checked = false;
 
   syncRoleAssignmentsToSelectedCrew();
   pendingBoardPrefill = null;
@@ -751,12 +758,22 @@ function extractBulkEmployeeEntries(rawText) {
   }));
 }
 
-function parseBulkEmployeeNoteFlags(noteText) {
+function isUntilNoonEarlyStartNote(noteText, schedule) {
+  const note = cleanText(noteText).toLowerCase();
+  return (
+    /\b(?:until|unitl)\s+noon\b/.test(note) &&
+    parseScheduleTimeToMinutes(schedule?.startTimeText) <= 6 * 60
+  );
+}
+
+function parseBulkEmployeeNoteFlags(noteText, schedule) {
   const note = cleanText(noteText).toLowerCase();
   return {
     rx: /\brx\b/.test(note),
     training: /\btrain|\btrainer\b|\bwork\s+(?:with|w\/)\b/.test(note),
-    earlyLate: /\b(until|after)\b/.test(note),
+    earlyLate:
+      /\b(until|unitl|after)\b/.test(note) &&
+      !isUntilNoonEarlyStartNote(note, schedule),
   };
 }
 
@@ -793,7 +810,7 @@ function summarizeBulkEntryList(items, limit = 4) {
   return `${entries.slice(0, limit).join(", ")} +${entries.length - limit} more`;
 }
 
-function resolveBulkEmployeeSelection(rawText, candidateIds) {
+function resolveBulkEmployeeSelection(rawText, candidateIds, schedule) {
   const structuredEntries = extractBulkEmployeeEntries(rawText);
   const entries = structuredEntries.map((entry) => entry.name);
   const pool = Array.from(candidateIds || [])
@@ -811,7 +828,7 @@ function resolveBulkEmployeeSelection(rawText, candidateIds) {
     const normalizedEntry = cleanText(entry);
     const normalizedLower = normalizedEntry.toLowerCase();
     if (!normalizedLower) return;
-    const noteFlags = parseBulkEmployeeNoteFlags(entryObj.note);
+    const noteFlags = parseBulkEmployeeNoteFlags(entryObj.note, schedule);
     const markMatched = (employeeId) => {
       matchedIds.add(employeeId);
       if (noteFlags.rx) rxIds.add(employeeId);
@@ -1172,6 +1189,10 @@ function bindEvents() {
   dom.planningMode.addEventListener("change", onPlanningInputChange);
   dom.targetValue.addEventListener("input", onPlanningInputChange);
   dom.productionShrinkPercent?.addEventListener("input", onPlanningInputChange);
+  dom.useRecentAccountProduction?.addEventListener(
+    "change",
+    onPlanningInputChange,
+  );
   dom.detailModeBtn?.addEventListener("click", toggleDetailedView);
   dom.supervisorEmployee.addEventListener("change", onRoleConfigChange);
   dom.supervisorMode.addEventListener("change", onRoleConfigChange);
@@ -2496,9 +2517,12 @@ function resetPlanInputsForNewStore() {
   state.planningMode = "duration";
   state.targetValue = 0;
   state.productionShrinkPercent = 0;
+  state.useRecentAccountProduction = false;
   dom.planningMode.value = state.planningMode;
   dom.targetValue.value = "";
   if (dom.productionShrinkPercent) dom.productionShrinkPercent.value = "";
+  if (dom.useRecentAccountProduction)
+    dom.useRecentAccountProduction.checked = false;
   applyScheduledGoalDefault(true);
 
   if (
@@ -3474,8 +3498,13 @@ function effectiveEmployeeSpeedForRoles(
   employeeId,
   roles,
   modes,
+  options = {},
 ) {
-  const baseSpeed = displayEmployeeSpeed(employee, account);
+  const baseSpeed = resolveEmployeePlanningBaseSpeed(
+    employee,
+    account,
+    options,
+  );
   if (!employee) return baseSpeed;
   let factor = 1;
   if (roles.supervisor === employeeId) {
@@ -3505,24 +3534,54 @@ function getEmployeeMostRecentAccountProduction(employee, account) {
   };
 }
 
-function buildStaffingRankRows(store, crewIds, roles, modes, onSiteDuration) {
+function resolveEmployeePlanningBaseSpeed(employee, account, options = {}) {
+  const baseSpeed = displayEmployeeSpeed(employee, account);
+  if (!options.useRecentAccountProduction) return baseSpeed;
+  const recentPiecesPerHr = safeNumber(
+    getEmployeeMostRecentAccountProduction(employee, account).piecesPerHr,
+  );
+  if (
+    recentPiecesPerHr > 0 &&
+    baseSpeed > 0 &&
+    recentPiecesPerHr !== baseSpeed
+  ) {
+    return recentPiecesPerHr;
+  }
+  return baseSpeed;
+}
+
+function buildStaffingRankRows(
+  store,
+  crewIds,
+  roles,
+  modes,
+  onSiteDuration,
+  options = {},
+) {
   if (!store) return [];
   const predictedHours = Math.max(0, safeNumber(onSiteDuration));
   return (crewIds || [])
     .map((id) => {
       const employee = state.employees.get(id);
-      const baseSpeed = displayEmployeeSpeed(employee, store.account);
+      const originalBaseSpeed = displayEmployeeSpeed(employee, store.account);
+      const baseSpeed = resolveEmployeePlanningBaseSpeed(
+        employee,
+        store.account,
+        options,
+      );
       const effectiveSpeed = effectiveEmployeeSpeedForRoles(
         employee,
         store.account,
         id,
         roles,
         modes,
+        options,
       );
       const mostRecentAccountProduction =
         getEmployeeMostRecentAccountProduction(employee, store.account);
       return {
         id,
+        originalBaseSpeed,
         baseSpeed,
         effectiveSpeed,
         mostRecentAccountProduction,
@@ -3981,6 +4040,14 @@ function renderStoreStats() {
     noteRows.push(renderBriefItem("Store Notes", schedule.storeNotes));
   if (schedule?.notes)
     noteRows.push(renderBriefItem("Schedule Notes", schedule.notes));
+  const prediction = state.analyticsReady ? predict() : null;
+  const finishTime =
+    schedule && prediction
+      ? estimateScheduleFinishTime(
+          schedule.startTimeText,
+          prediction.onSiteDuration,
+        )
+      : "";
 
   dom.storeStats.innerHTML = `
     <div class="store-brief">
@@ -3992,6 +4059,7 @@ function renderStoreStats() {
           <div class="brief-grid">
             ${renderBriefItem("Scheduled Date", formatLongDate(schedule.date))}
             ${renderBriefItem("Start Time", schedule.startTimeText || "Not listed")}
+            ${finishTime ? renderBriefItem("Finish Time", finishTime) : ""}
             ${renderBriefItem("Customer Number", formatCustomerNumber(schedule.customerNumber))}
             ${renderBriefItem("Address", formatScheduleAddress(schedule))}
             ${renderBriefItem("Phone", schedule.phone || "Not listed")}
@@ -4224,7 +4292,11 @@ function onEmployeeFilterKeyDown(event) {
 
   const query = (dom.employeeFilter.value || "").trim().toLowerCase();
   if (!query) return;
-  const bulk = resolveBulkEmployeeSelection(query, getSchedulableEmployeeIds());
+  const bulk = resolveBulkEmployeeSelection(
+    query,
+    getSchedulableEmployeeIds(),
+    getPrimaryScheduleForStore(),
+  );
   if (bulk.entries.length > 1) {
     bulk.matchedIds.forEach((id) => state.selectedEmployees.add(id));
     const assignedSupervisor = assignFirstBulkSupervisorToSelectedStore(
@@ -4270,6 +4342,7 @@ function onEmployeeFilterPaste(event) {
   const bulk = resolveBulkEmployeeSelection(
     rawText,
     getSchedulableEmployeeIds(),
+    getPrimaryScheduleForStore(),
   );
   if (bulk.entries.length <= 1) return;
   event.preventDefault();
@@ -4329,6 +4402,9 @@ function onPlanningInputChange() {
   state.targetValue = Math.max(0, toNumber(dom.targetValue.value));
   state.productionShrinkPercent = normalizeProductionShrinkPercent(
     dom.productionShrinkPercent?.value,
+  );
+  state.useRecentAccountProduction = Boolean(
+    dom.useRecentAccountProduction?.checked,
   );
   persistToStorage();
   updateResults();
@@ -4436,6 +4512,7 @@ function predict() {
         state.employees.get(name),
         state.selectedStoreKey,
         store.account,
+        { useRecentAccountProduction: state.useRecentAccountProduction },
       ),
     )
     .filter((v) => v > 0);
@@ -4495,11 +4572,13 @@ function predict() {
         state.employees.get(id),
         state.selectedStoreKey,
         store.account,
+        { useRecentAccountProduction: state.useRecentAccountProduction },
       ),
     })),
     baselinePieces: baseline.value,
     productionShrinkPercent,
     productionShrinkFactor,
+    useRecentAccountProduction: state.useRecentAccountProduction,
     crewSpeedBeforeShrink,
     baselineSource: baseline.source,
     baselineMode: baseline.modeLabel,
@@ -4837,6 +4916,7 @@ function updateResults() {
       waitMessage,
       state.analyticsScheduled ? "info" : "warning",
     );
+    renderStoreStats();
     renderScenarios(null);
     return;
   }
@@ -4866,6 +4946,7 @@ function updateResults() {
               : "Choose your crew to view the plan preview.";
     const needsAttention = missingSupervisor || missingRxRole;
     setPredictionMeta(metaMessage, needsAttention ? "warning" : "info");
+    renderStoreStats();
     renderScenarios(null);
     return;
   }
@@ -4882,6 +4963,7 @@ function updateResults() {
     buildPlainEnglishEstimateReason(prediction),
     "info",
   );
+  renderStoreStats();
   renderScenarios(prediction);
 }
 
@@ -4936,6 +5018,13 @@ function buildPlainEnglishEstimateReason(prediction) {
       1,
       0,
       `A ${formatNumber(prediction.productionShrinkPercent, 0)}% production filter reduced crew output from ${formatNumber(prediction.crewSpeedBeforeShrink, 0)} pieces per hour.`,
+    );
+  }
+  if (prediction.useRecentAccountProduction) {
+    pieces.splice(
+      1,
+      0,
+      "Arrowed employees are planned from their most recent account production.",
     );
   }
   if (prediction.roleAssignments?.supervisor) {
@@ -5009,6 +5098,7 @@ function renderScenarios(prediction) {
     prediction.roleAssignments,
     prediction.roleModes,
     prediction.onSiteDuration,
+    { useRecentAccountProduction: state.useRecentAccountProduction },
   );
 
   if (ranked.length === 0) {
@@ -5086,7 +5176,11 @@ function renderDetailedBackground(rankedRows = []) {
     ? rankedRows
     : Array.from(state.selectedEmployees || []).map((id) => {
         const employee = state.employees.get(id);
-        const baseSpeed = displayEmployeeSpeed(employee, store.account);
+        const baseSpeed = resolveEmployeePlanningBaseSpeed(
+          employee,
+          store.account,
+          { useRecentAccountProduction: state.useRecentAccountProduction },
+        );
         return {
           id,
           baseSpeed,
@@ -6588,6 +6682,7 @@ function persistToStorage() {
     planningMode: state.planningMode,
     targetValue: state.targetValue,
     productionShrinkPercent: state.productionShrinkPercent,
+    useRecentAccountProduction: state.useRecentAccountProduction,
     selectedRolesByStore: state.selectedRolesByStore,
     roleModesByStore: state.roleModesByStore,
   };
@@ -6616,6 +6711,9 @@ function restoreSettingsFromStorage() {
   state.productionShrinkPercent = normalizeProductionShrinkPercent(
     settings.productionShrinkPercent,
   );
+  state.useRecentAccountProduction = Boolean(
+    settings.useRecentAccountProduction,
+  );
   state.storeScheduleFilter = "all";
   state.selectedRolesByStore =
     settings.selectedRolesByStore &&
@@ -6632,6 +6730,9 @@ function restoreSettingsFromStorage() {
   if (dom.productionShrinkPercent) {
     dom.productionShrinkPercent.value =
       state.productionShrinkPercent > 0 ? state.productionShrinkPercent : "";
+  }
+  if (dom.useRecentAccountProduction) {
+    dom.useRecentAccountProduction.checked = state.useRecentAccountProduction;
   }
   renderRoleSelectors();
 }
@@ -7052,8 +7153,9 @@ function effectiveEmployeeSpeed(
   employee,
   storeKey = state.selectedStoreKey,
   account = getSelectedAccount(),
+  options = {},
 ) {
-  const baseSpeed = displayEmployeeSpeed(employee, account);
+  const baseSpeed = resolveEmployeePlanningBaseSpeed(employee, account, options);
   if (!employee) return baseSpeed;
   const factor = getContributionFactorForEmployee(employee.employee, storeKey);
   return baseSpeed * factor;
@@ -7373,6 +7475,24 @@ function parseScheduleTimeToMinutes(value) {
   const meridiem = String(match[3] || "").toLowerCase();
   if (meridiem === "pm") hours += 12;
   return hours * 60 + minutes;
+}
+
+function estimateScheduleFinishTime(startTime, durationHours) {
+  const startMinutes = parseScheduleTimeToMinutes(startTime);
+  const durationMinutes = Math.round(safeNumber(durationHours) * 60);
+  if (!Number.isFinite(startMinutes) || !(durationMinutes > 0)) return "";
+  return formatScheduleMinutesAsTime(startMinutes + durationMinutes);
+}
+
+function formatScheduleMinutesAsTime(totalMinutes) {
+  const minutesInDay = 24 * 60;
+  const normalized =
+    ((Math.round(totalMinutes) % minutesInDay) + minutesInDay) % minutesInDay;
+  const hours24 = Math.floor(normalized / 60);
+  const minutes = normalized % 60;
+  const suffix = hours24 >= 12 ? "PM" : "AM";
+  const hours12 = hours24 % 12 || 12;
+  return `${hours12}:${String(minutes).padStart(2, "0")} ${suffix}`;
 }
 
 function canonicalizeStoreName(value) {
