@@ -3654,19 +3654,19 @@ function renderCompareResult(result, goalMode, goalA, goalB) {
       <div class="cards compare-store-cards">
         <article class="card">
           <h3>Estimated In-Store Time</h3>
-          <p class="value">${formatNumber(result.predA.onSiteDuration, 2)} hrs</p>
+          <p class="value">${formatNumber(result.predA.onSiteDuration, 1)} hrs</p>
         </article>
         <article class="card">
           <h3>Estimated Man-Hours</h3>
-          <p class="value">${formatNumber(result.predA.manHours, 2)} man-hours</p>
+          <p class="value">${formatNumber(result.predA.manHours, 1)} man-hours</p>
         </article>
         <article class="card">
           <h3>Likely On-Site Range</h3>
-          <p class="value">${formatNumber(result.predA.confidenceLow, 2)} - ${formatNumber(result.predA.confidenceHigh, 2)} hrs</p>
+          <p class="value">${formatNumber(result.predA.confidenceLow, 1)} - ${formatNumber(result.predA.confidenceHigh, 1)} hrs</p>
         </article>
         <article class="card">
           <h3>Difference From Goal</h3>
-          <p class="value">${formatSigned(deltaA, 2)} ${unit}</p>
+          <p class="value">${formatSigned(deltaA, 1)} ${unit}</p>
         </article>
       </div>
       <table class="compare-rank-table">
@@ -3686,19 +3686,19 @@ function renderCompareResult(result, goalMode, goalA, goalB) {
       <div class="cards compare-store-cards">
         <article class="card">
           <h3>Estimated In-Store Time</h3>
-          <p class="value">${formatNumber(result.predB.onSiteDuration, 2)} hrs</p>
+          <p class="value">${formatNumber(result.predB.onSiteDuration, 1)} hrs</p>
         </article>
         <article class="card">
           <h3>Estimated Man-Hours</h3>
-          <p class="value">${formatNumber(result.predB.manHours, 2)} man-hours</p>
+          <p class="value">${formatNumber(result.predB.manHours, 1)} man-hours</p>
         </article>
         <article class="card">
           <h3>Likely On-Site Range</h3>
-          <p class="value">${formatNumber(result.predB.confidenceLow, 2)} - ${formatNumber(result.predB.confidenceHigh, 2)} hrs</p>
+          <p class="value">${formatNumber(result.predB.confidenceLow, 1)} - ${formatNumber(result.predB.confidenceHigh, 1)} hrs</p>
         </article>
         <article class="card">
           <h3>Difference From Goal</h3>
-          <p class="value">${formatSigned(deltaB, 2)} ${unit}</p>
+          <p class="value">${formatSigned(deltaB, 1)} ${unit}</p>
         </article>
       </div>
       <table class="compare-rank-table">
