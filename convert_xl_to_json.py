@@ -6,6 +6,7 @@ import http.server
 import json
 import logging
 import os
+import re
 import shutil
 import socket
 import struct
@@ -29,6 +30,10 @@ ANALYTICS_SNAPSHOT_NAME = "ScheduleAnalyticsSnapshot.json"
 EXCEL_EXTENSIONS = (".xlsx", ".xlsm", ".xls")
 MODE_LOCAL_ONLY = "local"
 MODE_FULL = "full"
+SCHEDULE_PLANNING_HTML_PATHS = (
+    "public/scheduleplanning.html",
+    "docs/scheduleplanning.html",
+)
 
 
 def get_excel_engine(excel_path: Path) -> str | None:
@@ -77,6 +82,31 @@ def copy_json_to_targets(json_path: Path, repo_root: Path, targets: list[str]):
             continue
         shutil.copy2(json_path, dest_file)
         logging.info("Copied JSON -> %s", dest_file)
+
+
+def bump_schedule_planning_asset_versions(repo_root: Path):
+    """
+    Force browsers to request the latest planner JS/CSS after data updates.
+    """
+    version = time.strftime("%Y%m%d-%H%M%S")
+    pattern = re.compile(
+        r"(scheduleplanning(?:app\.js|style\.css)\?v=)[A-Za-z0-9._-]+"
+    )
+
+    for rel_path in SCHEDULE_PLANNING_HTML_PATHS:
+        html_path = repo_root / rel_path
+        if not html_path.exists():
+            logging.warning("Schedule planning HTML not found: %s", html_path)
+            continue
+
+        original = html_path.read_text(encoding="utf-8")
+        updated = pattern.sub(rf"\g<1>{version}", original)
+        if updated == original:
+            logging.warning("No schedule planning asset versions found in %s", html_path)
+            continue
+
+        html_path.write_text(updated, encoding="utf-8")
+        logging.info("Updated schedule planning asset version -> %s", html_path)
 
 
 def run_npm_build(repo_root: Path) -> bool:
@@ -575,6 +605,8 @@ def main():
     if not args.skip_analytics_precompute:
         if not precompute_analytics_snapshot(repo_root, args.analytics_timeout):
             return 1
+
+    bump_schedule_planning_asset_versions(repo_root)
 
     if not run_npm_build(repo_root):
         return 1
