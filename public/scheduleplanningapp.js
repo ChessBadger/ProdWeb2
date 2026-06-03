@@ -265,10 +265,14 @@ const ANALYTICS_DB_NAME = "crew_predictor_analytics";
 const ANALYTICS_DB_VERSION = 1;
 const ANALYTICS_DB_STORE = "snapshots";
 const ANALYTICS_DB_SNAPSHOT_ID = "latest";
-const HISTORY_JSON_PATH = "data/EmployeeProductionExport.json";
-const ACTIVE_EMPLOYEE_JSON_PATH = "data/EmployeeProductionExport.json";
-const SCHEDULE_JSON_PATH = "data/ScheduleFinalFull.json";
-const PRECOMPUTED_ANALYTICS_JSON_PATH = "data/ScheduleAnalyticsSnapshot.json";
+const DATA_ASSET_VERSION = "20260603-2";
+const withDataAssetVersion = (path) => `${path}?v=${DATA_ASSET_VERSION}`;
+const HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
+const ACTIVE_EMPLOYEE_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
+const SCHEDULE_JSON_PATH = withDataAssetVersion("data/ScheduleFinalFull.json");
+const PRECOMPUTED_ANALYTICS_JSON_PATH = withDataAssetVersion(
+  "data/ScheduleAnalyticsSnapshot.json",
+);
 const runtimeConfig = window.__BADGER_RUNTIME_CONFIG__ || {};
 const PRECOMPUTE_ANALYTICS_MODE = new URLSearchParams(
   window.location.search || "",

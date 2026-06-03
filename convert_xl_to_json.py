@@ -34,6 +34,10 @@ SCHEDULE_PLANNING_HTML_PATHS = (
     "public/scheduleplanning.html",
     "docs/scheduleplanning.html",
 )
+SCHEDULE_PLANNING_APP_PATHS = (
+    "public/scheduleplanningapp.js",
+    "docs/scheduleplanningapp.js",
+)
 
 
 def get_excel_engine(excel_path: Path) -> str | None:
@@ -86,11 +90,14 @@ def copy_json_to_targets(json_path: Path, repo_root: Path, targets: list[str]):
 
 def bump_schedule_planning_asset_versions(repo_root: Path):
     """
-    Force browsers to request the latest planner JS/CSS after data updates.
+    Force browsers to request the latest planner JS/CSS/JSON after data updates.
     """
     version = time.strftime("%Y%m%d-%H%M%S")
-    pattern = re.compile(
+    html_pattern = re.compile(
         r"(scheduleplanning(?:app\.js|style\.css)\?v=)[A-Za-z0-9._-]+"
+    )
+    data_pattern = re.compile(
+        r'(const DATA_ASSET_VERSION = ")[^"]+(";)',
     )
 
     for rel_path in SCHEDULE_PLANNING_HTML_PATHS:
@@ -100,13 +107,28 @@ def bump_schedule_planning_asset_versions(repo_root: Path):
             continue
 
         original = html_path.read_text(encoding="utf-8")
-        updated = pattern.sub(rf"\g<1>{version}", original)
+        updated = html_pattern.sub(rf"\g<1>{version}", original)
         if updated == original:
             logging.warning("No schedule planning asset versions found in %s", html_path)
             continue
 
         html_path.write_text(updated, encoding="utf-8")
         logging.info("Updated schedule planning asset version -> %s", html_path)
+
+    for rel_path in SCHEDULE_PLANNING_APP_PATHS:
+        app_path = repo_root / rel_path
+        if not app_path.exists():
+            logging.warning("Schedule planning app JS not found: %s", app_path)
+            continue
+
+        original = app_path.read_text(encoding="utf-8")
+        updated = data_pattern.sub(rf"\g<1>{version}\g<2>", original)
+        if updated == original:
+            logging.warning("No schedule planning data version found in %s", app_path)
+            continue
+
+        app_path.write_text(updated, encoding="utf-8")
+        logging.info("Updated schedule planning data version -> %s", app_path)
 
 
 def run_npm_build(repo_root: Path) -> bool:
