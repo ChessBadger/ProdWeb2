@@ -67,6 +67,8 @@ const state = {
   planningMode: "duration",
   targetValue: 0,
   productionShrinkPercent: 0,
+  productionShrinkMode: "all",
+  productionShrinkEmployeeIds: new Set(),
   useRecentAccountProduction: false,
   baseModelTuning: {
     overheadScale: 0.25,
@@ -265,7 +267,7 @@ const ANALYTICS_DB_NAME = "crew_predictor_analytics";
 const ANALYTICS_DB_VERSION = 1;
 const ANALYTICS_DB_STORE = "snapshots";
 const ANALYTICS_DB_SNAPSHOT_ID = "latest";
-const DATA_ASSET_VERSION = "20260603-141748";
+const DATA_ASSET_VERSION = "20260604-110057";
 const withDataAssetVersion = (path) => `${path}?v=${DATA_ASSET_VERSION}`;
 const HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
 const ACTIVE_EMPLOYEE_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
@@ -366,6 +368,9 @@ const dom = {
   planningMode: document.getElementById("planningMode"),
   targetValue: document.getElementById("targetValue"),
   productionShrinkPercent: document.getElementById("productionShrinkPercent"),
+  productionShrinkMode: document.getElementById("productionShrinkMode"),
+  productionShrinkEmployees: document.getElementById("productionShrinkEmployees"),
+  productionShrinkHelp: document.getElementById("productionShrinkHelp"),
   useRecentAccountProduction: document.getElementById(
     "useRecentAccountProduction",
   ),
@@ -674,14 +679,18 @@ function applyBoardPrefillIfAvailable() {
   state.planningMode = "duration";
   state.targetValue = Math.max(0, toNumber(prefill.plannedDurationHours));
   state.productionShrinkPercent = 0;
+  state.productionShrinkMode = "all";
+  state.productionShrinkEmployeeIds = new Set();
   state.useRecentAccountProduction = false;
   if (dom.planningMode) dom.planningMode.value = state.planningMode;
   if (dom.targetValue)
     dom.targetValue.value = state.targetValue > 0 ? state.targetValue : "";
   if (dom.productionShrinkPercent) dom.productionShrinkPercent.value = "";
+  if (dom.productionShrinkMode) dom.productionShrinkMode.value = "all";
   if (dom.useRecentAccountProduction)
     dom.useRecentAccountProduction.checked = false;
 
+  renderProductionShrinkEmployees();
   syncRoleAssignmentsToSelectedCrew();
   pendingBoardPrefill = null;
   clearBoardPrefillFromUrl();
@@ -1203,6 +1212,11 @@ function bindEvents() {
   dom.planningMode.addEventListener("change", onPlanningInputChange);
   dom.targetValue.addEventListener("input", onPlanningInputChange);
   dom.productionShrinkPercent?.addEventListener("input", onPlanningInputChange);
+  dom.productionShrinkMode?.addEventListener("change", onPlanningInputChange);
+  dom.productionShrinkEmployees?.addEventListener(
+    "change",
+    onPlanningInputChange,
+  );
   dom.useRecentAccountProduction?.addEventListener(
     "change",
     onPlanningInputChange,
@@ -2604,12 +2618,16 @@ function resetPlanInputsForNewStore() {
   state.planningMode = "duration";
   state.targetValue = 0;
   state.productionShrinkPercent = 0;
+  state.productionShrinkMode = "all";
+  state.productionShrinkEmployeeIds = new Set();
   state.useRecentAccountProduction = false;
   dom.planningMode.value = state.planningMode;
   dom.targetValue.value = "";
   if (dom.productionShrinkPercent) dom.productionShrinkPercent.value = "";
+  if (dom.productionShrinkMode) dom.productionShrinkMode.value = "all";
   if (dom.useRecentAccountProduction)
     dom.useRecentAccountProduction.checked = false;
+  renderProductionShrinkEmployees();
   applyScheduledGoalDefault(true);
 
   if (
@@ -3664,15 +3682,22 @@ function buildStaffingRankRows(
         modes,
         options,
       );
+      const productionShrinkFactor = getEmployeeProductionShrinkFactor(
+        id,
+        options.productionShrinkMode,
+        new Set(options.productionShrinkEmployeeIds || []),
+        safeNumber(options.productionShrinkFactor) || 1,
+      );
+      const adjustedEffectiveSpeed = effectiveSpeed * productionShrinkFactor;
       const mostRecentAccountProduction =
         getEmployeeMostRecentAccountProduction(employee, store.account);
       return {
         id,
         originalBaseSpeed,
         baseSpeed,
-        effectiveSpeed,
+        effectiveSpeed: adjustedEffectiveSpeed,
         mostRecentAccountProduction,
-        predictedPieces: effectiveSpeed * predictedHours,
+        predictedPieces: adjustedEffectiveSpeed * predictedHours,
       };
     })
     .filter((row) => row.baseSpeed > 0 || row.effectiveSpeed > 0)
@@ -4331,9 +4356,11 @@ function renderEmployeeList() {
     checkbox.addEventListener("change", () => {
       if (checkbox.checked) state.selectedEmployees.add(emp.employee);
       else state.selectedEmployees.delete(emp.employee);
+      syncProductionShrinkSelectionToCrew();
       syncRoleAssignmentsToSelectedCrew();
       renderRoleSelectors();
       renderSelectedCrewChips();
+      renderProductionShrinkEmployees();
       persistToStorage();
       updateResults();
     });
@@ -4372,6 +4399,76 @@ function renderSelectedCrewChips() {
     .join("");
 }
 
+function renderProductionShrinkEmployees() {
+  if (!dom.productionShrinkEmployees) return;
+  const mode = normalizeProductionShrinkMode(state.productionShrinkMode);
+  syncProductionShrinkSelectionToCrew();
+  dom.productionShrinkEmployees.classList.toggle(
+    "is-hidden",
+    mode !== "selected",
+  );
+  dom.productionShrinkEmployees.innerHTML = "";
+
+  if (dom.productionShrinkHelp) {
+    const percent = normalizeProductionShrinkPercent(
+      state.productionShrinkPercent,
+    );
+    dom.productionShrinkHelp.textContent =
+      mode === "none"
+        ? "Production shrink is ignored for this plan."
+        : mode === "selected"
+          ? `Apply the ${formatNumber(percent, 0)}% shrink only to checked crew members.`
+          : `Apply the ${formatNumber(percent, 0)}% shrink to every selected crew member.`;
+  }
+
+  if (mode !== "selected") return;
+
+  const selected = Array.from(state.selectedEmployees || [])
+    .filter(Boolean)
+    .sort(compareEmployeesByDisplayName);
+  if (!selected.length) {
+    dom.productionShrinkEmployees.innerHTML =
+      '<div class="muted">Select crew members first.</div>';
+    return;
+  }
+
+  const shrinkSelected = new Set(state.productionShrinkEmployeeIds || []);
+  const fragment = document.createDocumentFragment();
+  selected.forEach((id) => {
+    const row = document.createElement("label");
+    row.className = "role-check-item";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.value = id;
+    checkbox.checked = shrinkSelected.has(id);
+    const text = document.createElement("span");
+    text.textContent = getEmployeeDisplayName(id);
+    row.appendChild(checkbox);
+    row.appendChild(text);
+    fragment.appendChild(row);
+  });
+  dom.productionShrinkEmployees.appendChild(fragment);
+}
+
+function getCheckedProductionShrinkEmployeeIds() {
+  return Array.from(
+    dom.productionShrinkEmployees?.querySelectorAll(
+      'input[type="checkbox"]:checked',
+    ) || [],
+  )
+    .map((el) => el.value)
+    .filter(Boolean);
+}
+
+function syncProductionShrinkSelectionToCrew() {
+  const selectedSet = new Set(state.selectedEmployees || []);
+  state.productionShrinkEmployeeIds = new Set(
+    Array.from(state.productionShrinkEmployeeIds || []).filter((id) =>
+      selectedSet.has(id),
+    ),
+  );
+}
+
 function onEmployeeFilterKeyDown(event) {
   if (event.key !== "Enter") return;
   event.preventDefault();
@@ -4386,12 +4483,14 @@ function onEmployeeFilterKeyDown(event) {
   );
   if (bulk.entries.length > 1) {
     bulk.matchedIds.forEach((id) => state.selectedEmployees.add(id));
+    syncProductionShrinkSelectionToCrew();
     const assignedSupervisor = assignFirstBulkSupervisorToSelectedStore(
       bulk.matchedIds,
     );
     applyBulkRoleHintsToSelectedStore(bulk);
     syncRoleAssignmentsToSelectedCrew();
     renderRoleSelectors();
+    renderProductionShrinkEmployees();
     persistToStorage();
     dom.employeeFilter.value = "";
     renderEmployeeList();
@@ -4414,8 +4513,10 @@ function onEmployeeFilterKeyDown(event) {
   if (!chosen) return;
 
   state.selectedEmployees.add(chosen);
+  syncProductionShrinkSelectionToCrew();
   syncRoleAssignmentsToSelectedCrew();
   renderRoleSelectors();
+  renderProductionShrinkEmployees();
   persistToStorage();
   renderEmployeeList();
   updateResults();
@@ -4434,12 +4535,14 @@ function onEmployeeFilterPaste(event) {
   if (bulk.entries.length <= 1) return;
   event.preventDefault();
   bulk.matchedIds.forEach((id) => state.selectedEmployees.add(id));
+  syncProductionShrinkSelectionToCrew();
   const assignedSupervisor = assignFirstBulkSupervisorToSelectedStore(
     bulk.matchedIds,
   );
   applyBulkRoleHintsToSelectedStore(bulk);
   syncRoleAssignmentsToSelectedCrew();
   renderRoleSelectors();
+  renderProductionShrinkEmployees();
   persistToStorage();
   dom.employeeFilter.value = "";
   renderEmployeeList();
@@ -4490,9 +4593,17 @@ function onPlanningInputChange() {
   state.productionShrinkPercent = normalizeProductionShrinkPercent(
     dom.productionShrinkPercent?.value,
   );
+  state.productionShrinkMode = normalizeProductionShrinkMode(
+    dom.productionShrinkMode?.value,
+  );
+  state.productionShrinkEmployeeIds = new Set(
+    getCheckedProductionShrinkEmployeeIds(),
+  );
+  syncProductionShrinkSelectionToCrew();
   state.useRecentAccountProduction = Boolean(
     dom.useRecentAccountProduction?.checked,
   );
+  renderProductionShrinkEmployees();
   persistToStorage();
   updateResults();
 }
@@ -4515,8 +4626,10 @@ function updateDetailedViewVisibility() {
 
 function clearEmployees() {
   state.selectedEmployees.clear();
+  syncProductionShrinkSelectionToCrew();
   syncRoleAssignmentsToSelectedCrew();
   renderRoleSelectors();
+  renderProductionShrinkEmployees();
   persistToStorage();
   setEmployeeBulkStatus("");
   renderEmployeeList();
@@ -4525,8 +4638,10 @@ function clearEmployees() {
 
 function selectVisibleEmployees() {
   state.visibleEmployees.forEach((name) => state.selectedEmployees.add(name));
+  syncProductionShrinkSelectionToCrew();
   syncRoleAssignmentsToSelectedCrew();
   renderRoleSelectors();
+  renderProductionShrinkEmployees();
   persistToStorage();
   renderEmployeeList();
   updateResults();
@@ -4544,6 +4659,7 @@ function selectLastCrew() {
   const activeSupervisor = allowed.has(supervisor) ? supervisor : "";
   if (activeSupervisor) selected.add(activeSupervisor);
   state.selectedEmployees = selected;
+  syncProductionShrinkSelectionToCrew();
 
   const storeKey = state.selectedStoreKey;
   if (storeKey) {
@@ -4555,6 +4671,7 @@ function selectLastCrew() {
   }
   syncRoleAssignmentsToSelectedCrew();
   renderRoleSelectors();
+  renderProductionShrinkEmployees();
   persistToStorage();
   renderEmployeeList();
   updateResults();
@@ -4588,6 +4705,12 @@ function predict() {
     store.primaryType,
   );
   const productionShrinkPercent = state.productionShrinkPercent;
+  const productionShrinkMode = normalizeProductionShrinkMode(
+    state.productionShrinkMode,
+  );
+  const productionShrinkEmployeeIds = new Set(
+    Array.from(state.productionShrinkEmployeeIds || []),
+  );
   const productionShrinkFactor = getProductionShrinkFactor(
     productionShrinkPercent,
   );
@@ -4600,15 +4723,32 @@ function predict() {
         state.selectedStoreKey,
         store.account,
         { useRecentAccountProduction: state.useRecentAccountProduction },
-      ),
+      ) *
+        getEmployeeProductionShrinkFactor(
+          name,
+          productionShrinkMode,
+          productionShrinkEmployeeIds,
+          productionShrinkFactor,
+        ),
     )
     .filter((v) => v > 0);
 
   const crewSpeedRaw = crewSpeeds.reduce((sum, n) => sum + n, 0);
   const crewSize = crewSpeeds.length;
   const crewEfficiency = getCrewEfficiencyFactor(crewSize, tuning);
-  const crewSpeedBeforeShrink = crewSpeedRaw * crewEfficiency;
-  const crewSpeed = crewSpeedBeforeShrink * productionShrinkFactor;
+  const crewSpeed = crewSpeedRaw * crewEfficiency;
+  const crewSpeedBeforeShrink =
+    selectedRaw
+      .map((name) =>
+        effectiveEmployeeSpeed(
+          state.employees.get(name),
+          state.selectedStoreKey,
+          store.account,
+          { useRecentAccountProduction: state.useRecentAccountProduction },
+        ),
+      )
+      .filter((v) => v > 0)
+      .reduce((sum, n) => sum + n, 0) * crewEfficiency;
 
   if (!(baseline.value > 0) || !(crewSpeedBeforeShrink > 0) || crewSize === 0)
     return null;
@@ -4664,6 +4804,8 @@ function predict() {
     })),
     baselinePieces: baseline.value,
     productionShrinkPercent,
+    productionShrinkMode,
+    productionShrinkEmployeeIds: Array.from(productionShrinkEmployeeIds),
     productionShrinkFactor,
     useRecentAccountProduction: state.useRecentAccountProduction,
     crewSpeedBeforeShrink,
@@ -4717,8 +4859,27 @@ function normalizeProductionShrinkPercent(value) {
   return Math.max(0, Math.min(100, percent));
 }
 
+function normalizeProductionShrinkMode(value) {
+  return ["all", "selected", "none"].includes(value) ? value : "all";
+}
+
 function getProductionShrinkFactor(percent) {
   return Math.max(0.01, 1 - normalizeProductionShrinkPercent(percent) / 100);
+}
+
+function getEmployeeProductionShrinkFactor(
+  employeeId,
+  mode,
+  selectedEmployeeIds,
+  shrinkFactor,
+) {
+  if (normalizeProductionShrinkPercent(state.productionShrinkPercent) <= 0)
+    return 1;
+  const normalizedMode = normalizeProductionShrinkMode(mode);
+  if (normalizedMode === "none") return 1;
+  if (normalizedMode === "selected")
+    return selectedEmployeeIds?.has(employeeId) ? shrinkFactor : 1;
+  return shrinkFactor;
 }
 
 function resolveBaselinePieces(
@@ -5101,10 +5262,16 @@ function buildPlainEnglishEstimateReason(prediction) {
     `Store complexity and recent history ${correctionVerb} ${formatNumber(Math.abs(historicalCorrection), 1)} hrs ${historicalCorrection >= 0 ? "to" : "from"} the estimate.`,
   ];
   if (safeNumber(prediction.productionShrinkPercent) > 0) {
+    const shrinkTarget =
+      prediction.productionShrinkMode === "selected"
+        ? `${prediction.productionShrinkEmployeeIds?.length || 0} checked employee${(prediction.productionShrinkEmployeeIds?.length || 0) === 1 ? "" : "s"}`
+        : prediction.productionShrinkMode === "none"
+          ? "no employees"
+          : "all selected employees";
     pieces.splice(
       1,
       0,
-      `A ${formatNumber(prediction.productionShrinkPercent, 0)}% production filter reduced crew output from ${formatNumber(prediction.crewSpeedBeforeShrink, 0)} pieces per hour.`,
+      `A ${formatNumber(prediction.productionShrinkPercent, 0)}% production filter applied to ${shrinkTarget}, changing crew output from ${formatNumber(prediction.crewSpeedBeforeShrink, 0)} to ${formatNumber(prediction.crewSpeed, 0)} pieces per hour.`,
     );
   }
   if (prediction.useRecentAccountProduction) {
@@ -5185,7 +5352,12 @@ function renderScenarios(prediction) {
     prediction.roleAssignments,
     prediction.roleModes,
     prediction.onSiteDuration,
-    { useRecentAccountProduction: state.useRecentAccountProduction },
+    {
+      useRecentAccountProduction: state.useRecentAccountProduction,
+      productionShrinkMode: prediction.productionShrinkMode,
+      productionShrinkEmployeeIds: prediction.productionShrinkEmployeeIds,
+      productionShrinkFactor: prediction.productionShrinkFactor,
+    },
   );
 
   if (ranked.length === 0) {
@@ -6769,6 +6941,10 @@ function persistToStorage() {
     planningMode: state.planningMode,
     targetValue: state.targetValue,
     productionShrinkPercent: state.productionShrinkPercent,
+    productionShrinkMode: state.productionShrinkMode,
+    productionShrinkEmployeeIds: Array.from(
+      state.productionShrinkEmployeeIds || [],
+    ),
     useRecentAccountProduction: state.useRecentAccountProduction,
     selectedRolesByStore: state.selectedRolesByStore,
     roleModesByStore: state.roleModesByStore,
@@ -6798,6 +6974,13 @@ function restoreSettingsFromStorage() {
   state.productionShrinkPercent = normalizeProductionShrinkPercent(
     settings.productionShrinkPercent,
   );
+  state.productionShrinkMode = normalizeProductionShrinkMode(
+    settings.productionShrinkMode,
+  );
+  state.productionShrinkEmployeeIds = new Set(
+    uniqueStrings(settings.productionShrinkEmployeeIds || []),
+  );
+  syncProductionShrinkSelectionToCrew();
   state.useRecentAccountProduction = Boolean(
     settings.useRecentAccountProduction,
   );
@@ -6818,10 +7001,14 @@ function restoreSettingsFromStorage() {
     dom.productionShrinkPercent.value =
       state.productionShrinkPercent > 0 ? state.productionShrinkPercent : "";
   }
+  if (dom.productionShrinkMode) {
+    dom.productionShrinkMode.value = state.productionShrinkMode;
+  }
   if (dom.useRecentAccountProduction) {
     dom.useRecentAccountProduction.checked = state.useRecentAccountProduction;
   }
   renderRoleSelectors();
+  renderProductionShrinkEmployees();
 }
 
 function readSavedCrew(storeKey) {

@@ -1092,6 +1092,25 @@ th {
   margin: 0;
 }
 
+.production-shrink-employees {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.38rem;
+  max-height: 150px;
+  overflow: auto;
+}
+
+.production-shrink-employees.is-hidden {
+  display: none;
+}
+
+.production-shrink-employees .role-check-item {
+  padding: 0.48rem 0.56rem;
+  border: 1px solid #dce5ef;
+  border-radius: 10px;
+  background: #ffffff;
+}
+
 .planning-toggle-row {
   display: grid;
   grid-template-columns: auto 1fr;

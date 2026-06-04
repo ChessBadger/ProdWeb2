@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Shift Crew Planner</title>
-  <link rel="stylesheet" href="scheduleplanningstyle.css?v=20260603-141748" />
+  <link rel="stylesheet" href="scheduleplanningstyle.css?v=20260604-110057" />
 </head>
 <body>
   <header class="topbar">
@@ -69,7 +69,13 @@
         <div class="custom-goal-row production-shrink-row">
           <label class="field-label" for="productionShrinkPercent">Production Shrink %</label>
           <input id="productionShrinkPercent" type="number" min="0" max="100" step="1" placeholder="0" />
-          <p class="help muted">Example: 10 uses 90% of the store's usual production.</p>
+          <select id="productionShrinkMode" aria-label="Production shrink target">
+            <option value="all" selected>All selected crew</option>
+            <option value="selected">Checked crew only</option>
+            <option value="none">Nobody</option>
+          </select>
+          <div id="productionShrinkEmployees" class="production-shrink-employees"></div>
+          <p id="productionShrinkHelp" class="help muted">Example: 10 uses 90% of each selected employee's production.</p>
         </div>
         <label class="planning-toggle-row">
           <input id="useRecentAccountProduction" type="checkbox" />
@@ -390,6 +396,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
   <script src="runtime-config.js?v=20260501-1"></script>
-  <script src="scheduleplanningapp.js?v=20260603-141748"></script>
+  <script src="scheduleplanningapp.js?v=20260604-110057"></script>
 </body>
 </html>
