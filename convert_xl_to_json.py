@@ -193,6 +193,30 @@ def run_local_http_server(repo_root: Path):
     return server, port
 
 
+def terminate_process_tree(process: subprocess.Popen, timeout_seconds: int = 5):
+    if process.poll() is not None:
+        return
+
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        try:
+            process.wait(timeout=timeout_seconds)
+        except subprocess.TimeoutExpired:
+            pass
+        return
+
+    process.terminate()
+    try:
+        process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        process.kill()
+
+
 def websocket_recv_exact(sock: socket.socket, length: int) -> bytes:
     chunks = []
     remaining = length
@@ -365,7 +389,10 @@ def precompute_analytics_snapshot(repo_root: Path, timeout_seconds: int) -> bool
     server, port = run_local_http_server(repo_root)
     debug_port = find_free_port()
     url = f"http://127.0.0.1:{port}/public/scheduleplanning.html?precomputeAnalytics=1"
-    user_data_parent = tempfile.TemporaryDirectory(prefix="analytics-precompute-")
+    user_data_parent = tempfile.TemporaryDirectory(
+        prefix="analytics-precompute-",
+        ignore_cleanup_errors=True,
+    )
     user_data_dir = Path(user_data_parent.name) / "profile"
 
     command = [
@@ -427,12 +454,8 @@ def precompute_analytics_snapshot(repo_root: Path, timeout_seconds: int) -> bool
                 logging.error("Headless browser stderr:\n%s", stderr[-4000:].rstrip())
         return False
     finally:
-        if process and process.poll() is None:
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                process.kill()
+        if process:
+            terminate_process_tree(process)
         server.shutdown()
         server.server_close()
         user_data_parent.cleanup()
