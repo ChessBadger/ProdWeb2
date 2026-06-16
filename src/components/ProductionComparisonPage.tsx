@@ -50,6 +50,8 @@ const ProductionComparisonPage: React.FC<{
   const [entitySearch, setEntitySearch] = useState("");
   const [selectedMember, setSelectedMember] = useState("all");
   const [topN, setTopN] = useState(8);
+  const [onlyShowCompleteEmployees, setOnlyShowCompleteEmployees] =
+    useState(false);
   const [activeGraphTab, setActiveGraphTab] = useState<GraphTab>("overall");
   const [tableSortKey, setTableSortKey] = useState<TableSortKey>("label");
   const [tableSortOrder, setTableSortOrder] = useState<"asc" | "desc">("asc");
@@ -67,6 +69,7 @@ const ProductionComparisonPage: React.FC<{
     setEntitySearch("");
     setSelectedMember("all");
     setTopN(8);
+    setOnlyShowCompleteEmployees(false);
     setActiveGraphTab("overall");
     setTableSortKey("label");
     setTableSortOrder("asc");
@@ -223,6 +226,24 @@ const ProductionComparisonPage: React.FC<{
     [aggregatesByMember]
   );
 
+  const memberHasAllSelectedEntities = useMemo(
+    () => (member: string) => {
+      if (selectedEntities.length === 0) return false;
+
+      const byEntity = aggregatesByMember.get(member);
+      if (!byEntity) return false;
+
+      return selectedEntities.every((entity) => {
+        const aggregate = byEntity.get(entity);
+        return Boolean(aggregate && aggregate.count > 0);
+      });
+    },
+    [aggregatesByMember, selectedEntities]
+  );
+
+  const shouldFilterCompleteEmployees =
+    breakdownBy === "employee" && onlyShowCompleteEmployees;
+
   useEffect(() => {
     if (selectedMember !== "all" && !availableMembers.includes(selectedMember)) {
       setSelectedMember("all");
@@ -232,9 +253,28 @@ const ProductionComparisonPage: React.FC<{
   const displayedMembers = useMemo(() => {
     if (selectedMember !== "all") return [selectedMember];
 
+    const rows = shouldFilterCompleteEmployees
+      ? memberAverages.filter((row) => memberHasAllSelectedEntities(row.member))
+      : memberAverages;
+
     const cappedTopN = Math.max(1, Math.min(topN, 25));
-    return memberAverages.slice(0, cappedTopN).map((row) => row.member);
-  }, [selectedMember, topN, memberAverages]);
+    return rows.slice(0, cappedTopN).map((row) => row.member);
+  }, [
+    selectedMember,
+    shouldFilterCompleteEmployees,
+    memberAverages,
+    topN,
+    memberHasAllSelectedEntities,
+  ]);
+
+  const tableMembers = useMemo(() => {
+    if (!shouldFilterCompleteEmployees) return availableMembers;
+    return availableMembers.filter(memberHasAllSelectedEntities);
+  }, [
+    availableMembers,
+    shouldFilterCompleteEmployees,
+    memberHasAllSelectedEntities,
+  ]);
 
   const buildComparisonRows = (members: string[]) => {
     return members.map((member) => {
@@ -268,8 +308,8 @@ const ProductionComparisonPage: React.FC<{
   );
 
   const tableRows = useMemo(
-    () => buildComparisonRows(availableMembers),
-    [availableMembers, aggregatesByMember, selectedEntities]
+    () => buildComparisonRows(tableMembers),
+    [tableMembers, aggregatesByMember, selectedEntities]
   );
 
   const entitySummary = useMemo(() => {
@@ -619,24 +659,40 @@ const ProductionComparisonPage: React.FC<{
         )}
 
         {selectedMember === "all" && (
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mt-4 max-w-xs">
-            Top {breakdownLabel}s to Display
-            <input
-              type="number"
-              min={1}
-              max={25}
-              value={topN}
-              onChange={(event) => {
-                const parsed = parseInt(event.target.value, 10);
-                if (Number.isNaN(parsed)) {
-                  setTopN(1);
-                  return;
-                }
-                setTopN(Math.max(1, Math.min(25, parsed)));
-              }}
-              className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm"
-            />
-          </label>
+          <div className="mt-4 flex flex-wrap items-end gap-4">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 max-w-xs">
+              Top {breakdownLabel}s to Display
+              <input
+                type="number"
+                min={1}
+                max={25}
+                value={topN}
+                onChange={(event) => {
+                  const parsed = parseInt(event.target.value, 10);
+                  if (Number.isNaN(parsed)) {
+                    setTopN(1);
+                    return;
+                  }
+                  setTopN(Math.max(1, Math.min(25, parsed)));
+                }}
+                className="mt-1 w-full rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 px-3 py-2 text-sm"
+              />
+            </label>
+
+            {breakdownBy === "employee" && (
+              <label className="inline-flex items-center gap-2 rounded-md border border-slate-200 dark:border-slate-700 px-3 py-2 text-sm font-medium text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={onlyShowCompleteEmployees}
+                  onChange={(event) =>
+                    setOnlyShowCompleteEmployees(event.target.checked)
+                  }
+                  className="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                />
+                Only employees with all selected {compareBy}s
+              </label>
+            )}
+          </div>
         )}
 
         <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
