@@ -12,6 +12,7 @@ import socket
 import struct
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.parse
@@ -364,9 +365,8 @@ def precompute_analytics_snapshot(repo_root: Path, timeout_seconds: int) -> bool
     server, port = run_local_http_server(repo_root)
     debug_port = find_free_port()
     url = f"http://127.0.0.1:{port}/public/scheduleplanning.html?precomputeAnalytics=1"
-    user_data_dir = repo_root / ".analytics-precompute-profile"
-    if user_data_dir.exists():
-        shutil.rmtree(user_data_dir, ignore_errors=True)
+    user_data_parent = tempfile.TemporaryDirectory(prefix="analytics-precompute-")
+    user_data_dir = Path(user_data_parent.name) / "profile"
 
     command = [
         browser,
@@ -375,6 +375,7 @@ def precompute_analytics_snapshot(repo_root: Path, timeout_seconds: int) -> bool
         "--disable-extensions",
         "--no-first-run",
         "--no-default-browser-check",
+        "--remote-debugging-address=127.0.0.1",
         f"--remote-debugging-port={debug_port}",
         f"--user-data-dir={user_data_dir}",
         url,
@@ -413,6 +414,17 @@ def precompute_analytics_snapshot(repo_root: Path, timeout_seconds: int) -> bool
         return True
     except Exception as exc:
         logging.error("Analytics precompute failed: %s", exc)
+        if process:
+            if process.poll() is not None:
+                logging.error("Headless browser exited with code %s.", process.returncode)
+            stderr = ""
+            if process.stderr:
+                try:
+                    stderr = process.stderr.read()
+                except Exception:
+                    stderr = ""
+            if stderr:
+                logging.error("Headless browser stderr:\n%s", stderr[-4000:].rstrip())
         return False
     finally:
         if process and process.poll() is None:
@@ -423,7 +435,7 @@ def precompute_analytics_snapshot(repo_root: Path, timeout_seconds: int) -> bool
                 process.kill()
         server.shutdown()
         server.server_close()
-        shutil.rmtree(user_data_dir, ignore_errors=True)
+        user_data_parent.cleanup()
 
 
 def git_add_commit_push(repo_root: Path, message: str) -> bool:

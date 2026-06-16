@@ -33,6 +33,9 @@ interface RawEmployeeRecord {
   TypeOfInv: string;
   StoreName: string;
   DateOfInv: string;
+  Count_Record: number | null;
+  Total_Ext_Qty: number | null;
+  Total_Ext_Price: number | null;
   PiecesPerHr: number | null;
   DollarPerHr: number | null;
   SkusPerHr: number | null;
@@ -99,6 +102,9 @@ export const usePerformanceData = () => {
             supervisor: supervisorName,
             rx: toBoolean(record.Rx),
             date: record.DateOfInv.split(" ")[0], // Keep only YYYY-MM-DD
+            totalPieces: toNumber(record.Total_Ext_Qty),
+            totalDollars: toNumber(record.Total_Ext_Price),
+            totalSkus: toNumber(record.Count_Record),
             pieces: toNumber(record.PiecesPerHr),
             dollars: toNumber(record.DollarPerHr),
             skus: toNumber(record.SkusPerHr),

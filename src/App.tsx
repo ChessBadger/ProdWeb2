@@ -16,6 +16,7 @@ import ModasUsageReportTable from "./components/ModasUsageReportTable";
 import AnomalyDetection from "./components/AnomalyDetection";
 import KPI from "./components/KPI";
 import Tabs from "./components/Tabs";
+import AccountMetricsPage from "./components/AccountMetricsPage";
 import ProductionComparisonPage from "./components/ProductionComparisonPage";
 import TypeOfInvComparisonPage from "./components/TypeOfInvComparisonPage";
 import { Metric } from "./types";
@@ -162,7 +163,7 @@ const Dashboard: React.FC = () => {
     "comparison" | "trend" | "dayOfWeek" | "anomaly"
   >("comparison");
   const [activePage, setActivePage] = useState<
-    "dashboard" | "compare" | "typeOfInv"
+    "dashboard" | "accountMetrics" | "compare" | "typeOfInv"
   >("dashboard");
 
   const handleFilterChange = useCallback(
@@ -460,6 +461,18 @@ const Dashboard: React.FC = () => {
               onClearFilters={handleClearFilters}
             />
           </div>
+        ) : activePage === "accountMetrics" ? (
+          <div className="flex-grow pr-2">
+            <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 text-sm text-slate-600 dark:text-slate-300 space-y-2">
+              <p className="font-semibold text-slate-800 dark:text-slate-100">
+                Account Metrics Page
+              </p>
+              <p>
+                Pick one account to review totals, averages, staffing counts,
+                stores, and inventory type activity.
+              </p>
+            </div>
+          </div>
         ) : activePage === "compare" ? (
           <div className="flex-grow pr-2">
             <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-4 text-sm text-slate-600 dark:text-slate-300 space-y-2">
@@ -509,6 +522,8 @@ const Dashboard: React.FC = () => {
               <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100">
                 {activePage === "dashboard"
                   ? "Employee Production Dashboard"
+                  : activePage === "accountMetrics"
+                    ? "Account Metrics"
                   : activePage === "compare"
                     ? "Production Comparison"
                     : "Modas vs Non-Modas"}
@@ -516,6 +531,8 @@ const Dashboard: React.FC = () => {
               <p className="text-slate-500 dark:text-slate-400 mt-1">
                 {activePage === "dashboard"
                   ? "Analyze employee performance across production metrics."
+                  : activePage === "accountMetrics"
+                    ? "Review account totals, averages, staffing, stores, and inventory mix."
                   : activePage === "compare"
                     ? "Compare production between selected accounts or stores by employee or group."
                     : "Compare Modas vs Non-Modas performance inside one account across stores, employees, groups, and accounts."}
@@ -536,6 +553,17 @@ const Dashboard: React.FC = () => {
                 }`}
               >
                 Dashboard
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivePage("accountMetrics")}
+                className={`px-4 py-2 text-sm font-medium border ${
+                  activePage === "accountMetrics"
+                    ? "bg-slate-800 text-white border-slate-800"
+                    : "bg-white text-slate-700 dark:bg-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-600"
+                }`}
+              >
+                Account Metrics
               </button>
               <button
                 type="button"
@@ -700,12 +728,21 @@ const Dashboard: React.FC = () => {
               />
             </div>
           </>
+        ) : activePage === "accountMetrics" ? (
+          <AccountMetricsPage
+            data={productionBaseData}
+            isDarkMode={isDarkMode}
+          />
+        ) : activePage === "compare" ? (
+          <ProductionComparisonPage
+            data={productionBaseData}
+            isDarkMode={isDarkMode}
+          />
         ) : (
-          activePage === "compare" ? (
-            <ProductionComparisonPage data={productionBaseData} isDarkMode={isDarkMode} />
-          ) : (
-            <TypeOfInvComparisonPage data={productionBaseData} isDarkMode={isDarkMode} />
-          )
+          <TypeOfInvComparisonPage
+            data={productionBaseData}
+            isDarkMode={isDarkMode}
+          />
         )}
       </main>
     </div>
