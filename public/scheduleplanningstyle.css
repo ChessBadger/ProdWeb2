@@ -1374,6 +1374,68 @@ th {
   color: #b91c1c;
 }
 
+.crew-production-employee {
+  min-width: 190px;
+}
+
+.employee-name-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.role-indicator-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.38rem;
+}
+
+.role-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.26rem;
+  max-width: 100%;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  padding: 0.14rem 0.45rem;
+  background: #ffffff;
+  color: #334155;
+  font-size: 0.72rem;
+  font-weight: 800;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.role-indicator span {
+  color: #64748b;
+  font-weight: 900;
+}
+
+.role-indicator-supervisor {
+  border-color: #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.role-indicator-rx {
+  border-color: #bae6fd;
+  background: #f0f9ff;
+  color: #0369a1;
+}
+
+.role-indicator-training {
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+  color: #047857;
+}
+
+.role-indicator-earlyLate {
+  border-color: #fed7aa;
+  background: #fff7ed;
+  color: #c2410c;
+}
+
 .results .insights-details {
   padding: 0;
 }

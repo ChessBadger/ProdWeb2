@@ -267,7 +267,7 @@ const ANALYTICS_DB_NAME = "crew_predictor_analytics";
 const ANALYTICS_DB_VERSION = 1;
 const ANALYTICS_DB_STORE = "snapshots";
 const ANALYTICS_DB_SNAPSHOT_ID = "latest";
-const DATA_ASSET_VERSION = "20260616-125558";
+const DATA_ASSET_VERSION = "20260618-113344";
 const withDataAssetVersion = (path) => `${path}?v=${DATA_ASSET_VERSION}`;
 const HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
 const ACTIVE_EMPLOYEE_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
@@ -4139,6 +4139,14 @@ function getContributionModeLabel(mode) {
   return "Reduced contribution (70%)";
 }
 
+function getContributionModeShortLabel(mode) {
+  if (mode === "full") return "100%";
+  if (mode === "none") return "0%";
+  if (mode === "p30") return "30%";
+  if (mode === "p50") return "50%";
+  return "70%";
+}
+
 function renderStoreStats() {
   const store = state.stores.get(state.selectedStoreKey);
   if (!store) {
@@ -5373,7 +5381,7 @@ function renderScenarios(prediction) {
     if (varianceTone) tr.classList.add(varianceTone);
     tr.innerHTML = [
       `<td>${index + 1}</td>`,
-      `<td>${escapeHtml(getEmployeeDisplayName(item.id))}${renderProductionVarianceArrow(item)}</td>`,
+      `<td class="crew-production-employee"><span class="employee-name-line">${escapeHtml(getEmployeeDisplayName(item.id))}${renderProductionVarianceArrow(item)}</span>${renderProductionRoleBadges(item.id, prediction.roleAssignments, prediction.roleModes)}</td>`,
       `<td>${formatNumber(item.baseSpeed, 1)}</td>`,
       `<td>${escapeHtml(formatMostRecentAccountProduction(item.mostRecentAccountProduction))}</td>`,
       `<td>${formatNumber(item.predictedPieces, 0)}</td>`,
@@ -5384,6 +5392,26 @@ function renderScenarios(prediction) {
     "beforeend",
     renderCurrentCrewTotalRow(ranked, prediction.onSiteDuration, prediction),
   );
+}
+
+function renderProductionRoleBadges(employeeId, roles = {}, modes = {}) {
+  const badges = [];
+  const addBadge = (roleKey, label) => {
+    const mode = parseContributionMode(modes?.[roleKey]);
+    badges.push(
+      `<span class="role-indicator role-indicator-${roleKey}" title="${escapeHtml(`${label}: ${getContributionModeLabel(mode)}`)}">${escapeHtml(label)} <span>${escapeHtml(getContributionModeShortLabel(mode))}</span></span>`,
+    );
+  };
+
+  if (roles?.supervisor === employeeId) addBadge("supervisor", "Supervisor");
+  if (normalizeRoleArray(roles?.rx).includes(employeeId)) addBadge("rx", "RX");
+  if (normalizeRoleArray(roles?.training).includes(employeeId))
+    addBadge("training", "Training");
+  if (normalizeRoleArray(roles?.earlyLate).includes(employeeId))
+    addBadge("earlyLate", "Early/Late");
+
+  if (!badges.length) return "";
+  return `<div class="role-indicator-list" aria-label="Assigned roles">${badges.join("")}</div>`;
 }
 
 function renderCurrentCrewTotalRow(rankedRows, onSiteDuration, prediction = null) {
