@@ -1,9 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { EmployeeRecord, Metric } from "../types";
 import { METRIC_OPTIONS } from "../constants";
 import { SortAscIcon, SortDescIcon } from "./icons/Icons";
 import ModasBadge from "./ModasBadge";
 import RxBadge from "./RxBadge";
+import PaginationControls, { ITEMS_PER_PAGE } from "./PaginationControls";
 
 interface AveragesTableProps {
   data: EmployeeRecord[];
@@ -33,6 +34,7 @@ export const PerformanceByGroupTable: React.FC<
 > = ({ data, groupBy }) => {
   const [sortKey, setSortKey] = useState<GroupSortKey>("groupName");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const groupedData = useMemo((): GroupData[] => {
     if (!data.length) return [];
@@ -87,6 +89,23 @@ export const PerformanceByGroupTable: React.FC<
     });
   }, [groupedData, sortKey, sortOrder]);
 
+  const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
+
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return sortedData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [sortedData, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [data, groupBy, sortKey, sortOrder]);
+
+  useEffect(() => {
+    setCurrentPage((page) =>
+      Math.min(Math.max(1, page), Math.max(1, totalPages))
+    );
+  }, [totalPages]);
+
   const handleSort = (key: GroupSortKey) => {
     if (sortKey === key) {
       setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
@@ -131,6 +150,7 @@ export const PerformanceByGroupTable: React.FC<
   else headerLabel = "Account";
 
   return (
+    <>
     <div className="overflow-x-auto">
       <table className="min-w-full divide-y divide-slate-200 dark:divide-slate-700">
         <thead className="bg-slate-50 dark:bg-slate-700/50">
@@ -151,7 +171,7 @@ export const PerformanceByGroupTable: React.FC<
           </tr>
         </thead>
         <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
-          {sortedData.map((row) => (
+          {paginatedData.map((row) => (
             <tr
               key={row.groupName}
               className="hover:bg-slate-50 dark:hover:bg-slate-700/50 group"
@@ -172,6 +192,12 @@ export const PerformanceByGroupTable: React.FC<
         </tbody>
       </table>
     </div>
+    <PaginationControls
+      currentPage={currentPage}
+      totalPages={totalPages}
+      onPageChange={setCurrentPage}
+    />
+    </>
   );
 };
 
@@ -184,6 +210,7 @@ const AveragesTable: React.FC<AveragesTableProps> = ({
 }) => {
   const [sortKey, setSortKey] = useState<SortKey>("employee");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
+  const [currentPage, setCurrentPage] = useState(1);
   const dataForOverall = overallData ?? data;
 
   const rxEmployees = useMemo(() => {
@@ -306,6 +333,23 @@ const AveragesTable: React.FC<AveragesTableProps> = ({
     });
   }, [averagesData, sortKey, sortOrder]);
 
+  const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
+
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return sortedData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [sortedData, currentPage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [data, metric, sortKey, sortOrder]);
+
+  useEffect(() => {
+    setCurrentPage((page) =>
+      Math.min(Math.max(1, page), Math.max(1, totalPages))
+    );
+  }, [totalPages]);
+
   const handleSort = (key: SortKey) => {
     if (sortKey === key) {
       setSortOrder(sortOrder === "asc" ? "desc" : "asc");
@@ -377,7 +421,7 @@ const AveragesTable: React.FC<AveragesTableProps> = ({
             </tr>
           </thead>
           <tbody className="bg-white dark:bg-slate-800 divide-y divide-slate-200 dark:divide-slate-700">
-            {sortedData.map((row) => (
+            {paginatedData.map((row) => (
               <tr
                 key={row.employee}
                 className="hover:bg-slate-50 dark:hover:bg-slate-700/50"
@@ -407,6 +451,11 @@ const AveragesTable: React.FC<AveragesTableProps> = ({
           </tbody>
         </table>
       </div>
+      <PaginationControls
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+      />
     </div>
   );
 };

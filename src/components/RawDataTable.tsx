@@ -1,9 +1,10 @@
-import React, { useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { EmployeeRecord } from '../types';
 import { METRIC_OPTIONS } from '../constants';
-import { SortAscIcon, SortDescIcon, ChevronLeftIcon, ChevronRightIcon } from './icons/Icons';
+import { SortAscIcon, SortDescIcon } from './icons/Icons';
 import ModasBadge from './ModasBadge';
 import RxBadge from './RxBadge';
+import PaginationControls, { ITEMS_PER_PAGE } from './PaginationControls';
 
 interface RawDataTableProps {
     data: EmployeeRecord[];
@@ -11,7 +12,6 @@ interface RawDataTableProps {
 }
 
 type SortKey = keyof EmployeeRecord;
-const ITEMS_PER_PAGE = 10;
 
 const RawDataTable: React.FC<RawDataTableProps> = ({ data, showRxBadges = false }) => {
     const [sortKey, setSortKey] = useState<SortKey>('date');
@@ -41,7 +41,15 @@ const RawDataTable: React.FC<RawDataTableProps> = ({ data, showRxBadges = false 
         return sortedData.slice(startIndex, startIndex + ITEMS_PER_PAGE);
     }, [sortedData, currentPage]);
     
-    const totalPages = Math.ceil(data.length / ITEMS_PER_PAGE);
+    const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [data]);
+
+    useEffect(() => {
+        setCurrentPage(page => Math.min(Math.max(1, page), Math.max(1, totalPages)));
+    }, [totalPages]);
 
     const handleSort = (key: SortKey) => {
         if (sortKey === key) {
@@ -102,31 +110,11 @@ const RawDataTable: React.FC<RawDataTableProps> = ({ data, showRxBadges = false 
                     </tbody>
                 </table>
             </div>
-            {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4 px-4 py-2 border-t border-slate-200 dark:border-slate-700">
-                    <span className="text-sm text-slate-500 dark:text-slate-400">
-                        Page {currentPage} of {totalPages}
-                    </span>
-                    <div className="flex items-center gap-1">
-                        <button 
-                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-                            disabled={currentPage === 1}
-                            className="p-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                            aria-label="Previous Page"
-                        >
-                            <ChevronLeftIcon />
-                        </button>
-                        <button 
-                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} 
-                            disabled={currentPage === totalPages}
-                            className="p-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
-                            aria-label="Next Page"
-                        >
-                            <ChevronRightIcon />
-                        </button>
-                    </div>
-                </div>
-            )}
+            <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+            />
         </>
     );
 };
