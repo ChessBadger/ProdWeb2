@@ -1348,6 +1348,49 @@ th {
   grid-column: 1 / -1;
 }
 
+.peer-breakdown-row td {
+  background: #f8fbff;
+  padding: 0.35rem 0.5rem 0.7rem;
+}
+
+.peer-breakdown {
+  border: 1px solid #dce7f4;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 0.55rem 0.7rem;
+}
+
+.peer-breakdown summary {
+  cursor: pointer;
+  font-weight: 800;
+  color: #27415f;
+}
+
+.peer-breakdown-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.9rem;
+  margin: 0.55rem 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.peer-breakdown-table {
+  margin-top: 0.35rem;
+}
+
+.peer-breakdown-table th,
+.peer-breakdown-table td {
+  font-size: 0.8rem;
+}
+
+.peer-shared-list {
+  margin: 0;
+  padding-left: 1rem;
+  max-height: 7rem;
+  overflow: auto;
+}
+
 .production-risk-medium td {
   background: #fffaf0;
 }

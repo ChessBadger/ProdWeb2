@@ -8,6 +8,7 @@ const state = {
   accountOfficeStats: new Map(),
   accountGlobalStats: new Map(),
   employees: new Map(),
+  peerAccountEstimateCache: new Map(),
   activeEmployeeIds: new Set(),
   suggestedSupervisorByStore: new Map(),
   global: {
@@ -267,7 +268,7 @@ const ANALYTICS_DB_NAME = "crew_predictor_analytics";
 const ANALYTICS_DB_VERSION = 1;
 const ANALYTICS_DB_STORE = "snapshots";
 const ANALYTICS_DB_SNAPSHOT_ID = "latest";
-const DATA_ASSET_VERSION = "20260630-142545";
+const DATA_ASSET_VERSION = "20260630-151044";
 const withDataAssetVersion = (path) => `${path}?v=${DATA_ASSET_VERSION}`;
 const HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
 const ACTIVE_EMPLOYEE_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
@@ -1417,6 +1418,7 @@ async function loadRows(
   state.accountOfficeStats = buildAccountOfficeStats(state.jobs);
   state.accountGlobalStats = buildAccountGlobalStats(state.jobs);
   state.employees = buildEmployeeStats(normalizedRows);
+  state.peerAccountEstimateCache = new Map();
   state.activeEmployeeIds = buildActiveEmployeeIds(
     activeEmployeeRawRows,
     state.employees,
@@ -3671,6 +3673,7 @@ function getEmployeeMostRecentAccountProduction(employee, account) {
   const supervisorAccountStat = accountKey
     ? employee.supervisorAccountStats?.[accountKey]
     : null;
+  const peerEstimate = getPeerAdjustedAccountEstimate(employee, accountKey);
   const piecesPerHr = safeNumber(accountStat?.mostRecentPiecesPerHr);
   const supervisorPiecesPerHr = safeNumber(
     supervisorAccountStat?.mostRecentPiecesPerHr,
@@ -3686,6 +3689,7 @@ function getEmployeeMostRecentAccountProduction(employee, account) {
     supervisorStoreName: supervisorAccountStat?.mostRecentStoreName || "",
     supervisorStoreKey: supervisorAccountStat?.mostRecentStoreKey || "",
     supervisorAccount: supervisorAccountStat?.mostRecentAccount || "",
+    peerEstimate,
   };
 }
 
@@ -5574,6 +5578,8 @@ function renderDetailedBackground(rankedRows = []) {
                       const source = row.mostRecentAccountProduction || {};
                       const sourceStore = source.storeName
                         ? `${source.account || store.account} | ${source.storeName}`
+                        : source.peerEstimate?.speed > 0
+                          ? `${formatNumber(source.peerEstimate.peerCount, 0)} similar employees with account history`
                         : source.supervisorOnly && source.supervisorStoreName
                           ? `${source.supervisorAccount || store.account} | ${source.supervisorStoreName} (supervisor-only)`
                         : "No account history";
@@ -5585,6 +5591,7 @@ function renderDetailedBackground(rankedRows = []) {
                           <td>${formatNumber(safeNumber(row.effectiveSpeed || row.baseSpeed), 0)} pieces/hr</td>
                           <td>${escapeHtml(sourceStore)}</td>
                         </tr>
+                        ${renderPeerEstimateBreakdownRow(row, store, prediction)}
                       `;
                     })
                     .join("")}
@@ -5595,6 +5602,78 @@ function renderDetailedBackground(rankedRows = []) {
       </section>
     </div>
   `;
+}
+
+function renderPeerEstimateBreakdownRow(row, store, prediction = null) {
+  if (prediction?.roleAssignments?.supervisor === row?.id) return "";
+  const estimate = row?.mostRecentAccountProduction?.peerEstimate;
+  if (!estimate?.peers?.length) return "";
+  return `
+    <tr class="peer-breakdown-row">
+      <td colspan="5">
+        <details class="peer-breakdown">
+          <summary>
+            Similar employees behind ${escapeHtml(getEmployeeDisplayName(row.id))}'s estimate
+          </summary>
+          <div class="peer-breakdown-summary">
+            <span>Final estimate: <strong>${formatNumber(estimate.speed, 0)} pieces/hr</strong></span>
+            <span>Peer-only estimate: ${formatNumber(estimate.peerSpeed, 0)} pieces/hr</span>
+            <span>Employee global baseline: ${formatNumber(estimate.baseSpeed, 0)} pieces/hr</span>
+            <span>Peer blend weight: ${formatNumber(estimate.blendWeight * 100, 0)}%</span>
+          </div>
+          <table class="peer-breakdown-table">
+            <thead>
+              <tr>
+                <th>Similar Employee</th>
+                <th>${escapeHtml(store.account)} Speed</th>
+                <th>Comparable Speed</th>
+                <th>Shared Accounts</th>
+                <th>Influence</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${estimate.peers.map(renderPeerEstimateBreakdownPeerRow).join("")}
+            </tbody>
+          </table>
+        </details>
+      </td>
+    </tr>
+  `;
+}
+
+function renderPeerEstimateBreakdownPeerRow(peer) {
+  const shared = (peer.shared || [])
+    .slice(0, 4)
+    .map(
+      (item) =>
+        `<li>${escapeHtml(formatAccountKeyLabel(item.accountKey))}: ${formatNumber(item.targetSpeed, 0)} vs ${formatNumber(item.peerSpeed, 0)} pieces/hr</li>`,
+    )
+    .join("");
+  const extraCount = Math.max(0, safeNumber(peer.sharedCount) - 4);
+  return `
+    <tr>
+      <td>${escapeHtml(peer.displayName || peer.employee || "Unknown")}</td>
+      <td>${formatNumber(peer.targetAccountSpeed, 0)} pieces/hr (${formatNumber(peer.targetAccountJobs, 0)} jobs)</td>
+      <td>
+        ${formatNumber(peer.targetComparableSpeed, 0)} vs ${formatNumber(peer.peerComparableSpeed, 0)} pieces/hr
+        <div class="muted">account ratio ${formatNumber(peer.accountRatio, 2)}x, similarity ${formatNumber(peer.similarity * 100, 0)}%</div>
+      </td>
+      <td>
+        <ul class="peer-shared-list">${shared}${extraCount ? `<li>+${formatNumber(extraCount, 0)} more shared accounts</li>` : ""}</ul>
+      </td>
+      <td>${formatNumber(peer.weight, 2)}</td>
+    </tr>
+  `;
+}
+
+function formatAccountKeyLabel(accountKey) {
+  const key = cleanText(accountKey);
+  if (!key) return "Unknown account";
+  const store = (state.storesList || []).find(
+    (candidate) =>
+      (candidate.accountKey || getLinkedAccountKey(candidate.account)) === key,
+  );
+  return store?.account || key;
 }
 
 function getSegmentCountForAccount(store) {
@@ -5700,9 +5779,17 @@ function formatEmployeeLongTermAccountSpeed(employeeId, account) {
   const supervisorAccountStat = accountKey
     ? employee?.supervisorAccountStats?.[accountKey]
     : null;
+  const peerEstimate = getPeerAdjustedAccountEstimate(employee, accountKey);
+  const supervisorJobCount = safeNumber(supervisorAccountStat?.jobCount);
   const value = safeNumber(accountStat?.avgPiecesPerHr);
   if (!(value > 0)) {
-    const supervisorJobCount = safeNumber(supervisorAccountStat?.jobCount);
+    if (peerEstimate?.speed > 0) {
+      const supervisorNote =
+        supervisorJobCount > 0
+          ? `; supervisor-only history excluded (${formatNumber(supervisorJobCount, 0)} jobs)`
+          : "";
+      return `Similar-peer estimate (${formatNumber(peerEstimate.peerCount, 0)} peers)${supervisorNote}`;
+    }
     if (supervisorJobCount > 0) {
       return `Supervisor-only history excluded (${formatNumber(supervisorJobCount, 0)} jobs)`;
     }
@@ -5714,6 +5801,12 @@ function formatEmployeeLongTermAccountSpeed(employeeId, account) {
 function formatMostRecentAccountProduction(production) {
   const piecesPerHr = safeNumber(production?.piecesPerHr);
   if (!(piecesPerHr > 0)) {
+    if (production?.peerEstimate?.speed > 0) {
+      const supervisorNote = production?.supervisorOnly
+        ? "; supervisor history excluded"
+        : "";
+      return `Similar-peer estimate (${formatNumber(production.peerEstimate.speed, 0)} pieces/hr)${supervisorNote}`;
+    }
     const supervisorPiecesPerHr = safeNumber(production?.supervisorPiecesPerHr);
     if (production?.supervisorOnly && supervisorPiecesPerHr > 0) {
       return `Supervisor-only history excluded (${formatNumber(supervisorPiecesPerHr, 0)} pieces/hr)`;
@@ -7460,8 +7553,18 @@ async function restoreAnalyticsCache(fingerprint) {
 }
 
 function displayEmployeeSpeed(employee, account = getSelectedAccount()) {
+  return getEmployeePlanningSpeedSource(employee, account).speed;
+}
+
+function getEmployeePlanningSpeedSource(employee, account = getSelectedAccount()) {
   const fallback = safeNumber(state.global.medianEmployeeSpeed);
-  if (!employee) return fallback;
+  if (!employee) {
+    return {
+      speed: fallback,
+      source: "globalMedian",
+      label: "Company median speed",
+    };
+  }
 
   const accountKey = getLinkedAccountKey(account);
   const accountStat = accountKey ? employee.accountStats?.[accountKey] : null;
@@ -7471,7 +7574,21 @@ function displayEmployeeSpeed(employee, account = getSelectedAccount()) {
       accountStat.avgPiecesPerHr,
       accountStat.jobCount,
     );
-    return shrinkTowardFallback(blended, fallback, accountStat.jobCount, 3);
+    return {
+      speed: shrinkTowardFallback(blended, fallback, accountStat.jobCount, 3),
+      source: "account",
+      label: `Direct account history (${formatNumber(accountStat.jobCount, 0)} jobs)`,
+    };
+  }
+
+  const peerEstimate = getPeerAdjustedAccountEstimate(employee, accountKey);
+  if (peerEstimate && peerEstimate.speed > 0) {
+    return {
+      speed: peerEstimate.speed,
+      source: "peerAccount",
+      label: `Similar-peer account estimate (${formatNumber(peerEstimate.peerCount, 0)} peers)`,
+      peerEstimate,
+    };
   }
 
   if (employee.globalJobCount >= 1) {
@@ -7480,10 +7597,207 @@ function displayEmployeeSpeed(employee, account = getSelectedAccount()) {
       employee.avgPiecesPerHrGlobal,
       employee.globalJobCount,
     );
-    return shrinkTowardFallback(blended, fallback, employee.globalJobCount, 4);
+    return {
+      speed: shrinkTowardFallback(blended, fallback, employee.globalJobCount, 4),
+      source: "globalEmployee",
+      label: `Employee global history (${formatNumber(employee.globalJobCount, 0)} jobs)`,
+    };
   }
 
-  return fallback;
+  return {
+    speed: fallback,
+    source: "globalMedian",
+    label: "Company median speed",
+  };
+}
+
+function getPeerAdjustedAccountEstimate(employee, accountKey) {
+  if (!employee || !accountKey || !employee.accountStats) return null;
+  if (employee.accountStats?.[accountKey]?.jobCount >= 1) return null;
+  const cacheKey = `${employee.employee || ""}||${accountKey}`;
+  if (state.peerAccountEstimateCache?.has(cacheKey)) {
+    return state.peerAccountEstimateCache.get(cacheKey);
+  }
+
+  const targetGlobalSpeed = getBlendedGlobalEmployeeSpeed(employee);
+  const fallback = safeNumber(state.global.medianEmployeeSpeed);
+  const targetAccountEntries = getComparableAccountEntries(employee, accountKey);
+  if (!targetAccountEntries.length) {
+    state.peerAccountEstimateCache?.set(cacheKey, null);
+    return null;
+  }
+
+  const candidates = [];
+  state.employees.forEach((peer) => {
+    if (!peer || peer.employee === employee.employee) return;
+    const peerTargetAccount = peer.accountStats?.[accountKey];
+    const peerTargetSpeed = getBlendedAccountSpeed(peerTargetAccount);
+    if (!(peerTargetSpeed > 0)) return;
+
+    const shared = [];
+    targetAccountEntries.forEach((targetEntry) => {
+      const peerSharedStat = peer.accountStats?.[targetEntry.accountKey];
+      const peerSharedSpeed = getBlendedAccountSpeed(peerSharedStat);
+      if (!(peerSharedSpeed > 0)) return;
+      shared.push({
+        accountKey: targetEntry.accountKey,
+        targetSpeed: targetEntry.speed,
+        peerSpeed: peerSharedSpeed,
+        weight: Math.sqrt(
+          Math.max(
+            1,
+            Math.min(
+              safeNumber(targetEntry.jobCount),
+              safeNumber(peerSharedStat.jobCount),
+            ),
+          ),
+        ),
+      });
+    });
+
+    if (!shared.length) return;
+
+    const sharedWeight = shared.reduce((sum, item) => sum + item.weight, 0);
+    if (!(sharedWeight > 0)) return;
+
+    const targetComparableSpeed =
+      shared.reduce((sum, item) => sum + item.targetSpeed * item.weight, 0) /
+      sharedWeight;
+    const peerComparableSpeed =
+      shared.reduce((sum, item) => sum + item.peerSpeed * item.weight, 0) /
+      sharedWeight;
+    if (!(targetComparableSpeed > 0) || !(peerComparableSpeed > 0)) return;
+
+    const avgLogDifference =
+      shared.reduce(
+        (sum, item) =>
+          sum +
+          Math.abs(Math.log(item.targetSpeed / item.peerSpeed)) * item.weight,
+        0,
+      ) / sharedWeight;
+    const similarity = 1 / (1 + avgLogDifference * 4);
+    if (similarity < 0.45) return;
+
+    const accountRatio = clampNumber(peerTargetSpeed / peerComparableSpeed, 0.55, 1.75);
+    const candidateSpeed = targetComparableSpeed * accountRatio;
+    const support =
+      similarity *
+      Math.min(1, shared.length / 3) *
+      Math.sqrt(Math.min(safeNumber(peerTargetAccount.jobCount), 8) / 8) *
+      Math.log1p(sharedWeight);
+
+    if (candidateSpeed > 0 && support > 0) {
+      candidates.push({
+        employee: peer.employee,
+        displayName: getEmployeeDisplayName(peer.employee),
+        speed: candidateSpeed,
+        weight: support,
+        sharedCount: shared.length,
+        targetAccountSpeed: peerTargetSpeed,
+        targetAccountJobs: safeNumber(peerTargetAccount.jobCount),
+        targetComparableSpeed,
+        peerComparableSpeed,
+        accountRatio,
+        similarity,
+        shared: shared
+          .sort((a, b) => b.weight - a.weight)
+          .slice(0, 6)
+          .map((item) => ({
+            accountKey: item.accountKey,
+            targetSpeed: item.targetSpeed,
+            peerSpeed: item.peerSpeed,
+            weight: item.weight,
+          })),
+      });
+    }
+  });
+
+  if (candidates.length < 2) {
+    state.peerAccountEstimateCache?.set(cacheKey, null);
+    return null;
+  }
+  candidates.sort((a, b) => b.weight - a.weight);
+  const selected = candidates.slice(0, 8);
+  const totalWeight = selected.reduce((sum, item) => sum + item.weight, 0);
+  if (!(totalWeight > 0.35)) {
+    state.peerAccountEstimateCache?.set(cacheKey, null);
+    return null;
+  }
+
+  const peerSpeed =
+    selected.reduce((sum, item) => sum + item.speed * item.weight, 0) /
+    totalWeight;
+  const baseSpeed = targetGlobalSpeed > 0 ? targetGlobalSpeed : fallback;
+  if (!(baseSpeed > 0) || !(peerSpeed > 0)) {
+    state.peerAccountEstimateCache?.set(cacheKey, null);
+    return null;
+  }
+
+  const blendWeight = clampNumber(totalWeight / 5, 0.2, 0.65);
+  const estimate = {
+    speed: baseSpeed * (1 - blendWeight) + peerSpeed * blendWeight,
+    peerSpeed,
+    baseSpeed,
+    blendWeight,
+    peerCount: selected.length,
+    sharedAccountCount: Math.max(...selected.map((item) => item.sharedCount)),
+    peers: selected.map((item) => ({
+      employee: item.employee,
+      displayName: item.displayName,
+      speed: item.speed,
+      weight: item.weight,
+      sharedCount: item.sharedCount,
+      targetAccountSpeed: item.targetAccountSpeed,
+      targetAccountJobs: item.targetAccountJobs,
+      targetComparableSpeed: item.targetComparableSpeed,
+      peerComparableSpeed: item.peerComparableSpeed,
+      accountRatio: item.accountRatio,
+      similarity: item.similarity,
+      shared: item.shared,
+    })),
+  };
+  state.peerAccountEstimateCache?.set(cacheKey, estimate);
+  return estimate;
+}
+
+function getComparableAccountEntries(employee, excludeAccountKey) {
+  return Object.entries(employee?.accountStats || {})
+    .filter(([accountKey, stat]) => accountKey !== excludeAccountKey && safeNumber(stat?.jobCount) > 0)
+    .map(([accountKey, stat]) => ({
+      accountKey,
+      speed: getBlendedAccountSpeed(stat),
+      jobCount: safeNumber(stat.jobCount),
+    }))
+    .filter((entry) => entry.speed > 0);
+}
+
+function getBlendedAccountSpeed(accountStat) {
+  if (!accountStat || safeNumber(accountStat.jobCount) < 1) return 0;
+  return blendRecentAndLongSpeed(
+    accountStat.avgPiecesPerHrRecent,
+    accountStat.avgPiecesPerHr,
+    accountStat.jobCount,
+  );
+}
+
+function getBlendedGlobalEmployeeSpeed(employee) {
+  if (!employee || safeNumber(employee.globalJobCount) < 1) return 0;
+  return shrinkTowardFallback(
+    blendRecentAndLongSpeed(
+      employee.avgPiecesPerHrRecentGlobal,
+      employee.avgPiecesPerHrGlobal,
+      employee.globalJobCount,
+    ),
+    safeNumber(state.global.medianEmployeeSpeed),
+    employee.globalJobCount,
+    4,
+  );
+}
+
+function clampNumber(value, min, max) {
+  const n = safeNumber(value);
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, n));
 }
 
 function recencyDecayWeight(ageDays, halfLifeDays = 120) {
