@@ -2125,17 +2125,6 @@ function buildEmployeeStats(rows) {
   const referenceTimestamp = maxRowTimestamp > 0 ? maxRowTimestamp : Date.now();
 
   rows.forEach((row) => {
-    // Exclude rows where the employee was the listed supervisor for that inventory.
-    // This keeps supervisor-assignment days from biasing counter productivity history.
-    const isSupervisorRunRow =
-      cleanText(row.employee).toLowerCase() !== "" &&
-      cleanText(row.supervisorNumber).toLowerCase() !== "" &&
-      cleanText(row.employee).toLowerCase() ===
-        cleanText(row.supervisorNumber).toLowerCase();
-    if (isSupervisorRunRow) {
-      return;
-    }
-
     if (!grouped.has(row.employee)) {
       grouped.set(row.employee, {
         employee: row.employee,
@@ -2145,6 +2134,7 @@ function buildEmployeeStats(rows) {
         recentWeightSumGlobal: 0,
         jobKeysGlobal: new Set(),
         accountBuckets: new Map(),
+        supervisorAccountBuckets: new Map(),
         nameCounts: new Map(),
       });
     }
@@ -2157,6 +2147,49 @@ function buildEmployeeStats(rows) {
       : 0;
     const recencyWeight = weight * recencyDecayWeight(ageDays);
     const bucket = grouped.get(row.employee);
+
+    if (row.employeeName) {
+      bucket.nameCounts.set(
+        row.employeeName,
+        (bucket.nameCounts.get(row.employeeName) || 0) + 1,
+      );
+    }
+
+    // Exclude rows where the employee was the listed supervisor for that inventory.
+    // This keeps supervisor-assignment days from biasing counter productivity history.
+    const isSupervisorRunRow =
+      cleanText(row.employee).toLowerCase() !== "" &&
+      cleanText(row.supervisorNumber).toLowerCase() !== "" &&
+      cleanText(row.employee).toLowerCase() ===
+        cleanText(row.supervisorNumber).toLowerCase();
+    if (isSupervisorRunRow) {
+      const accountKey = row.accountKey || getLinkedAccountKey(row.account);
+      if (!bucket.supervisorAccountBuckets.has(accountKey)) {
+        bucket.supervisorAccountBuckets.set(accountKey, {
+          jobKeys: new Set(),
+          mostRecentSpeed: 0,
+          mostRecentTimestamp: 0,
+          mostRecentStoreName: "",
+          mostRecentStoreKey: "",
+          mostRecentAccount: "",
+        });
+      }
+      const supervisorAccountBucket =
+        bucket.supervisorAccountBuckets.get(accountKey);
+      if (
+        speed > 0 &&
+        !row.isRx &&
+        rowTimestamp > supervisorAccountBucket.mostRecentTimestamp
+      ) {
+        supervisorAccountBucket.mostRecentSpeed = speed;
+        supervisorAccountBucket.mostRecentTimestamp = rowTimestamp;
+        supervisorAccountBucket.mostRecentStoreName = row.store;
+        supervisorAccountBucket.mostRecentStoreKey = row.storeKey;
+        supervisorAccountBucket.mostRecentAccount = row.account;
+      }
+      supervisorAccountBucket.jobKeys.add(row.jobKey);
+      return;
+    }
 
     if (speed > 0 && weight > 0) {
       bucket.weightedSpeedSumGlobal += speed * weight;
@@ -2201,13 +2234,6 @@ function buildEmployeeStats(rows) {
       accountBucket.mostRecentAccount = row.account;
     }
     accountBucket.jobKeys.add(row.jobKey);
-
-    if (row.employeeName) {
-      bucket.nameCounts.set(
-        row.employeeName,
-        (bucket.nameCounts.get(row.employeeName) || 0) + 1,
-      );
-    }
   });
 
   const stats = new Map();
@@ -2232,6 +2258,16 @@ function buildEmployeeStats(rows) {
         mostRecentAccount: accountBucket.mostRecentAccount,
       };
     });
+    const supervisorAccountStats = {};
+    bucket.supervisorAccountBuckets.forEach((accountBucket, account) => {
+      supervisorAccountStats[account] = {
+        jobCount: accountBucket.jobKeys.size,
+        mostRecentPiecesPerHr: accountBucket.mostRecentSpeed,
+        mostRecentStoreName: accountBucket.mostRecentStoreName,
+        mostRecentStoreKey: accountBucket.mostRecentStoreKey,
+        mostRecentAccount: accountBucket.mostRecentAccount,
+      };
+    });
 
     stats.set(employee, {
       employee,
@@ -2246,6 +2282,7 @@ function buildEmployeeStats(rows) {
           : 0,
       globalJobCount: bucket.jobKeysGlobal.size,
       accountStats,
+      supervisorAccountStats,
     });
   });
 
@@ -3631,11 +3668,24 @@ function getEmployeeMostRecentAccountProduction(employee, account) {
   if (!employee) return { piecesPerHr: 0, storeName: "", account: "" };
   const accountKey = getLinkedAccountKey(account);
   const accountStat = accountKey ? employee.accountStats?.[accountKey] : null;
+  const supervisorAccountStat = accountKey
+    ? employee.supervisorAccountStats?.[accountKey]
+    : null;
+  const piecesPerHr = safeNumber(accountStat?.mostRecentPiecesPerHr);
+  const supervisorPiecesPerHr = safeNumber(
+    supervisorAccountStat?.mostRecentPiecesPerHr,
+  );
   return {
-    piecesPerHr: safeNumber(accountStat?.mostRecentPiecesPerHr),
+    piecesPerHr,
     storeName: accountStat?.mostRecentStoreName || "",
     storeKey: accountStat?.mostRecentStoreKey || "",
     account: accountStat?.mostRecentAccount || "",
+    supervisorOnly: !(piecesPerHr > 0) && supervisorPiecesPerHr > 0,
+    supervisorPiecesPerHr,
+    supervisorJobCount: safeNumber(supervisorAccountStat?.jobCount),
+    supervisorStoreName: supervisorAccountStat?.mostRecentStoreName || "",
+    supervisorStoreKey: supervisorAccountStat?.mostRecentStoreKey || "",
+    supervisorAccount: supervisorAccountStat?.mostRecentAccount || "",
   };
 }
 
@@ -5524,6 +5574,8 @@ function renderDetailedBackground(rankedRows = []) {
                       const source = row.mostRecentAccountProduction || {};
                       const sourceStore = source.storeName
                         ? `${source.account || store.account} | ${source.storeName}`
+                        : source.supervisorOnly && source.supervisorStoreName
+                          ? `${source.supervisorAccount || store.account} | ${source.supervisorStoreName} (supervisor-only)`
                         : "No account history";
                       return `
                         <tr>
@@ -5645,14 +5697,29 @@ function formatEmployeeLongTermAccountSpeed(employeeId, account) {
   const employee = state.employees.get(employeeId);
   const accountKey = getLinkedAccountKey(account);
   const accountStat = accountKey ? employee?.accountStats?.[accountKey] : null;
+  const supervisorAccountStat = accountKey
+    ? employee?.supervisorAccountStats?.[accountKey]
+    : null;
   const value = safeNumber(accountStat?.avgPiecesPerHr);
-  if (!(value > 0)) return "No account history";
+  if (!(value > 0)) {
+    const supervisorJobCount = safeNumber(supervisorAccountStat?.jobCount);
+    if (supervisorJobCount > 0) {
+      return `Supervisor-only history excluded (${formatNumber(supervisorJobCount, 0)} jobs)`;
+    }
+    return "No account history";
+  }
   return `${formatNumber(value, 0)} pieces/hr (${formatNumber(safeNumber(accountStat.jobCount), 0)} jobs)`;
 }
 
 function formatMostRecentAccountProduction(production) {
   const piecesPerHr = safeNumber(production?.piecesPerHr);
-  if (!(piecesPerHr > 0)) return "No account history";
+  if (!(piecesPerHr > 0)) {
+    const supervisorPiecesPerHr = safeNumber(production?.supervisorPiecesPerHr);
+    if (production?.supervisorOnly && supervisorPiecesPerHr > 0) {
+      return `Supervisor-only history excluded (${formatNumber(supervisorPiecesPerHr, 0)} pieces/hr)`;
+    }
+    return "No account history";
+  }
   return `${formatNumber(piecesPerHr, 0)} pieces/hr`;
 }
 
