@@ -268,7 +268,7 @@ const ANALYTICS_DB_NAME = "crew_predictor_analytics";
 const ANALYTICS_DB_VERSION = 1;
 const ANALYTICS_DB_STORE = "snapshots";
 const ANALYTICS_DB_SNAPSHOT_ID = "latest";
-const DATA_ASSET_VERSION = "20260701-112223";
+const DATA_ASSET_VERSION = "20260701-132349";
 const withDataAssetVersion = (path) => `${path}?v=${DATA_ASSET_VERSION}`;
 const HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
 const ACTIVE_EMPLOYEE_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
@@ -5618,8 +5618,8 @@ function renderPeerEstimateBreakdownRow(row, store, prediction = null) {
           <div class="peer-breakdown-summary">
             <span>Final estimate: <strong>${formatNumber(estimate.speed, 0)} pieces/hr</strong></span>
             <span>Peer-only estimate: ${formatNumber(estimate.peerSpeed, 0)} pieces/hr</span>
-            <span>Employee global baseline: ${formatNumber(estimate.baseSpeed, 0)} pieces/hr</span>
-            <span>Peer blend weight: ${formatNumber(estimate.blendWeight * 100, 0)}%</span>
+            <span>Employee global baseline excluded: ${formatNumber(estimate.baseSpeed, 0)} pieces/hr</span>
+            <span>Peer estimate weight: ${formatNumber(estimate.blendWeight * 100, 0)}%</span>
           </div>
           <table class="peer-breakdown-table">
             <thead>
@@ -7733,9 +7733,9 @@ function getPeerAdjustedAccountEstimate(employee, accountKey) {
     return null;
   }
 
-  const blendWeight = clampNumber(totalWeight / 5, 0.2, 0.65);
+  const blendWeight = 1;
   const estimate = {
-    speed: baseSpeed * (1 - blendWeight) + peerSpeed * blendWeight,
+    speed: peerSpeed,
     peerSpeed,
     baseSpeed,
     blendWeight,
