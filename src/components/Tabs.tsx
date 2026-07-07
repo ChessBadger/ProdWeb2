@@ -14,7 +14,7 @@ const Tabs: React.FC<TabsProps> = ({ tabs }) => {
 
   return (
     <div>
-      <div className="border-b border-slate-200 dark:border-slate-700">
+      <div className="border-b border-slate-200 dark:border-slate-700 overflow-x-auto">
         <nav className="-mb-px flex space-x-6 px-6" aria-label="Tabs">
           {tabs.map((tab, index) => (
             <button

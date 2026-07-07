@@ -268,7 +268,7 @@ const ANALYTICS_DB_NAME = "crew_predictor_analytics";
 const ANALYTICS_DB_VERSION = 1;
 const ANALYTICS_DB_STORE = "snapshots";
 const ANALYTICS_DB_SNAPSHOT_ID = "latest";
-const DATA_ASSET_VERSION = "20260702-125213";
+const DATA_ASSET_VERSION = "20260707-154333";
 const withDataAssetVersion = (path) => `${path}?v=${DATA_ASSET_VERSION}`;
 const HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
 const ACTIVE_EMPLOYEE_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
@@ -4276,7 +4276,14 @@ function renderLastCrewSummary() {
     (sum, row) => sum + safeNumber(row.pieces),
     0,
   );
+  const supervisorId = cleanText(
+    lastJob?.supervisorNumber || state.storeLastSupervisor.get(store.storeKey),
+  );
+  const supervisorName = supervisorId
+    ? getEmployeeDisplayName(supervisorId)
+    : "Not available";
   dom.lastCrewSummary.innerHTML = `
+    <p class="last-crew-supervisor"><strong>Supervisor:</strong> ${escapeHtml(supervisorName)}</p>
     <table>
       <thead>
         <tr>

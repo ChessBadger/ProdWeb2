@@ -51,6 +51,7 @@ export interface RampPoint {
   jobNumber: number;
   value: number;
   rollingAvg: number;
+  cumulativeAvg: number;
   date: string;
 }
 
@@ -258,15 +259,18 @@ export const buildEmployeeProfile = (
 export const buildRampPoints = (
   records: EmployeeRecord[],
   metric: Metric,
-  windowSize = 5
+  windowSize = 10
 ): RampPoint[] => {
   const sortedRecords = [...records].sort((a, b) => getTime(a.date) - getTime(b.date));
+  let cumulativeTotal = 0;
   return sortedRecords.map((record, index) => {
     const windowRecords = sortedRecords.slice(Math.max(0, index - windowSize + 1), index + 1);
+    cumulativeTotal += record[metric];
     return {
       jobNumber: index + 1,
       value: record[metric],
       rollingAvg: average(windowRecords.map((item) => item[metric])) ?? record[metric],
+      cumulativeAvg: cumulativeTotal / (index + 1),
       date: record.date,
     };
   });

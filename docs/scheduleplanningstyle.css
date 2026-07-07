@@ -1285,6 +1285,12 @@ th {
   line-height: 1.45;
 }
 
+.last-crew-supervisor {
+  margin-bottom: 0.75rem;
+  color: #1f2d41;
+  font-size: 0.98rem;
+}
+
 .last-crew-notice {
   margin-top: 0.75rem;
   padding: 0.65rem 0.75rem;

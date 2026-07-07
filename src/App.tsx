@@ -19,6 +19,7 @@ import Tabs from "./components/Tabs";
 import AccountMetricsPage from "./components/AccountMetricsPage";
 import ProductionComparisonPage from "./components/ProductionComparisonPage";
 import TypeOfInvComparisonPage from "./components/TypeOfInvComparisonPage";
+import GrowthInsightsPanel from "./components/GrowthInsightsPanel";
 import { Metric } from "./types";
 import { METRIC_OPTIONS, getLinkedAccounts } from "./constants";
 import {
@@ -312,6 +313,65 @@ const Dashboard: React.FC = () => {
     () => data.filter((record) => !record.rx),
     [data]
   );
+
+  const growthFilteredData = useMemo(() => {
+    if (!data) return [];
+    let result = data;
+
+    if (filters.office !== "all")
+      result = result.filter((d) => d.office === filters.office);
+
+    if (filters.account !== "all") {
+      const linkedAccounts = getLinkedAccounts(filters.account);
+      result = result.filter((d) =>
+        linkedAccounts.includes(d.account.toLowerCase())
+      );
+    }
+
+    if (filters.employee !== "all")
+      result = result.filter((d) => d.employee === filters.employee);
+    if (filters.store !== "all")
+      result = result.filter((d) => d.store === filters.store);
+    if (filters.supervisor !== "all")
+      result = result.filter((d) => d.supervisor === filters.supervisor);
+
+    return result.filter((record) => !record.rx);
+  }, [
+    data,
+    filters.office,
+    filters.account,
+    filters.employee,
+    filters.store,
+    filters.supervisor,
+  ]);
+
+  const growthOverallData = useMemo(() => {
+    if (!data) return [];
+    let result = data;
+
+    if (filters.office !== "all")
+      result = result.filter((d) => d.office === filters.office);
+
+    if (filters.account !== "all") {
+      const linkedAccounts = getLinkedAccounts(filters.account);
+      result = result.filter((d) =>
+        linkedAccounts.includes(d.account.toLowerCase())
+      );
+    }
+
+    if (filters.store !== "all")
+      result = result.filter((d) => d.store === filters.store);
+    if (filters.supervisor !== "all")
+      result = result.filter((d) => d.supervisor === filters.supervisor);
+
+    return result.filter((record) => !record.rx);
+  }, [
+    data,
+    filters.office,
+    filters.account,
+    filters.store,
+    filters.supervisor,
+  ]);
 
   const kpiValues = useMemo(() => {
     if (!productionData.length) {
@@ -703,6 +763,18 @@ const Dashboard: React.FC = () => {
                           groupBy={groupBy}
                         />
                       </>
+                    ),
+                  },
+                  {
+                    label: "Growth & Risk",
+                    content: (
+                      <GrowthInsightsPanel
+                        data={growthFilteredData}
+                        overallData={growthOverallData}
+                        metric={selectedMetric}
+                        selectedEmployee={filters.employee}
+                        isDarkMode={isDarkMode}
+                      />
                     ),
                   },
                   {
