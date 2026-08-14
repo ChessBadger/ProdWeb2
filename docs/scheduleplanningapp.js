@@ -268,7 +268,7 @@ const ANALYTICS_DB_NAME = "crew_predictor_analytics";
 const ANALYTICS_DB_VERSION = 1;
 const ANALYTICS_DB_STORE = "snapshots";
 const ANALYTICS_DB_SNAPSHOT_ID = "latest";
-const DATA_ASSET_VERSION = "20260807-050935";
+const DATA_ASSET_VERSION = "20260814-171735";
 const withDataAssetVersion = (path) => `${path}?v=${DATA_ASSET_VERSION}`;
 const HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
 const ACTIVE_EMPLOYEE_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
@@ -2455,6 +2455,13 @@ function createUiYieldController(maxSliceMs = 12) {
       last = now();
     }
   };
+}
+
+function createAnalyticsYieldController() {
+  // Headless precompute has no interactive UI to keep responsive. Longer work
+  // slices avoid thousands of zero-delay timers while still letting DevTools
+  // observe progress and completion.
+  return createUiYieldController(PRECOMPUTE_ANALYTICS_MODE ? 250 : 10);
 }
 
 async function scheduleDeferredAnalytics() {
@@ -6082,7 +6089,7 @@ function renderAccuracyReport() {
 
 async function calibrateModelParameters() {
   if (!state.jobs.length) return;
-  const maybeYield = createUiYieldController(10);
+  const maybeYield = createAnalyticsYieldController();
 
   state.modelTuningByAccount = new Map();
   state.modelTuningByAccountType = new Map();
@@ -6404,43 +6411,134 @@ async function replayScoreForParameters(
   let manHoursAbs = 0;
   let count = 0;
 
-  const jobs = jobsSubset || [];
-  for (let i = 0; i < jobs.length; i += 1) {
-    const job = jobs[i];
-    const store = state.stores.get(job.storeKey);
-    if (!store || !(job.duration > 0)) {
-      if (i % 25 === 0) await maybeYield();
-      continue;
-    }
-
-    const predicted = computePredictionForJob(job, store, {
-      tuning: modelTuning,
-      baselineTuning,
-      applyResiduals: false,
-    });
-    if (!predicted) {
-      if (i % 25 === 0) await maybeYield();
-      continue;
-    }
-
-    const durationErr = Math.abs(
-      predicted.onSiteDuration - safeNumber(job.duration),
+  const replayInputs = getReplayInputs(jobsSubset || []);
+  for (let i = 0; i < replayInputs.length; i += 1) {
+    const input = replayInputs[i];
+    const baselinePieces = resolveReplayBaselinePieces(input, baselineTuning);
+    if (!(baselinePieces > 0) || !(input.crewSpeedRaw > 0)) continue;
+    const efficiency = getCrewEfficiencyFactor(input.crewSize, modelTuning);
+    const durationPred = Math.max(
+      0,
+      input.overheadBase * modelTuning.overheadScale +
+        baselinePieces / (input.crewSpeedRaw * efficiency),
     );
-    const manErr = Math.abs(predicted.manHours - safeNumber(job.totalManHours));
+    const manHoursPred = durationPred * input.crewSize;
+    const durationErr = Math.abs(durationPred - input.duration);
+    const manErr = Math.abs(manHoursPred - input.totalManHours);
     if (!Number.isFinite(durationErr) || !Number.isFinite(manErr)) {
-      if (i % 25 === 0) await maybeYield();
       continue;
     }
     durationAbs += clipOutlierError(durationErr, 12);
     manHoursAbs += clipOutlierError(manErr, 60);
     count += 1;
-    if (i % 25 === 0) await maybeYield();
   }
+
+  await maybeYield();
 
   if (!(count > 0)) return Number.POSITIVE_INFINITY;
   const durationMae = durationAbs / count;
   const manHoursMae = manHoursAbs / count;
   return durationMae * 0.75 + manHoursMae * 0.25;
+}
+
+const replayInputsCache = new WeakMap();
+
+function getReplayInputs(jobs) {
+  if (!Array.isArray(jobs) || !jobs.length) return [];
+  const cached = replayInputsCache.get(jobs);
+  if (cached) return cached;
+
+  const inputs = [];
+  for (const job of jobs) {
+    const store = state.stores.get(job.storeKey);
+    const duration = safeNumber(job.duration);
+    if (!store || !(duration > 0)) continue;
+
+    const crewSize = Math.max(1, safeNumber(job.crewSize));
+    const crewSpeedRaw = (job.employees || [])
+      .map((id) =>
+        effectiveEmployeeSpeed(
+          state.employees.get(id),
+          job.storeKey,
+          store.account,
+        ),
+      )
+      .filter((value) => value > 0)
+      .reduce((sum, value) => sum + value, 0);
+    if (!(crewSpeedRaw > 0)) continue;
+
+    const accountKey = store.accountKey || getLinkedAccountKey(store.account);
+    const segmentKey =
+      state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
+      `${accountKey}||S1`;
+    const typeKey = `${accountKey}||${job.typeOfInv || store.primaryType || "Unknown"}`;
+    const officeKey = `${accountKey}||${store.officeName || "Unknown"}`;
+    inputs.push({
+      duration,
+      totalManHours: safeNumber(job.totalManHours),
+      crewSize,
+      crewSpeedRaw,
+      overheadBase: resolveOverheadHours(store, 1).value,
+      store,
+      segmentStats: state.accountSegmentStats.get(segmentKey),
+      typeStats: state.accountTypeStats.get(typeKey),
+      officeStats: state.accountOfficeStats.get(officeKey),
+      accountStats: state.accountGlobalStats.get(accountKey),
+      baselineCache: new WeakMap(),
+    });
+  }
+  replayInputsCache.set(jobs, inputs);
+  return inputs;
+}
+
+function resolveReplayBaselinePieces(input, baselineTuning) {
+  if (baselineTuning && typeof baselineTuning === "object") {
+    const cached = input.baselineCache.get(baselineTuning);
+    if (cached !== undefined) return cached;
+  }
+  const storeMode = baselineTuning?.storeMode || "median";
+  const contextMode = baselineTuning?.contextMode || "median";
+  const storeCandidate = pickBaselineCandidate(input.store, storeMode);
+  const weightedCandidates = [
+    [input.segmentStats, baselineTuning?.segmentWeight],
+    [input.typeStats, baselineTuning?.typeWeight],
+    [input.accountStats, baselineTuning?.accountWeight],
+    [input.officeStats, baselineTuning?.officeWeight],
+    [state.global, baselineTuning?.globalWeight],
+  ];
+  let weightedTotal = 0;
+  let totalWeight = 0;
+  for (const [stats, rawWeight] of weightedCandidates) {
+    const value = pickBaselineCandidate(stats, contextMode);
+    const weight = safeNumber(rawWeight);
+    if (value > 0 && weight > 0) {
+      weightedTotal += value * weight;
+      totalWeight += weight;
+    }
+  }
+  const contextCandidate = totalWeight > 0 ? weightedTotal / totalWeight : 0;
+  if (!(storeCandidate > 0)) {
+    input.baselineCache.set(baselineTuning, contextCandidate);
+    return contextCandidate;
+  }
+  if (!(contextCandidate > 0)) {
+    input.baselineCache.set(baselineTuning, storeCandidate);
+    return storeCandidate;
+  }
+
+  const n = Math.max(0, safeNumber(input.store.jobCount));
+  const shrinkK = Math.max(1, safeNumber(baselineTuning?.storeShrinkK));
+  const rawStoreWeight = n / (n + shrinkK);
+  const minStoreWeight = Math.max(
+    0,
+    Math.min(0.9, safeNumber(baselineTuning?.minStoreWeight) || 0.45),
+  );
+  const storeWeight =
+    n > 0 ? Math.max(rawStoreWeight, minStoreWeight) : rawStoreWeight;
+  const result =
+    storeWeight * storeCandidate + (1 - storeWeight) * contextCandidate;
+  input.baselineCache.set(baselineTuning, result);
+  return result;
 }
 
 function clipOutlierError(value, cap) {
