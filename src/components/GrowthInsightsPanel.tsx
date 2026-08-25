@@ -38,7 +38,7 @@ type GrowthStatus =
   | "Stable"
   | "Low Sample";
 
-type ViewFilter = "watchlist" | "growing" | "returning" | "stable" | "all";
+type ViewFilter = "watchlist" | "needsPush" | "growing" | "returning" | "stable" | "all";
 
 type SortKey =
   | "employee"
@@ -62,6 +62,20 @@ interface GrowthRiskRow extends EmployeeGrowthRow {
   consistency: number | null;
   trajectoryPercent: number | null;
 }
+
+const isNeedsPushCandidate = (row: GrowthRiskRow): boolean => {
+  const expectedDeltaPercent = getExpectedDeltaPercent(row.expectedDelta, row.profile);
+  const totalPeriodJobs = row.currentCount + row.previousCount;
+
+  return (
+    totalPeriodJobs >= 4 &&
+    (row.profile?.records.length ?? 0) >= 5 &&
+    expectedDeltaPercent !== null &&
+    expectedDeltaPercent <= -10 &&
+    (row.percentChange === null || row.percentChange > -12) &&
+    (row.consistency ?? 0) >= 55
+  );
+};
 
 const formatValue = (value: number | null, decimals = 2) =>
   value === null || !Number.isFinite(value) ? "-" : value.toFixed(decimals);
@@ -371,6 +385,7 @@ const GrowthInsightsPanel: React.FC<GrowthInsightsPanelProps> = ({
       if (viewFilter === "watchlist") {
         return row.status === "Needs Review" || row.status === "Monitor";
       }
+      if (viewFilter === "needsPush") return isNeedsPushCandidate(row);
       if (viewFilter === "growing") return row.status === "Growing";
       if (viewFilter === "returning") return row.status === "Returning";
       if (viewFilter === "stable") return row.status === "Stable";
@@ -408,13 +423,19 @@ const GrowthInsightsPanel: React.FC<GrowthInsightsPanelProps> = ({
   const summary = useMemo(() => {
     const needsReview = riskRows.filter((row) => row.status === "Needs Review").length;
     const monitor = riskRows.filter((row) => row.status === "Monitor").length;
+    const needsPush = riskRows.filter(isNeedsPushCandidate).length;
     const growing = riskRows.filter((row) => row.status === "Growing").length;
     const returning = riskRows.filter((row) => row.status === "Returning").length;
     const avgRisk = riskRows.length
       ? riskRows.reduce((total, row) => total + row.riskScore, 0) / riskRows.length
       : 0;
-    return { needsReview, monitor, growing, returning, avgRisk };
+    return { needsReview, monitor, needsPush, growing, returning, avgRisk };
   }, [riskRows]);
+
+  const viewDescription =
+    viewFilter === "needsPush"
+      ? "At least 10% below the matched expectation, with enough work, reasonable consistency, and no sharp recent decline."
+      : "All-time employee history, with latest 30 vs prior 30 signals and benchmark context.";
 
   const tickColor = isDarkMode ? "#94a3b8" : "#64748b";
   const gridColor = isDarkMode ? "#334155" : "#e2e8f0";
@@ -451,9 +472,10 @@ const GrowthInsightsPanel: React.FC<GrowthInsightsPanelProps> = ({
 
   return (
     <div className="space-y-6 p-4">
-      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-6 gap-4">
         <SummaryTile label="Needs Review" value={summary.needsReview.toLocaleString()} tone="risk" />
         <SummaryTile label="Monitor" value={summary.monitor.toLocaleString()} tone="warn" />
+        <SummaryTile label="Needs a Push" value={summary.needsPush.toLocaleString()} tone="warn" />
         <SummaryTile label="Growing" value={summary.growing.toLocaleString()} tone="good" />
         <SummaryTile label="Returning" value={summary.returning.toLocaleString()} tone="info" />
         <SummaryTile label="Avg Risk" value={summary.avgRisk.toFixed(0)} tone="neutral" />
@@ -468,7 +490,7 @@ const GrowthInsightsPanel: React.FC<GrowthInsightsPanelProps> = ({
                   Growth Watchlist
                 </h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400">
-                  All-time employee history, with latest 30 vs prior 30 signals and benchmark context.
+                  {viewDescription}
                 </p>
               </div>
               <div className="flex flex-wrap items-end gap-3">
@@ -480,6 +502,7 @@ const GrowthInsightsPanel: React.FC<GrowthInsightsPanelProps> = ({
                     className="mt-1 block w-40 rounded-md border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-sm"
                   >
                     <option value="watchlist">Watchlist</option>
+                    <option value="needsPush">Needs a Push</option>
                     <option value="growing">Growing</option>
                     <option value="returning">Returning</option>
                     <option value="stable">Stable</option>
