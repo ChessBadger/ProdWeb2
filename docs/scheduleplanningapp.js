@@ -9,6 +9,7 @@ const state = {
   accountGlobalStats: new Map(),
   employees: new Map(),
   peerAccountEstimateCache: new Map(),
+  modasMedianCache: new Map(),
   activeEmployeeIds: new Set(),
   suggestedSupervisorByStore: new Map(),
   global: {
@@ -30,6 +31,7 @@ const state = {
   storeLastCrew: new Map(),
   storeLastSupervisor: new Map(),
   selectedStoreKey: null,
+  modasByStore: {},
   selectedRolesByStore: {},
   roleModesByStore: {},
   selectedEmployees: new Set(),
@@ -268,7 +270,7 @@ const ANALYTICS_DB_NAME = "crew_predictor_analytics";
 const ANALYTICS_DB_VERSION = 1;
 const ANALYTICS_DB_STORE = "snapshots";
 const ANALYTICS_DB_SNAPSHOT_ID = "latest";
-const DATA_ASSET_VERSION = "20260904-130625";
+const DATA_ASSET_VERSION = "20260908-113118";
 const withDataAssetVersion = (path) => `${path}?v=${DATA_ASSET_VERSION}`;
 const HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
 const ACTIVE_EMPLOYEE_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
@@ -364,6 +366,7 @@ const dom = {
   clearStoreSearchBtn: document.getElementById("clearStoreSearchBtn"),
   storeScheduleFilter: document.getElementById("storeScheduleFilter"),
   storeSelect: document.getElementById("storeSelect"),
+  useModas: document.getElementById("useModas"),
   storeSelectMeta: document.getElementById("storeSelectMeta"),
   storeStats: document.getElementById("storeStats"),
   planningMode: document.getElementById("planningMode"),
@@ -1210,6 +1213,13 @@ function bindEvents() {
     onStoreScheduleFilterChange,
   );
   dom.storeSelect.addEventListener("change", onStoreChange);
+  dom.useModas.addEventListener("change", () => {
+    if (!state.selectedStoreKey) return;
+    state.modasByStore[state.selectedStoreKey] = dom.useModas.checked;
+    persistToStorage();
+    renderEmployeeList();
+    updateResults();
+  });
   dom.planningMode.addEventListener("change", onPlanningInputChange);
   dom.targetValue.addEventListener("input", onPlanningInputChange);
   dom.productionShrinkPercent?.addEventListener("input", onPlanningInputChange);
@@ -1418,7 +1428,15 @@ async function loadRows(
   state.accountOfficeStats = buildAccountOfficeStats(state.jobs);
   state.accountGlobalStats = buildAccountGlobalStats(state.jobs);
   state.employees = buildEmployeeStats(normalizedRows);
+  for (const isModas of [true, false]) {
+    const modeStats = buildEmployeeStats(normalizedRows.filter(row => row.isModas === isModas));
+    state.employees.forEach((employee, id) => {
+      employee[isModas ? "modasAccountStats" : "regularAccountStats"] =
+        modeStats.get(id)?.accountStats || {};
+    });
+  }
   state.peerAccountEstimateCache = new Map();
+  state.modasMedianCache = new Map();
   state.activeEmployeeIds = buildActiveEmployeeIds(
     activeEmployeeRawRows,
     state.employees,
@@ -1692,7 +1710,16 @@ function onStoreScheduleFilterChange() {
   updateResults();
 }
 
+function getStoreModasMode(storeKey = state.selectedStoreKey) {
+  if (typeof state.modasByStore[storeKey] === "boolean") return state.modasByStore[storeKey];
+  const store = state.stores.get(storeKey);
+  return getLinkedAccountKey(store?.account || "") === "kroger" ||
+    /modas/i.test(getPrimaryScheduleForStore(storeKey)?.typeOfInv || store?.type || "");
+}
+
 function refreshStoreContextPanels() {
+  dom.useModas.checked = getStoreModasMode();
+  dom.useModas.disabled = !state.selectedStoreKey;
   renderStoreStats();
   renderGoalHint();
   renderLastCrewSummary();
@@ -1804,6 +1831,7 @@ function normalizeRow(row) {
     manHours,
     totalExtQty,
     piecesPerHr,
+    isModas: toNumber(firstValue(normalized, ["avgdelta"])) > 0,
     jobKey,
   };
 }
@@ -3701,8 +3729,13 @@ function getEmployeeMostRecentAccountProduction(employee, account) {
 }
 
 function resolveEmployeePlanningBaseSpeed(employee, account, options = {}) {
-  const baseSpeed = displayEmployeeSpeed(employee, account);
-  if (!options.useRecentAccountProduction) return baseSpeed;
+  const inventoryMode = options.inventoryMode === null ? null :
+    (options.inventoryMode ?? getStoreModasMode());
+  const baseSpeed = getEmployeePlanningSpeedSource(employee, account, inventoryMode).speed;
+  // Matching-mode history takes precedence over the latest mixed-mode record.
+  const accountKey = getLinkedAccountKey(account);
+  const matching = employee?.[inventoryMode ? "modasAccountStats" : "regularAccountStats"]?.[accountKey];
+  if (inventoryMode === true || (inventoryMode !== null && matching?.jobCount > 0) || !options.useRecentAccountProduction) return baseSpeed;
   const recentPiecesPerHr = safeNumber(
     getEmployeeMostRecentAccountProduction(employee, account).piecesPerHr,
   );
@@ -5181,6 +5214,7 @@ function computePredictionForJob(job, store, options = {}) {
         state.employees.get(id),
         job.storeKey,
         store.account,
+        { inventoryMode: null },
       ),
     )
     .filter((v) => v > 0)
@@ -5573,6 +5607,15 @@ function renderDetailedBackground(rankedRows = []) {
         ${renderPredictionDifferenceImpact(prediction)}
       </section>
       <section class="detail-wide">
+        <h4>Modas vs Non-Modas Account Production</h4>
+        <p>Planning as <strong>${getStoreModasMode() ? "Modas" : "Non-Modas"}</strong> for ${escapeHtml(store.account)}. Modas history gets 85% weight after one inventory, 90% after two, 95% after three or four, and 100% after five. With only Modas history, it gets 100%. Without Modas history, similar employees? Modas production on this account is used, then the account Modas median. If the account has no usable Modas history, existing estimates apply. Non-Modas plans retain the 80/20 weighting.</p>
+        <p class="muted">History is classified using AVG_DELTA &gt; 0 for Modas. Speeds below blend recent and long-term production and exclude supervisor-assignment days. Matching history takes priority over the most recent production toggle. For Modas plans with fewer than five Modas inventories, the planning base is also pulled toward the account Modas median. This adjustment fades out at five inventories. Role and production shrink adjustments apply afterward.</p>
+        ${rows.length ? `<div style="overflow-x: auto"><table>
+          <thead><tr><th>Employee</th><th>Modas History</th><th>Non-Modas History</th><th>History Weighting</th><th>Planning Base</th></tr></thead>
+          <tbody>${rows.map(row => renderEmployeeModasDetail(row, store)).join("")}</tbody>
+        </table></div>` : `<p class="muted">Select crew members to compare their Modas and Non-Modas account history.</p>`}
+      </section>
+      <section class="detail-wide">
         <h4>Recent vs Long-Term Speed</h4>
         ${
           rows.length
@@ -5616,6 +5659,48 @@ function renderDetailedBackground(rankedRows = []) {
       </section>
     </div>
   `;
+}
+
+function renderEmployeeModasDetail(row, store) {
+  const employee = state.employees.get(row.id);
+  const accountKey = getLinkedAccountKey(store.account);
+  const modas = employee?.modasAccountStats?.[accountKey];
+  const regular = employee?.regularAccountStats?.[accountKey];
+  const isModas = getStoreModasMode();
+  const matchingSpeed = getBlendedAccountSpeed(isModas ? modas : regular);
+  const otherSpeed = getBlendedAccountSpeed(isModas ? regular : modas);
+  const modeLabel = isModas ? "Modas" : "Non-Modas";
+  let weighting = matchingSpeed > 0
+    ? otherSpeed > 0
+      ? `${isModas ? "80% Modas / 20% Non-Modas" : "20% Modas / 80% Non-Modas"}`
+      : `100% ${modeLabel}`
+    : `No usable ${modeLabel} history; existing estimate`;
+  if (isModas) {
+    const source = getModasPlanningSource(employee, accountKey);
+    weighting = source?.label || "No account Modas history; existing estimate";
+    if (source?.source === "modasAccount" && source.confidenceWeight < 1) {
+      weighting += `; ${formatNumber((1 - source.confidenceWeight) * 100, 0)}% confidence adjustment toward account Modas median (${formatNumber(source.accountMedian, 0)} pieces/hr)`;
+    }
+  }
+  const formatHistory = (stat) => {
+    const speed = getBlendedAccountSpeed(stat);
+    if (!stat?.jobCount) return `<span class="muted">No history</span>`;
+    const latest = stat.mostRecentStoreName
+      ? `<div class="muted">Latest: ${formatNumber(stat.mostRecentPiecesPerHr, 0)} pieces/hr at ${escapeHtml(stat.mostRecentStoreName)}</div>`
+      : "";
+    return `${speed > 0 ? `${formatNumber(speed, 0)} pieces/hr` : "No usable production"}
+      <div class="muted">${formatNumber(stat.jobCount, 0)} inventories</div>${latest}`;
+  };
+  const baseSpeed = resolveEmployeePlanningBaseSpeed(employee, store.account, {
+    useRecentAccountProduction: state.useRecentAccountProduction,
+  });
+  return `<tr>
+    <td>${escapeHtml(getEmployeeDisplayName(row.id))}</td>
+    <td>${formatHistory(modas)}</td>
+    <td>${formatHistory(regular)}</td>
+    <td>${escapeHtml(weighting)}</td>
+    <td>${formatNumber(baseSpeed, 0)} pieces/hr</td>
+  </tr>`;
 }
 
 function renderPeerEstimateBreakdownRow(row, store, prediction = null) {
@@ -7239,6 +7324,7 @@ function persistToStorage() {
       state.productionShrinkEmployeeIds || [],
     ),
     useRecentAccountProduction: state.useRecentAccountProduction,
+    modasByStore: state.modasByStore,
     selectedRolesByStore: state.selectedRolesByStore,
     roleModesByStore: state.roleModesByStore,
   };
@@ -7261,6 +7347,7 @@ function restoreSelectionsFromStorage() {
 
 function restoreSettingsFromStorage() {
   const settings = readStorage().settings || {};
+  state.modasByStore = settings.modasByStore || {};
   state.planningMode =
     settings.planningMode === "manhours" ? "manhours" : "duration";
   state.targetValue = Math.max(0, toNumber(settings.targetValue));
@@ -7661,7 +7748,57 @@ function displayEmployeeSpeed(employee, account = getSelectedAccount()) {
   return getEmployeePlanningSpeedSource(employee, account).speed;
 }
 
-function getEmployeePlanningSpeedSource(employee, account = getSelectedAccount()) {
+function getModasHistoryWeight(jobCount) {
+  if (jobCount >= 5) return 1;
+  if (jobCount >= 3) return 0.95;
+  if (jobCount >= 2) return 0.9;
+  return 0.85;
+}
+
+function getAccountModasMedian(accountKey) {
+  if (!state.modasMedianCache.has(accountKey)) {
+    const speeds = Array.from(state.employees.values())
+      .map(employee => getBlendedAccountSpeed(employee.modasAccountStats?.[accountKey]))
+      .filter(speed => speed > 0);
+    state.modasMedianCache.set(accountKey, speeds.length ? median(speeds) : 0);
+  }
+  return state.modasMedianCache.get(accountKey);
+}
+
+function getModasPlanningSource(employee, accountKey) {
+  const matching = employee?.modasAccountStats?.[accountKey];
+  const modeSpeed = getBlendedAccountSpeed(matching);
+  const accountMedian = getAccountModasMedian(accountKey);
+  if (modeSpeed > 0) {
+    const otherSpeed = getBlendedAccountSpeed(employee?.regularAccountStats?.[accountKey]);
+    const weight = otherSpeed > 0 ? getModasHistoryWeight(matching.jobCount) : 1;
+    const blended = modeSpeed * weight + otherSpeed * (1 - weight);
+    // Retire confidence shrinkage after five matching inventories, too.
+    const confidenceWeight = Math.min(1, matching.jobCount / 5);
+    return {
+      speed: accountMedian > 0 ? blended * confidenceWeight + accountMedian * (1 - confidenceWeight) : blended,
+      source: "modasAccount",
+      label: `${formatNumber(weight * 100, 0)}% Modas history (${matching.jobCount} inventories)`,
+      historyWeight: weight,
+      confidenceWeight: accountMedian > 0 ? confidenceWeight : 1,
+      accountMedian,
+    };
+  }
+  const peerEstimate = getPeerAdjustedAccountEstimate(employee, accountKey, true);
+  if (peerEstimate?.speed > 0) return {
+    speed: peerEstimate.speed, source: "modasPeer", label: "Similar-peer Modas account estimate", peerEstimate,
+  };
+  if (accountMedian > 0) return {
+    speed: accountMedian, source: "modasMedian", label: "Account Modas median (no similar-peer estimate)",
+  };
+  return null;
+}
+
+function getEmployeePlanningSpeedSource(employee, account = getSelectedAccount(), inventoryMode = getStoreModasMode()) {
+  if (inventoryMode === true) {
+    const modasSource = getModasPlanningSource(employee, getLinkedAccountKey(account));
+    if (modasSource) return modasSource;
+  }
   const fallback = safeNumber(state.global.medianEmployeeSpeed);
   if (!employee) {
     return {
@@ -7674,11 +7811,18 @@ function getEmployeePlanningSpeedSource(employee, account = getSelectedAccount()
   const accountKey = getLinkedAccountKey(account);
   const accountStat = accountKey ? employee.accountStats?.[accountKey] : null;
   if (accountStat && accountStat.jobCount >= 1) {
-    const blended = blendRecentAndLongSpeed(
+    let blended = blendRecentAndLongSpeed(
       accountStat.avgPiecesPerHrRecent,
       accountStat.avgPiecesPerHr,
       accountStat.jobCount,
     );
+    const matching = employee[inventoryMode ? "modasAccountStats" : "regularAccountStats"]?.[accountKey];
+    const other = employee[inventoryMode ? "regularAccountStats" : "modasAccountStats"]?.[accountKey];
+    const modeSpeed = getBlendedAccountSpeed(matching);
+    if (inventoryMode !== null && modeSpeed > 0) {
+      const otherSpeed = getBlendedAccountSpeed(other);
+      blended = otherSpeed > 0 ? modeSpeed * 0.8 + otherSpeed * 0.2 : modeSpeed;
+    }
     return {
       speed: shrinkTowardFallback(blended, fallback, accountStat.jobCount, 3),
       source: "account",
@@ -7716,17 +7860,17 @@ function getEmployeePlanningSpeedSource(employee, account = getSelectedAccount()
   };
 }
 
-function getPeerAdjustedAccountEstimate(employee, accountKey) {
+function getPeerAdjustedAccountEstimate(employee, accountKey, modasOnly = false) {
   if (!employee || !accountKey || !employee.accountStats) return null;
-  if (employee.accountStats?.[accountKey]?.jobCount >= 1) return null;
-  const cacheKey = `${employee.employee || ""}||${accountKey}`;
+  if (!modasOnly && employee.accountStats?.[accountKey]?.jobCount >= 1) return null;
+  const cacheKey = `${employee.employee || ""}||${accountKey}||${modasOnly ? "modas" : "all"}`;
   if (state.peerAccountEstimateCache?.has(cacheKey)) {
     return state.peerAccountEstimateCache.get(cacheKey);
   }
 
   const targetGlobalSpeed = getBlendedGlobalEmployeeSpeed(employee);
   const fallback = safeNumber(state.global.medianEmployeeSpeed);
-  const targetAccountEntries = getComparableAccountEntries(employee, accountKey);
+  const targetAccountEntries = getComparableAccountEntries(employee, modasOnly ? null : accountKey);
   if (!targetAccountEntries.length) {
     state.peerAccountEstimateCache?.set(cacheKey, null);
     return null;
@@ -7735,7 +7879,7 @@ function getPeerAdjustedAccountEstimate(employee, accountKey) {
   const candidates = [];
   state.employees.forEach((peer) => {
     if (!peer || peer.employee === employee.employee) return;
-    const peerTargetAccount = peer.accountStats?.[accountKey];
+    const peerTargetAccount = (modasOnly ? peer.modasAccountStats : peer.accountStats)?.[accountKey];
     const peerTargetSpeed = getBlendedAccountSpeed(peerTargetAccount);
     if (!(peerTargetSpeed > 0)) return;
 
@@ -7784,7 +7928,7 @@ function getPeerAdjustedAccountEstimate(employee, accountKey) {
     if (similarity < 0.45) return;
 
     const accountRatio = clampNumber(peerTargetSpeed / peerComparableSpeed, 0.55, 1.75);
-    const candidateSpeed = targetComparableSpeed * accountRatio;
+    const candidateSpeed = modasOnly ? peerTargetSpeed : targetComparableSpeed * accountRatio;
     const support =
       similarity *
       Math.min(1, shared.length / 3) *
