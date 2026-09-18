@@ -21,6 +21,7 @@ type ModasUsageSummary = {
 
 interface ModasUsageReportTableProps {
   data: EmployeeRecord[];
+  equipment?: "Modas" | "DC5";
 }
 
 const isModasRecord = (record: EmployeeRecord) => Number(record.avg_delta) > 0;
@@ -39,6 +40,7 @@ const escapeCsvValue = (value: string | number) => {
 
 const ModasUsageReportTable: React.FC<ModasUsageReportTableProps> = ({
   data,
+  equipment = "Modas",
 }) => {
   const [sortKey, setSortKey] = useState<SortKey>("modasInventoryCount");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
@@ -50,7 +52,7 @@ const ModasUsageReportTable: React.FC<ModasUsageReportTableProps> = ({
       if (!employeeGroups.has(record.employee)) {
         employeeGroups.set(record.employee, []);
       }
-      if (isModasRecord(record)) {
+      if (isModasRecord(record) === (equipment === "Modas")) {
         employeeGroups.get(record.employee)!.push(record);
       }
     });
@@ -74,7 +76,7 @@ const ModasUsageReportTable: React.FC<ModasUsageReportTableProps> = ({
         lastUsed: sortedDates.at(-1) ?? "",
       };
     });
-  }, [data]);
+  }, [data, equipment]);
 
   const sortedData = useMemo(() => {
     return [...modasSummaries].sort((a, b) => {
@@ -105,7 +107,7 @@ const ModasUsageReportTable: React.FC<ModasUsageReportTableProps> = ({
   const handleExport = () => {
     const headers = [
       "Employee",
-      "Modas Uses",
+      `${equipment} Uses`,
       "Records",
       "Accounts",
       "First Used",
@@ -130,7 +132,7 @@ const ModasUsageReportTable: React.FC<ModasUsageReportTableProps> = ({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `modas-usage-report-${new Date()
+    link.download = `${equipment.toLowerCase()}-usage-report-${new Date()
       .toISOString()
       .slice(0, 10)}.csv`;
     link.click();
@@ -157,7 +159,7 @@ const ModasUsageReportTable: React.FC<ModasUsageReportTableProps> = ({
   if (!sortedData.length) {
     return (
       <div className="text-center py-10 text-slate-500 dark:text-slate-400">
-        No Modas usage to display for the selected timeframe.
+        No {equipment} usage to display for the selected timeframe.
       </div>
     );
   }
@@ -180,7 +182,7 @@ const ModasUsageReportTable: React.FC<ModasUsageReportTableProps> = ({
               {renderHeader("employee", "Employee")}
               {renderHeader(
                 "modasInventoryCount",
-                "Modas Uses",
+                `${equipment} Uses`,
                 "text-center"
               )}
               {renderHeader("modasRecordCount", "Records", "text-center")}

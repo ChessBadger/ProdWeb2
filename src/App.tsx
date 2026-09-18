@@ -793,8 +793,22 @@ const Dashboard: React.FC = () => {
                     ),
                   },
                   {
-                    label: "Modas Usage",
-                    content: <ModasUsageReportTable data={filteredData} />,
+                    label: "Equipment",
+                    content: (
+                      <Tabs
+                        key="equipment"
+                        tabs={[
+                          {
+                            label: "Modas Usage",
+                            content: <ModasUsageReportTable key="modas" data={filteredData} />,
+                          },
+                          {
+                            label: "DC5 Usage",
+                            content: <ModasUsageReportTable key="dc5" data={filteredData} equipment="DC5" />,
+                          },
+                        ]}
+                      />
+                    ),
                   },
                 ]}
               />
