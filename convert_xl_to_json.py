@@ -95,7 +95,7 @@ def bump_schedule_planning_asset_versions(repo_root: Path):
     """
     version = time.strftime("%Y%m%d-%H%M%S")
     html_pattern = re.compile(
-        r"(scheduleplanning(?:app\.js|style\.css)\?v=)[A-Za-z0-9._-]+"
+        r"((?:scheduleplanning(?:app\.js|style\.css)|durationmodel\.js)\?v=)[A-Za-z0-9._-]+"
     )
     data_pattern = re.compile(
         r'(const DATA_ASSET_VERSION = ")[^"]+(";)',

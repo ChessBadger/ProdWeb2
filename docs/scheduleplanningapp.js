@@ -1,4 +1,7 @@
 const state = {
+  durationHistory: null,
+  durationAnalytics: null,
+  durationContextCache: new Map(),
   rows: [],
   jobs: [],
   stores: new Map(),
@@ -73,196 +76,18 @@ const state = {
   productionShrinkMode: "all",
   productionShrinkEmployeeIds: new Set(),
   useRecentAccountProduction: false,
-  baseModelTuning: {
-    overheadScale: 0.25,
-    effSmall: 1.0,
-    effMid: 0.97,
-    effLarge: 0.93,
-    smallCrewMax: 8,
-    midCrewMax: 15,
-  },
-  modelTuning: {
-    overheadScale: 0.25,
-    effSmall: 1.0,
-    effMid: 0.97,
-    effLarge: 0.93,
-    smallCrewMax: 8,
-    midCrewMax: 15,
-  },
-  modelTuningByAccount: new Map(),
-  modelTuningByAccountType: new Map(),
-  modelTuningByAccountSegment: new Map(),
-  baseBaselineTuning: {
-    storeMode: "median",
-    contextMode: "median",
-    storeShrinkK: 4,
-    minStoreWeight: 0.45,
-    segmentWeight: 0.45,
-    typeWeight: 0.2,
-    officeWeight: 0.2,
-    accountWeight: 0.1,
-    globalWeight: 0.05,
-  },
-  baselineTuning: {
-    storeMode: "median",
-    contextMode: "median",
-    storeShrinkK: 4,
-    minStoreWeight: 0.45,
-    segmentWeight: 0.45,
-    typeWeight: 0.2,
-    officeWeight: 0.2,
-    accountWeight: 0.1,
-    globalWeight: 0.05,
-  },
-  baselineTuningByAccount: new Map(),
-  baselineTuningByAccountType: new Map(),
-  baselineTuningByAccountSegment: new Map(),
-  residualByStore: new Map(),
-  residualByAccountSegment: new Map(),
-  residualByAccountType: new Map(),
-  residualByAccountOffice: new Map(),
-  residualByAccount: new Map(),
-  residualGlobal: {
-    count: 0,
-    mean: 0,
-    p10: 0,
-    p25: 0,
-    p75: 0,
-    p90: 0,
-    stdDev: 0,
-  },
-  residualByStoreCrewBand: new Map(),
-  residualByStoreSupervisor: new Map(),
-  residualByAccountSupervisor: new Map(),
-  residualByAccountSegmentCrewBand: new Map(),
-  residualByAccountTypeCrewBand: new Map(),
-  residualByAccountCrewBand: new Map(),
-  residualGlobalCrewBand: new Map(),
-  manHourResidualByStore: new Map(),
-  manHourResidualByAccountSegment: new Map(),
-  manHourResidualByAccountType: new Map(),
-  manHourResidualByAccountOffice: new Map(),
-  manHourResidualByAccount: new Map(),
-  manHourResidualGlobal: {
-    count: 0,
-    mean: 0,
-    p10: 0,
-    p25: 0,
-    p75: 0,
-    p90: 0,
-    stdDev: 0,
-  },
-  manHourResidualByStoreCrewBand: new Map(),
-  manHourResidualByStoreSupervisor: new Map(),
-  manHourResidualByAccountSupervisor: new Map(),
-  manHourResidualByAccountSegmentCrewBand: new Map(),
-  manHourResidualByAccountTypeCrewBand: new Map(),
-  manHourResidualByAccountCrewBand: new Map(),
-  manHourResidualGlobalCrewBand: new Map(),
-  uncertaintyScale: 1,
-  backtestMetrics: {
-    durationMae: 0,
-    manHoursMae: 0,
-    jobs: 0,
-    splitDate: "",
-  },
+  backtestMetrics: { jobs: 0, durationMae: 0, splitDate: "" },
   accuracyCache: null,
-  residualShrinkageKs: {
-    account: 24,
-    segment: 14,
-    type: 16,
-    store: 8,
-  },
-  residualProfilesByDensity: {
-    dense: {
-      ks: {
-        account: 24,
-        segment: 14,
-        type: 16,
-        office: 16,
-        store: 8,
-        accountSupervisor: 10,
-        storeSupervisor: 6,
-        globalBand: 18,
-        accountBand: 14,
-        segmentBand: 12,
-        typeBand: 12,
-        storeBand: 8,
-      },
-      floors: {
-        minStoreWeight: 0.3,
-        anchorMinShare: 0.4,
-        anchorMinWeight: 0.35,
-        anchorK: 8,
-        anchorMaxAbsHours: 0.7,
-      },
-      mins: {
-        storeBand: 5,
-        storeSupervisor: 6,
-        store: 8,
-        accountSupervisor: 10,
-        segmentBand: 10,
-        segment: 16,
-        typeBand: 12,
-        type: 18,
-        office: 16,
-        accountBand: 16,
-        account: 24,
-        globalBand: 20,
-      },
-    },
-    sparse: {
-      ks: {
-        account: 12,
-        segment: 8,
-        type: 8,
-        office: 8,
-        store: 5,
-        accountSupervisor: 6,
-        storeSupervisor: 4,
-        globalBand: 12,
-        accountBand: 8,
-        segmentBand: 8,
-        typeBand: 8,
-        storeBand: 5,
-      },
-      floors: {
-        minStoreWeight: 0.45,
-        anchorMinShare: 0.55,
-        anchorMinWeight: 0.45,
-        anchorK: 6,
-        anchorMaxAbsHours: 0.9,
-      },
-      mins: {
-        storeBand: 3,
-        storeSupervisor: 4,
-        store: 5,
-        accountSupervisor: 6,
-        segmentBand: 6,
-        segment: 8,
-        typeBand: 8,
-        type: 10,
-        office: 8,
-        accountBand: 8,
-        account: 12,
-        globalBand: 12,
-      },
-    },
-  },
-  manHourShrinkageKs: {
-    account: 26,
-    segment: 16,
-    type: 18,
-    store: 10,
-  },
   analyticsReady: false,
   analyticsScheduled: false,
   dataFingerprint: "",
-  lastDurationResidualByStore: new Map(),
   lastCrewAppliedStoreKey: null,
   detailedView: false,
   isLoaded: false,
 };
+
+const FORECAST_LOG_KEY = "crew_predictor_forecasts_v1";
+let forecastSaveTimer = null;
 
 const STORAGE_KEY = "crew_predictor_v2";
 const ANALYTICS_CACHE_KEY = "crew_predictor_analytics_v2";
@@ -270,7 +95,7 @@ const ANALYTICS_DB_NAME = "crew_predictor_analytics";
 const ANALYTICS_DB_VERSION = 1;
 const ANALYTICS_DB_STORE = "snapshots";
 const ANALYTICS_DB_SNAPSHOT_ID = "latest";
-const DATA_ASSET_VERSION = "20260918-153518";
+const DATA_ASSET_VERSION = "20260921-143559";
 const withDataAssetVersion = (path) => `${path}?v=${DATA_ASSET_VERSION}`;
 const HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
 const ACTIVE_EMPLOYEE_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
@@ -1420,6 +1245,8 @@ async function loadRows(
 
   state.rows = normalizedRows;
   state.jobs = buildJobs(normalizedRows);
+  state.durationHistory = DurationModel.createHistory(state.jobs);
+  state.durationContextCache = new Map();
   state.stores = buildStoreStats(state.jobs);
   state.storeSegmentByStoreKey = buildStoreSegments(state.stores);
   applySegmentsToStores(state.stores, state.storeSegmentByStoreKey);
@@ -1714,7 +1541,7 @@ function getStoreModasMode(storeKey = state.selectedStoreKey) {
   if (typeof state.modasByStore[storeKey] === "boolean") return state.modasByStore[storeKey];
   const store = state.stores.get(storeKey);
   return getLinkedAccountKey(store?.account || "") === "kroger" ||
-    /modas/i.test(getPrimaryScheduleForStore(storeKey)?.typeOfInv || store?.type || "");
+    /modas/i.test(getPrimaryScheduleForStore(storeKey)?.typeOfInv || store?.primaryType || "");
 }
 
 function refreshStoreContextPanels() {
@@ -1858,6 +1685,9 @@ function buildJobs(rows) {
         duration: 0,
         durationIncludingSupervisor: 0,
         nonSupervisorDuration: 0,
+        modasRows: 0,
+        regularRows: 0,
+        rxEmployees: new Set(),
       });
     }
 
@@ -1883,6 +1713,11 @@ function buildJobs(rows) {
     const isDaySupervisor =
       Boolean(supervisorId && employeeId === supervisorId.toLowerCase()) ||
       isSupervisorRole(row.role);
+    if (row.isRx) job.rxEmployees.add(row.employee);
+    if (!isDaySupervisor && !row.isRx) {
+      if (row.isModas) job.modasRows++;
+      else job.regularRows++;
+    }
     if (!job.employeeStats.has(row.employee)) {
       job.employeeStats.set(row.employee, {
         employee: row.employee,
@@ -1913,6 +1748,8 @@ function buildJobs(rows) {
     ...job,
     duration: job.nonSupervisorDuration || job.durationIncludingSupervisor,
     crewSize: job.employees.size,
+    inventoryMode: job.modasRows && !job.regularRows ? true : job.regularRows && !job.modasRows ? false : null,
+    rxEmployees: Array.from(job.rxEmployees),
     employees: Array.from(job.employees),
     employeeDetails: Array.from(job.employeeStats.values()).map((stat) => ({
       ...stat,
@@ -2515,9 +2352,7 @@ async function scheduleDeferredAnalytics() {
   dom.accuracySummary.textContent = "Computing accuracy snapshot...";
   dom.storeAccuracySummary.textContent = "Computing selected store accuracy...";
   try {
-    await calibrateModelParameters();
-    await buildResidualStats(state.jobs);
-    state.accuracyCache = await buildAccuracyCache(state.jobs);
+    await calibrateDurationModel();
     await persistAnalyticsCache(state.dataFingerprint);
     state.analyticsReady = true;
     if (dom.computeAccuracyBtn) {
@@ -2563,6 +2398,126 @@ function finishAnalyticsPrecompute(ok, payload) {
     JSON.stringify(output),
   )}</pre>`;
   window.__ANALYTICS_PRECOMPUTE_DONE__ = output;
+}
+
+function buildDurationEmployeeContext(rows) {
+  const employees = buildEmployeeStats(rows);
+  for (const mode of [true, false]) {
+    const stats = buildEmployeeStats(rows.filter(row => row.isModas === mode));
+    for (const [id, employee] of employees) {
+      employee[mode ? "modasAccountStats" : "regularAccountStats"] = stats.get(id)?.accountStats || {};
+    }
+  }
+  return {
+    employees,
+    global: { medianEmployeeSpeed: median(Array.from(employees.values()).map(e => e.avgPiecesPerHrGlobal).filter(v => v > 0)) },
+    peerAccountEstimateCache: new Map(), modasMedianCache: new Map(),
+  };
+}
+
+function durationRateResolver(context) {
+  const cache = new Map();
+  return (id, account, inventoryMode, useRecentAccountProduction = false) => {
+    const key = JSON.stringify([id, account, inventoryMode, useRecentAccountProduction]);
+    if (cache.has(key)) return cache.get(key);
+    const employee = context.employees.get(id);
+    const source = getEmployeePlanningSpeedSource(employee, account, inventoryMode, context);
+    const result = {
+      speed: resolveEmployeePlanningBaseSpeed(employee, account, { inventoryMode, useRecentAccountProduction, employeeContext: context }),
+      known: Boolean(employee?.globalJobCount > 0 && source.source !== "globalMedian"),
+    };
+    cache.set(key, result);
+    return result;
+  };
+}
+
+async function buildDurationReplayRecords(rows, jobs, maybeYield = async () => {}) {
+  const history = DurationModel.createHistory();
+  const sortedRows = [...rows].sort((a, b) => a.date.localeCompare(b.date));
+  const sortedJobs = [...jobs].sort((a, b) => a.date.localeCompare(b.date));
+  const records = [];
+  let rowEnd = 0, jobIndex = 0;
+  while (jobIndex < sortedJobs.length) {
+    const date = sortedJobs[jobIndex].date;
+    while (rowEnd < sortedRows.length && sortedRows[rowEnd].date < date) rowEnd++;
+    // No held-out job, same-day row, later employee rate or planner selection enters this context.
+    const rateFor = durationRateResolver(buildDurationEmployeeContext(sortedRows.slice(0, rowEnd)));
+    let next = jobIndex;
+    while (next < sortedJobs.length && sortedJobs[next].date === date) {
+      const job = sortedJobs[next++];
+      if (!(job.duration > 0)) continue;
+      const input = DurationModel.prepare(history, DurationModel.historicalPlan(job), rateFor);
+      if (input) records.push({
+        date, storeKey: job.storeKey, account: job.account, accountKey: job.accountKey,
+        label: `${job.account} | ${job.storeName}`, actual: job.duration, input,
+      });
+    }
+    // Reveal outcomes only AFTER predicting every job on this date.
+    for (let i = jobIndex; i < next; i++) DurationModel.addJob(history, sortedJobs[i]);
+    jobIndex = next;
+    await maybeYield();
+  }
+  return records;
+}
+
+async function calibrateDurationModel() {
+  const records = await buildDurationReplayRecords(state.rows, state.jobs, createAnalyticsYieldController());
+  const analytics = DurationModel.analyze(records, state.jobs);
+  delete analytics.testRecords;
+  state.durationAnalytics = analytics;
+  state.backtestMetrics = analytics.testMetrics;
+  state.accuracyCache = analytics.accuracyCache;
+}
+
+function getDurationPlanningDate(storeKey) {
+  const scheduled = getPrimaryScheduleForStore(storeKey)?.date;
+  const today = getLocalDateStamp();
+  return scheduled && scheduled > today ? scheduled : today;
+}
+
+function getDurationRateResolver(date) {
+  if (!state.durationContextCache.has(date)) {
+    const context = buildDurationEmployeeContext(state.rows.filter(row => row.date < date));
+    state.durationContextCache.set(date, durationRateResolver(context));
+  }
+  return state.durationContextCache.get(date);
+}
+
+function makeDurationPlan(storeKey, crewIds, roles, modes, options = {}) {
+  const store = state.stores.get(storeKey);
+  if (!store) return null;
+  return {
+    date: options.date || getDurationPlanningDate(storeKey),
+    storeKey, accountKey: store.accountKey || getLinkedAccountKey(store.account),
+    typeOfInv: normalizeInventoryType(getPrimaryScheduleForStore(storeKey)?.typeOfInv || store.primaryType || "Unknown"),
+    inventoryMode: options.inventoryMode === undefined ? getStoreModasMode(storeKey) : options.inventoryMode,
+    employees: uniqueStrings(crewIds), roles, modes,
+    useRecentAccountProduction: Boolean(options.useRecentAccountProduction),
+    shrink: { percent: options.productionShrinkPercent || 0, mode: options.productionShrinkMode || "none", employeeIds: options.productionShrinkEmployeeIds || [] },
+  };
+}
+
+function predictDurationPlan(plan, options = {}) {
+  if (!plan) return null;
+  const analytics = state.durationAnalytics;
+  const config = options.config || analytics?.byAccount?.[plan.accountKey] || analytics?.config || DurationModel.DEFAULT_CONFIG;
+  const prediction = DurationModel.predict(
+    options.history || state.durationHistory || DurationModel.createHistory(state.jobs),
+    plan, options.rateFor || getDurationRateResolver(plan.date), config,
+  );
+  if (!prediction) return null;
+  const storeErrors = analytics?.errorByStore?.[plan.storeKey];
+  const accountErrors = analytics?.errorByAccount?.[plan.accountKey];
+  const errors = storeErrors?.count >= 8 ? storeErrors : accountErrors?.count >= 20 ? accountErrors : analytics?.errorGlobal;
+  const fallback = prediction.baseDuration * 0.25;
+  const low = errors?.count ? errors.p25 : -fallback;
+  const high = errors?.count ? errors.p75 : fallback;
+  return {
+    ...prediction, plan,
+    confidenceLow: Math.max(0, Math.min(prediction.onSiteDuration, prediction.onSiteDuration + low)),
+    confidenceHigh: Math.max(prediction.onSiteDuration, prediction.onSiteDuration + high),
+    rangeSampleCount: errors?.count || 0,
+  };
 }
 
 function onAccuracyFilterChange() {
@@ -3588,87 +3543,11 @@ function scoreTwoStoreAssignment(config, crewA, crewB, options = {}) {
 }
 
 function predictForAssignedCrew(storeKey, crewIds, rolesConfig, modesConfig) {
-  const store = state.stores.get(storeKey);
-  const roles = {
-    supervisor: cleanText(rolesConfig?.supervisor),
-    rx: uniqueStrings(rolesConfig?.rx || []),
-    training: uniqueStrings(rolesConfig?.training || []),
-    earlyLate: uniqueStrings(rolesConfig?.earlyLate || []),
-  };
-  const modes = {
-    supervisor: parseContributionMode(modesConfig?.supervisor || "p50"),
-    rx: parseContributionMode(modesConfig?.rx || "p50"),
-    training: parseContributionMode(modesConfig?.training || "p70"),
-    earlyLate: parseContributionMode(modesConfig?.earlyLate || "p50"),
-  };
-  const crew = uniqueStrings(crewIds || []);
-  if (!store || !roles.supervisor || !crew.includes(roles.supervisor))
-    return null;
-  if (!roles.rx.every((id) => crew.includes(id))) return null;
-  if (!roles.training.every((id) => crew.includes(id))) return null;
-  if (!roles.earlyLate.every((id) => crew.includes(id))) return null;
-  const tuningCtx = getTuningForStore(store);
-  const baselineTuningCtx = getBaselineTuningForStore(store);
-  const tuning = tuningCtx.tuning;
-  const baseline = resolveBaselinePieces(
-    store,
-    baselineTuningCtx.tuning,
-    store.primaryType,
-  );
-  const overhead = resolveOverheadHours(store, tuning.overheadScale);
-  const crewSpeeds = crew
-    .map((id) =>
-      effectiveEmployeeSpeedForRoles(
-        state.employees.get(id),
-        store.account,
-        id,
-        roles,
-        modes,
-      ),
-    )
-    .filter((v) => v > 0);
-  const crewSpeedRaw = crewSpeeds.reduce((sum, n) => sum + n, 0);
-  const crewSize = crewSpeeds.length;
-  if (!(baseline.value > 0) || !(crewSpeedRaw > 0) || crewSize <= 0)
-    return null;
-  const crewEfficiency = getCrewEfficiencyFactor(crewSize, tuning);
-  const rawOnSiteDuration =
-    overhead.value + baseline.value / (crewSpeedRaw * crewEfficiency);
-  const residualAdjustment = resolveResidualAdjustmentForStore(
-    store,
-    crewSize,
-    roles.supervisor,
-  );
-  const residualCorrection = -safeNumber(residualAdjustment.biasHours);
-  const overlap = getLastCrewOverlapRate(storeKey, crew);
-  const lastCrewBias = 0;
-  const onSiteDuration = Math.max(
-    0,
-    rawOnSiteDuration + residualCorrection + lastCrewBias,
-  );
-  const fallbackBand = resolveDurationBand(store) * 0.7;
-  const lowOffset =
-    residualAdjustment.rangeCount > 0
-      ? residualAdjustment.lowOffset * state.uncertaintyScale
-      : -fallbackBand;
-  const highOffset =
-    residualAdjustment.rangeCount > 0
-      ? residualAdjustment.highOffset * state.uncertaintyScale
-      : fallbackBand;
-  const rangeCandidates = [
-    onSiteDuration + lowOffset,
-    onSiteDuration + highOffset,
-    onSiteDuration,
-  ];
-  const confidenceLow = Math.max(0, Math.min(...rangeCandidates));
-  const confidenceHigh = Math.max(confidenceLow, Math.max(...rangeCandidates));
-  return {
-    onSiteDuration,
-    manHours: onSiteDuration * crewSize,
-    crewSize,
-    confidenceLow,
-    confidenceHigh,
-  };
+  const roles = { supervisor: cleanText(rolesConfig?.supervisor), rx: uniqueStrings(rolesConfig?.rx), training: uniqueStrings(rolesConfig?.training), earlyLate: uniqueStrings(rolesConfig?.earlyLate) };
+  const crew = uniqueStrings(crewIds);
+  if (!roles.supervisor || !crew.includes(roles.supervisor)) return null;
+  if (![...roles.rx, ...roles.training, ...roles.earlyLate].every(id => crew.includes(id))) return null;
+  return predictDurationPlan(makeDurationPlan(storeKey, crew, roles, modesConfig || {}));
 }
 
 function effectiveEmployeeSpeedForRoles(
@@ -3731,13 +3610,13 @@ function getEmployeeMostRecentAccountProduction(employee, account) {
 function resolveEmployeePlanningBaseSpeed(employee, account, options = {}) {
   const inventoryMode = options.inventoryMode === null ? null :
     (options.inventoryMode ?? getStoreModasMode());
-  const baseSpeed = getEmployeePlanningSpeedSource(employee, account, inventoryMode).speed;
+  const baseSpeed = getEmployeePlanningSpeedSource(employee, account, inventoryMode, options.employeeContext || state).speed;
   // Matching-mode history takes precedence over the latest mixed-mode record.
   const accountKey = getLinkedAccountKey(account);
   const matching = employee?.[inventoryMode ? "modasAccountStats" : "regularAccountStats"]?.[accountKey];
   if (inventoryMode === true || (inventoryMode !== null && matching?.jobCount > 0) || !options.useRecentAccountProduction) return baseSpeed;
   const recentPiecesPerHr = safeNumber(
-    getEmployeeMostRecentAccountProduction(employee, account).piecesPerHr,
+    employee?.accountStats?.[accountKey]?.mostRecentPiecesPerHr,
   );
   if (
     recentPiecesPerHr > 0 &&
@@ -3758,11 +3637,12 @@ function buildStaffingRankRows(
   options = {},
 ) {
   if (!store) return [];
+  options = { ...options, inventoryMode: options.inventoryMode === undefined ? getStoreModasMode(store.storeKey) : options.inventoryMode };
   const predictedHours = Math.max(0, safeNumber(onSiteDuration));
   return (crewIds || [])
     .map((id) => {
       const employee = state.employees.get(id);
-      const originalBaseSpeed = displayEmployeeSpeed(employee, store.account);
+      const originalBaseSpeed = getEmployeePlanningSpeedSource(employee, store.account, options.inventoryMode).speed;
       const baseSpeed = resolveEmployeePlanningBaseSpeed(
         employee,
         store.account,
@@ -4788,166 +4668,25 @@ function selectLastCrew() {
 
 function predict() {
   if (!state.analyticsReady) return null;
-
   const store = state.stores.get(state.selectedStoreKey);
   const roles = getRoleSelectionForStore(state.selectedStoreKey);
-  const rxRequired = isRxRoleRequiredForStore(store);
-  const hasRequiredRx =
-    !rxRequired ||
-    normalizeRoleArray(roles.rx).some((id) => state.selectedEmployees.has(id));
-  if (
-    !store ||
-    state.selectedEmployees.size === 0 ||
-    !roles.supervisor ||
-    !state.selectedEmployees.has(roles.supervisor) ||
-    !hasRequiredRx
-  ) {
-    return null;
-  }
-
-  const tuningCtx = getTuningForStore(store);
-  const baselineTuningCtx = getBaselineTuningForStore(store);
-  const tuning = tuningCtx.tuning;
-  const baseline = resolveBaselinePieces(
-    store,
-    baselineTuningCtx.tuning,
-    store.primaryType,
-  );
-  const productionShrinkPercent = state.productionShrinkPercent;
-  const productionShrinkMode = normalizeProductionShrinkMode(
-    state.productionShrinkMode,
-  );
-  const productionShrinkEmployeeIds = new Set(
-    Array.from(state.productionShrinkEmployeeIds || []),
-  );
-  const productionShrinkFactor = getProductionShrinkFactor(
-    productionShrinkPercent,
-  );
-  const overhead = resolveOverheadHours(store, tuning.overheadScale);
-  const selectedRaw = Array.from(state.selectedEmployees);
-  const crewSpeeds = selectedRaw
-    .map((name) =>
-      effectiveEmployeeSpeed(
-        state.employees.get(name),
-        state.selectedStoreKey,
-        store.account,
-        { useRecentAccountProduction: state.useRecentAccountProduction },
-      ) *
-        getEmployeeProductionShrinkFactor(
-          name,
-          productionShrinkMode,
-          productionShrinkEmployeeIds,
-          productionShrinkFactor,
-        ),
-    )
-    .filter((v) => v > 0);
-
-  const crewSpeedRaw = crewSpeeds.reduce((sum, n) => sum + n, 0);
-  const crewSize = crewSpeeds.length;
-  const crewEfficiency = getCrewEfficiencyFactor(crewSize, tuning);
-  const crewSpeed = crewSpeedRaw * crewEfficiency;
-  const crewSpeedBeforeShrink =
-    selectedRaw
-      .map((name) =>
-        effectiveEmployeeSpeed(
-          state.employees.get(name),
-          state.selectedStoreKey,
-          store.account,
-          { useRecentAccountProduction: state.useRecentAccountProduction },
-        ),
-      )
-      .filter((v) => v > 0)
-      .reduce((sum, n) => sum + n, 0) * crewEfficiency;
-
-  if (!(baseline.value > 0) || !(crewSpeedBeforeShrink > 0) || crewSize === 0)
-    return null;
-
-  const rawOnSiteDuration = overhead.value + baseline.value / crewSpeed;
-  const residualAdjustment = resolveResidualAdjustmentForStore(
-    store,
-    crewSize,
-    roles.supervisor,
-  );
-  const residualCorrection = -safeNumber(residualAdjustment.biasHours);
-  const overlap = getLastCrewOverlapRate(state.selectedStoreKey, selectedRaw);
-  const lastResidual = state.lastDurationResidualByStore.get(
-    state.selectedStoreKey,
-  );
-  const lastCrewBias = 0;
-  const onSiteDuration = Math.max(
-    0,
-    rawOnSiteDuration + residualCorrection + lastCrewBias,
-  );
-  const manHours = Math.max(0, onSiteDuration * crewSize);
-  const fallbackBand = resolveDurationBand(store) * 0.7;
-  const lowOffset =
-    residualAdjustment.rangeCount > 0
-      ? residualAdjustment.lowOffset * state.uncertaintyScale
-      : -fallbackBand;
-  const highOffset =
-    residualAdjustment.rangeCount > 0
-      ? residualAdjustment.highOffset * state.uncertaintyScale
-      : fallbackBand;
-  const rangeCandidates = [
-    onSiteDuration + lowOffset,
-    onSiteDuration + highOffset,
-    onSiteDuration,
-  ];
-  const confidenceLow = Math.max(0, Math.min(...rangeCandidates));
-  const confidenceHigh = Math.max(confidenceLow, Math.max(...rangeCandidates));
-  const delta = computeDelta(onSiteDuration, manHours);
-
-  return {
-    account: store.account,
-    storeName: store.storeName,
-    crewSize,
-    selectedEmployeesDisplay: selectedRaw.map(getEmployeeDisplayName),
-    selectedEmployeeRates: selectedRaw.map((id) => ({
-      name: getEmployeeDisplayName(id),
-      piecesPerHr: effectiveEmployeeSpeed(
-        state.employees.get(id),
-        state.selectedStoreKey,
-        store.account,
-        { useRecentAccountProduction: state.useRecentAccountProduction },
-      ),
-    })),
-    baselinePieces: baseline.value,
-    productionShrinkPercent,
-    productionShrinkMode,
-    productionShrinkEmployeeIds: Array.from(productionShrinkEmployeeIds),
-    productionShrinkFactor,
+  const crew = Array.from(state.selectedEmployees);
+  if (!store || !crew.length || !roles.supervisor || !crew.includes(roles.supervisor)) return null;
+  if (isRxRoleRequiredForStore(store) && !roles.rx.some(id => crew.includes(id))) return null;
+  const modes = getRoleModesForStore(state.selectedStoreKey);
+  const options = {
     useRecentAccountProduction: state.useRecentAccountProduction,
-    crewSpeedBeforeShrink,
-    baselineSource: baseline.source,
-    baselineMode: baseline.modeLabel,
-    baselineBlend: baseline.blendLabel,
-    baselineSupport: baseline.support,
-    overheadHours: overhead.value,
-    overheadSource: overhead.source,
-    tuningScope: tuningCtx.scope,
-    tuningLabel: tuningCtx.label,
-    tuning,
-    baselineTuningScope: baselineTuningCtx.scope,
-    baselineTuningLabel: baselineTuningCtx.label,
-    baselineTuning: baselineTuningCtx.tuning,
-    crewSpeedRaw,
-    crewEfficiency,
-    crewSpeed,
-    rawOnSiteDuration,
-    biasAdjustmentHours: residualCorrection,
-    lastCrewBiasHours: lastCrewBias,
-    manHourBiasAdjustment: 0,
-    onSiteDuration,
-    manHours,
-    confidenceLow,
-    confidenceHigh,
-    residualRangeScope: residualAdjustment.rangeScope,
-    residualRangeCount: residualAdjustment.rangeCount,
-    lastCrewOverlap: overlap,
-    lastStoreResidualHours: lastResidual?.durationResidual || 0,
-    roleModes: getRoleModesForStore(state.selectedStoreKey),
-    roleAssignments: roles,
-    delta,
+    productionShrinkPercent: state.productionShrinkPercent,
+    productionShrinkMode: state.productionShrinkMode,
+    productionShrinkEmployeeIds: Array.from(state.productionShrinkEmployeeIds || []),
+  };
+  const prediction = predictDurationPlan(makeDurationPlan(store.storeKey, crew, roles, modes, options));
+  if (!prediction) return null;
+  return {
+    ...prediction, ...options, account: store.account, storeName: store.storeName,
+    productionShrinkFactor: getProductionShrinkFactor(state.productionShrinkPercent),
+    roleAssignments: roles, roleModes: modes, crewEfficiency: 1,
+    delta: computeDelta(prediction.onSiteDuration, prediction.manHours),
   };
 }
 
@@ -4982,8 +4721,6 @@ function getEmployeeProductionShrinkFactor(
   selectedEmployeeIds,
   shrinkFactor,
 ) {
-  if (normalizeProductionShrinkPercent(state.productionShrinkPercent) <= 0)
-    return 1;
   const normalizedMode = normalizeProductionShrinkMode(mode);
   if (normalizedMode === "none") return 1;
   if (normalizedMode === "selected")
@@ -4991,259 +4728,14 @@ function getEmployeeProductionShrinkFactor(
   return shrinkFactor;
 }
 
-function resolveBaselinePieces(
-  store,
-  baselineTuning = state.baselineTuning,
-  typeOverride = null,
-) {
-  const storeMode = baselineTuning?.storeMode || "median";
-  const contextMode = baselineTuning?.contextMode || "median";
-  const storeCandidate = pickBaselineCandidate(store, storeMode);
-  const segmentKey =
-    state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
-    `${store.accountKey || getLinkedAccountKey(store.account)}||S1`;
-  const segmentStats = state.accountSegmentStats.get(segmentKey);
-  const accountKey = store.accountKey || getLinkedAccountKey(store.account);
-  const typeKey = `${accountKey}||${typeOverride || store.primaryType || "Unknown"}`;
-  const typeStats = state.accountTypeStats.get(typeKey);
-  const officeKey = `${accountKey}||${store.officeName || "Unknown"}`;
-  const officeStats = state.accountOfficeStats.get(officeKey);
-  const accountStats = state.accountGlobalStats.get(accountKey);
-  const support = {
-    store: safeNumber(store?.jobCount),
-    segment: safeNumber(segmentStats?.jobCount),
-    type: safeNumber(typeStats?.jobCount),
-    office: safeNumber(officeStats?.jobCount),
-    account: safeNumber(accountStats?.jobCount),
-  };
-  const context = resolveContextBaseline(
-    segmentStats,
-    typeStats,
-    officeStats,
-    accountStats,
-    contextMode,
-    baselineTuning,
-  );
-
-  if (storeCandidate > 0 && context.value > 0) {
-    const n = Math.max(0, safeNumber(store.jobCount));
-    const shrinkK = Math.max(1, safeNumber(baselineTuning?.storeShrinkK));
-    const rawStoreWeight = n / (n + shrinkK);
-    const minStoreWeight = Math.max(
-      0,
-      Math.min(0.9, safeNumber(baselineTuning?.minStoreWeight) || 0.45),
-    );
-    const storeWeight =
-      n > 0 ? Math.max(rawStoreWeight, minStoreWeight) : rawStoreWeight;
-    return {
-      value: storeWeight * storeCandidate + (1 - storeWeight) * context.value,
-      source: `store ${storeMode} + ${context.source}`,
-      modeLabel: `store=${storeMode}, context=${contextMode}`,
-      blendLabel: `store weight ${formatNumber(storeWeight, 2)} (raw ${formatNumber(rawStoreWeight, 2)})`,
-      support,
-    };
-  }
-
-  if (storeCandidate > 0) {
-    return {
-      value: storeCandidate,
-      source: `store ${storeMode}`,
-      modeLabel: `store=${storeMode}, context=${contextMode}`,
-      blendLabel: "store-only",
-      support,
-    };
-  }
-
-  return {
-    value: context.value,
-    source: context.source,
-    modeLabel: `store=${storeMode}, context=${contextMode}`,
-    blendLabel: "context-only",
-    support,
-  };
-}
-
-function resolveBaselinePiecesForJob(job, store, baselineTuning) {
-  return resolveBaselinePieces(
-    store,
-    baselineTuning,
-    job?.typeOfInv || store?.primaryType || "Unknown",
-  );
-}
-
-function pickBaselineCandidate(stats, mode = "median") {
-  if (!stats) return 0;
-  if (mode === "trimmed" && stats.trimmedMeanPieces > 0)
-    return stats.trimmedMeanPieces;
-  if (mode === "recent" && stats.recentWeightedPieces > 0)
-    return stats.recentWeightedPieces;
-  if (mode === "avg" && stats.avgPieces > 0) return stats.avgPieces;
-  if (stats.medianPieces > 0) return stats.medianPieces;
-  if (stats.trimmedMeanPieces > 0) return stats.trimmedMeanPieces;
-  if (stats.recentWeightedPieces > 0) return stats.recentWeightedPieces;
-  return stats.avgPieces > 0 ? stats.avgPieces : 0;
-}
-
-function resolveContextBaseline(
-  segmentStats,
-  typeStats,
-  officeStats,
-  accountStats,
-  contextMode,
-  baselineTuning,
-) {
-  const globalStats = {
-    avgPieces: state.global.avgPieces,
-    medianPieces: state.global.medianPieces,
-    trimmedMeanPieces: state.global.trimmedMeanPieces,
-    recentWeightedPieces: state.global.recentWeightedPieces,
-  };
-
-  const candidates = [
-    {
-      key: "account segment",
-      value: pickBaselineCandidate(segmentStats, contextMode),
-      weight: safeNumber(baselineTuning?.segmentWeight),
-    },
-    {
-      key: "account type",
-      value: pickBaselineCandidate(typeStats, contextMode),
-      weight: safeNumber(baselineTuning?.typeWeight),
-    },
-    {
-      key: "account global",
-      value: pickBaselineCandidate(accountStats, contextMode),
-      weight: safeNumber(baselineTuning?.accountWeight),
-    },
-    {
-      key: "account office",
-      value: pickBaselineCandidate(officeStats, contextMode),
-      weight: safeNumber(baselineTuning?.officeWeight),
-    },
-    {
-      key: "global",
-      value: pickBaselineCandidate(globalStats, contextMode),
-      weight: safeNumber(baselineTuning?.globalWeight),
-    },
-  ].filter((item) => item.value > 0 && item.weight > 0);
-
-  if (!candidates.length) {
-    return { value: 0, source: "no context baseline" };
-  }
-
-  const sumW = candidates.reduce((sum, c) => sum + c.weight, 0);
-  const value =
-    candidates.reduce((sum, c) => sum + c.value * c.weight, 0) / sumW;
-  const source = candidates.map((c) => c.key).join(" + ");
-  return { value, source };
-}
-
-function resolveOverheadHours(
-  store,
-  overheadScale = state.modelTuning.overheadScale,
-) {
-  if (store?.overheadBaseP20 > 0)
-    return {
-      value: Math.max(0, store.overheadBaseP20 * overheadScale),
-      source: "store overhead",
-    };
-
-  const segmentKey =
-    state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
-    `${store.accountKey || getLinkedAccountKey(store.account)}||S1`;
-  const segmentStats = state.accountSegmentStats.get(segmentKey);
-  if (segmentStats?.overheadBaseP20 > 0)
-    return {
-      value: Math.max(0, segmentStats.overheadBaseP20 * overheadScale),
-      source: "account segment overhead",
-    };
-
-  const accountKey = store.accountKey || getLinkedAccountKey(store.account);
-  const typeKey = `${accountKey}||${store.primaryType || "Unknown"}`;
-  const typeStats = state.accountTypeStats.get(typeKey);
-  if (typeStats?.overheadBaseP20 > 0)
-    return {
-      value: Math.max(0, typeStats.overheadBaseP20 * overheadScale),
-      source: "account type overhead",
-    };
-
-  const officeKey = `${accountKey}||${store.officeName || "Unknown"}`;
-  const officeStats = state.accountOfficeStats.get(officeKey);
-  if (officeStats?.overheadBaseP20 > 0)
-    return {
-      value: Math.max(0, officeStats.overheadBaseP20 * overheadScale),
-      source: "account office overhead",
-    };
-
-  const accountStats = state.accountGlobalStats.get(accountKey);
-  if (accountStats?.overheadBaseP20 > 0)
-    return {
-      value: Math.max(0, accountStats.overheadBaseP20 * overheadScale),
-      source: "account overhead",
-    };
-
-  return {
-    value: Math.max(
-      0,
-      safeNumber(state.global.overheadBaseP20) * overheadScale,
-    ),
-    source: "global overhead",
-  };
-}
-
-function resolveDurationBand(store) {
-  if (store.robustDurationSpread > 0) return store.robustDurationSpread;
-  if (store.durationStdDev > 0) return store.durationStdDev;
-  if (state.global.robustDurationSpread > 0)
-    return state.global.robustDurationSpread;
-  return safeNumber(state.global.durationStdDev);
-}
-
 function computePredictionForJob(job, store, options = {}) {
-  const tuning = options.tuning || getTuningForJob(job, store);
-  const baselineTuning =
-    options.baselineTuning || getBaselineTuningForJob(job, store);
-  const baseline = resolveBaselinePiecesForJob(job, store, baselineTuning);
-  if (!(baseline.value > 0)) return null;
-
-  const overhead = resolveOverheadHours(store, tuning.overheadScale);
-  const crewSize = Math.max(1, safeNumber(job.crewSize));
-  const crewSpeedRaw = (job.employees || [])
-    .map((id) =>
-      effectiveEmployeeSpeed(
-        state.employees.get(id),
-        job.storeKey,
-        store.account,
-        { inventoryMode: null },
-      ),
-    )
-    .filter((v) => v > 0)
-    .reduce((sum, n) => sum + n, 0);
-  if (!(crewSpeedRaw > 0)) return null;
-
-  const efficiency = getCrewEfficiencyFactor(crewSize, tuning);
-  const rawOnSiteDuration =
-    overhead.value + baseline.value / (crewSpeedRaw * efficiency);
-  const durationAdj = options.applyResiduals
-    ? resolveResidualAdjustmentForStore(store, crewSize, job.supervisorNumber)
-        .biasHours
-    : 0;
-  const onSiteDuration = Math.max(0, rawOnSiteDuration - durationAdj);
-  const manHours = Math.max(0, onSiteDuration * crewSize);
-
-  return {
-    onSiteDuration,
-    manHours,
-    rawOnSiteDuration,
-    crewSize,
-    baseline,
-    overhead,
-    efficiency,
-    crewSpeedRaw,
-  };
+  // The same kernel as live and two-store planning, with job-specific modes and roles.
+  // Callers doing evaluation must supply the earlier history/rate context.
+  return predictDurationPlan(DurationModel.historicalPlan(job), options);
 }
 
 function updateResults() {
+  clearTimeout(forecastSaveTimer);
   const store = state.stores.get(state.selectedStoreKey);
   const roleSelection = getRoleSelectionForStore(state.selectedStoreKey);
   const missingSupervisor =
@@ -5323,6 +4815,10 @@ function updateResults() {
   );
   renderStoreStats();
   renderScenarios(prediction);
+  if (!PRECOMPUTE_ANALYTICS_MODE) {
+    forecastSaveTimer = setTimeout(() => saveCurrentForecast(true), 1200);
+    renderSavedForecastStatus();
+  }
 }
 
 function setPredictionMeta(message, tone = "info") {
@@ -5354,7 +4850,7 @@ function applyMetricTone(tone = "info") {
 function getRecommendationForPrediction(prediction) {
   const deltaValue = safeNumber(prediction?.delta?.value);
   if (!prediction?.delta?.available) {
-    return { label: "High Confidence Estimate", tone: "success" };
+    return { label: "Duration Estimate", tone: "info" };
   }
   const absDelta = Math.abs(deltaValue);
   const riskBand = prediction.delta.mode === "manhours" ? 2 : 0.5;
@@ -5364,39 +4860,15 @@ function getRecommendationForPrediction(prediction) {
 }
 
 function buildPlainEnglishEstimateReason(prediction) {
-  const historicalCorrection = safeNumber(prediction.biasAdjustmentHours);
-  const correctionVerb = historicalCorrection >= 0 ? "add" : "remove";
-  const pieces = [
-    `Similar past stores suggest about ${formatNumber(prediction.baselinePieces, 0)} pieces.`,
-    `This crew is projected around ${formatNumber(prediction.crewSpeed, 0)} pieces per hour after role adjustments.`,
-    `Store complexity and recent history ${correctionVerb} ${formatNumber(Math.abs(historicalCorrection), 1)} hrs ${historicalCorrection >= 0 ? "to" : "from"} the estimate.`,
+  const parts = [
+    `The duration baseline is ${formatNumber(prediction.baseDuration, 1)} hrs from ${prediction.baselineSource}.`,
+    `The planned crew changes this by ${formatSigned(prediction.crewAdjustmentHours, 1)} hrs; adjustments are limited because exported crews may be incomplete.`,
+    `Planned labor assumes all ${prediction.crewSize} selected employees stay for the estimated duration.`,
   ];
-  if (safeNumber(prediction.productionShrinkPercent) > 0) {
-    const shrinkTarget =
-      prediction.productionShrinkMode === "selected"
-        ? `${prediction.productionShrinkEmployeeIds?.length || 0} checked employee${(prediction.productionShrinkEmployeeIds?.length || 0) === 1 ? "" : "s"}`
-        : prediction.productionShrinkMode === "none"
-          ? "no employees"
-          : "all selected employees";
-    pieces.splice(
-      1,
-      0,
-      `A ${formatNumber(prediction.productionShrinkPercent, 0)}% production filter applied to ${shrinkTarget}, changing crew output from ${formatNumber(prediction.crewSpeedBeforeShrink, 0)} to ${formatNumber(prediction.crewSpeed, 0)} pieces per hour.`,
-    );
-  }
-  if (prediction.useRecentAccountProduction) {
-    pieces.splice(
-      1,
-      0,
-      "Arrowed employees are planned from their most recent account production.",
-    );
-  }
-  if (prediction.roleAssignments?.supervisor) {
-    pieces.push(
-      `Supervisor impact is included for ${getEmployeeDisplayName(prediction.roleAssignments.supervisor)}.`,
-    );
-  }
-  return pieces.join(" ");
+  if (!prediction.supervisorComparable) parts.push("Supervisor production is missing from some reference crews; those comparisons use counters on both sides.");
+  if (!prediction.hasStoreHistory) parts.push("No earlier store visit is available; this estimate uses broader duration history without a crew adjustment.");
+  if (prediction.config.elasticity === 0) parts.push("Earlier validation favored the duration baseline without a crew adjustment for this account.");
+  return parts.join(" ");
 }
 
 function getStoreDisplayLabel(store) {
@@ -5585,7 +5057,7 @@ function renderDetailedBackground(rankedRows = []) {
   dom.detailBackgroundContent.innerHTML = `
     <div class="detail-grid">
       <section>
-        <h4>Account Segment</h4>
+        <h4>Recorded Production Segment (reference only)</h4>
         <p><strong>${escapeHtml(store.segmentId || "S1")}</strong> of ${formatNumber(getSegmentCountForAccount(store), 0)} segments for ${escapeHtml(store.account)}</p>
         <p class="muted">Segment key: ${escapeHtml(segmentKey)}</p>
         ${renderAccountSegmentBreakout(store)}
@@ -5603,12 +5075,12 @@ function renderDetailedBackground(rankedRows = []) {
         ${renderBaselineDetail(prediction)}
       </section>
       <section>
-        <h4>Historical Time Difference Impact</h4>
+        <h4>Crew Adjustment</h4>
         ${renderPredictionDifferenceImpact(prediction)}
       </section>
       <section class="detail-wide">
         <h4>Modas vs Non-Modas Account Production</h4>
-        <p>Planning as <strong>${getStoreModasMode() ? "Modas" : "Non-Modas"}</strong> for ${escapeHtml(store.account)}. Modas history gets 85% weight after one inventory, 90% after two, 95% after three or four, and 100% after five. With only Modas history, it gets 100%. Without Modas history, similar employees? Modas production on this account is used, then the account Modas median. If the account has no usable Modas history, existing estimates apply. Non-Modas plans retain the 80/20 weighting.</p>
+        <p>Planning as <strong>${getStoreModasMode() ? "Modas" : "Non-Modas"}</strong> for ${escapeHtml(store.account)}. Modas history gets 85% weight after one inventory, 90% after two, 95% after three or four, and 100% after five. With only Modas history, it gets 100%. Without Modas history, similar employees' Modas production on this account is used, then the account Modas median. If the account has no usable Modas history, existing estimates apply. Non-Modas plans retain the 80/20 weighting.</p>
         <p class="muted">History is classified using AVG_DELTA &gt; 0 for Modas. Speeds below blend recent and long-term production and exclude supervisor-assignment days. Matching history takes priority over the most recent production toggle. For Modas plans with fewer than five Modas inventories, the planning base is also pulled toward the account Modas median. This adjustment fades out at five inventories. Role and production shrink adjustments apply afterward.</p>
         ${rows.length ? `<div style="overflow-x: auto"><table>
           <thead><tr><th>Employee</th><th>Modas History</th><th>Non-Modas History</th><th>History Weighting</th><th>Planning Base</th></tr></thead>
@@ -5828,47 +5300,21 @@ function renderAccountSegmentBreakout(store) {
 }
 
 function renderBaselineDetail(prediction) {
-  if (!prediction) {
-    return `<p class="muted">Complete a plan to view baseline source.</p>`;
-  }
-  const support = prediction.baselineSupport || {};
-  return `
-    <p><strong>${formatNumber(prediction.baselinePieces, 0)} pieces</strong> from ${escapeHtml(prediction.baselineSource || "baseline history")}</p>
-    <p class="muted">${escapeHtml(prediction.baselineMode || "")} | ${escapeHtml(prediction.baselineBlend || "")}</p>
-    <ul>
-      <li>Store history: ${formatNumber(safeNumber(support.store), 0)} jobs</li>
-      <li>Segment history: ${formatNumber(safeNumber(support.segment), 0)} jobs</li>
-      <li>Account type history: ${formatNumber(safeNumber(support.type), 0)} jobs</li>
-      <li>Office history: ${formatNumber(safeNumber(support.office), 0)} jobs</li>
-      <li>Account history: ${formatNumber(safeNumber(support.account), 0)} jobs</li>
-    </ul>
-  `;
+  if (!prediction) return `<p class="muted">Complete a plan to view its duration baseline.</p>`;
+  return `<p><strong>${formatNumber(prediction.baseDuration, 1)} hrs</strong> from ${escapeHtml(prediction.baselineSource)}</p>
+    <p>Method: ${escapeHtml(prediction.baselineMethod)}. Earlier store visits: ${prediction.storeHistoryCount}. Reference visits used: ${prediction.matchingHistoryCount}.</p>
+    <p class="muted">Duration is the longest recorded non-supervisor employee time, or longest recorded employee time if no counter is present. The export can omit former employees and supervisors. Recorded pieces and labor are partial totals and do not set this baseline.</p>`;
 }
 
 function renderPredictionDifferenceImpact(prediction) {
-  if (!prediction) {
-    return `<p class="muted">Complete a plan to view time-difference impact.</p>`;
-  }
-  const residualBias = safeNumber(prediction.biasAdjustmentHours);
-  const lastCrewBias = safeNumber(prediction.lastCrewBiasHours);
-  const totalAdjustment = residualBias + lastCrewBias;
-  const beforeAdjustment = safeNumber(prediction.rawOnSiteDuration);
-  const afterAdjustment = safeNumber(prediction.onSiteDuration);
-  return `
-    <p><strong>${formatSigned(totalAdjustment, 1)} hrs</strong> applied to the current estimate.</p>
-    <ul>
-      <li>Before historical adjustment: ${formatNumber(beforeAdjustment, 1)} hrs</li>
-      <li>Historical correction applied: ${formatSigned(residualBias, 1)} hrs from ${formatNumber(prediction.residualRangeCount, 0)} jobs at the ${escapeHtml(prediction.residualRangeScope || "global")} scope</li>
-      <li>Last-crew overlap adjustment: ${formatSigned(lastCrewBias, 1)} hrs (${formatNumber(safeNumber(prediction.lastCrewOverlap) * 100, 0)}% overlap)</li>
-      <li>After adjustment: ${formatNumber(afterAdjustment, 1)} hrs</li>
-    </ul>
-    <p class="muted">The Confidence difference is a recency-weighted remaining error after model corrections. The correction above is the current estimate's adjustment, so it may be smaller or larger than the remaining average difference.</p>
-    <p class="muted">Positive correction values mean past predictions were too low, so the current estimate is nudged up. Negative correction values mean past predictions were too high, so the current estimate is nudged down.</p>
-  `;
+  if (!prediction) return `<p class="muted">Complete a plan to view the crew adjustment.</p>`;
+  return `<p><strong>${formatSigned(prediction.crewAdjustmentHours, 2)} hrs</strong> from the crew comparison.</p>
+    <p>${formatNumber(prediction.baseDuration, 2)} hrs baseline &rarr; ${formatNumber(prediction.onSiteDuration, 2)} hrs planned duration.</p>
+    <p class="muted">Comparable visits use the same inventory type and counting mode where available. Crew comparisons are limited to a 15% reduction or 20% increase. Missing supervisor production is never filled with zero or added as a historical measurement. The accuracy report does not supply an additional correction to this estimate.</p>`;
 }
 
 function renderLastCrewDataNotice() {
-  return `<p class="last-crew-notice">Heads up: this site only includes employees who are still employed, so the last crew may be missing former employees.</p>`;
+  return `<p class="last-crew-notice">This is the crew visible in the supplied export. Former employees and some supervisors are missing, so recorded crew size, pieces and labor may be incomplete.</p>`;
 }
 
 function formatEmployeeLongTermAccountSpeed(employeeId, account) {
@@ -5947,1363 +5393,138 @@ function getProductionVarianceTone(item) {
   return "";
 }
 
-async function buildAccuracyCache(jobsSubset) {
-  const maybeYield = createUiYieldController(10);
-  const jobs = jobsSubset || [];
-  if (!jobs.length) return null;
+function readSavedForecasts() {
+  const raw = localStorage.getItem(FORECAST_LOG_KEY);
+  if (!raw) return [];
+  const value = JSON.parse(raw);
+  if (!Array.isArray(value)) throw new Error("Saved forecast data could not be read; export or recover the browser data before saving again.");
+  return value;
+}
 
-  const storeAgg = new Map();
-  let totalAbs = 0;
-  let totalPct = 0;
-  let totalWeight = 0;
-  let counted = 0;
-  const maxJobTimestamp = jobs
-    .map((job) => Date.parse(job.date || ""))
-    .filter((ts) => Number.isFinite(ts))
-    .reduce((max, ts) => Math.max(max, ts), 0);
-  const referenceTimestamp = maxJobTimestamp > 0 ? maxJobTimestamp : Date.now();
+function forecastScheduledStart(schedule) {
+  if (!schedule?.date) return null;
+  const minutes = parseScheduleTimeToMinutes(schedule.startTimeText);
+  // Without a usable start time, only save before the inventory date begins.
+  const time = !Number.isFinite(minutes) ? "00:00" : `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+  const stamp = new Date(`${schedule.date}T${time}:00`).getTime();
+  return Number.isFinite(stamp) ? stamp : null;
+}
 
-  for (let i = 0; i < jobs.length; i += 1) {
-    const job = jobs[i];
-    const store = state.stores.get(job.storeKey);
-    if (!store || !(job.duration > 0)) {
-      if (i % 25 === 0) await maybeYield();
-      continue;
-    }
-
-    const predicted = computePredictionForJob(job, store, {
-      applyResiduals: true,
-    });
-    if (!predicted) {
-      if (i % 25 === 0) await maybeYield();
-      continue;
-    }
-
-    const durationPred = predicted.onSiteDuration;
-    const manPred = predicted.manHours;
-    const actual = job.duration;
-    const absErr = Math.abs(durationPred - actual);
-    const pctErr = actual > 0 ? (absErr / actual) * 100 : 0;
-    const jobTimestamp = Date.parse(job.date || "");
-    const ageDays = Number.isFinite(jobTimestamp)
-      ? Math.max(0, (referenceTimestamp - jobTimestamp) / 86400000)
-      : 0;
-    const weight = recencyDecayWeight(ageDays, 180);
-
-    totalAbs += absErr * weight;
-    totalPct += pctErr * weight;
-    totalWeight += weight;
-    counted += 1;
-
-    if (!storeAgg.has(job.storeKey)) {
-      storeAgg.set(job.storeKey, {
-        storeKey: job.storeKey,
-        account: job.account,
-        accountKey: job.accountKey || getLinkedAccountKey(job.account),
-        label: `${job.account} | ${job.storeName}`,
-        absErrWeightedSum: 0,
-        pctErrWeightedSum: 0,
-        actualDurationWeightedSum: 0,
-        predictedDurationWeightedSum: 0,
-        actualManHoursWeightedSum: 0,
-        predictedManHoursWeightedSum: 0,
-        weightSum: 0,
-        count: 0,
-      });
-    }
-    const bucket = storeAgg.get(job.storeKey);
-    bucket.absErrWeightedSum += absErr * weight;
-    bucket.pctErrWeightedSum += pctErr * weight;
-    bucket.actualDurationWeightedSum += actual * weight;
-    bucket.predictedDurationWeightedSum += durationPred * weight;
-    bucket.actualManHoursWeightedSum += safeNumber(job.totalManHours) * weight;
-    bucket.predictedManHoursWeightedSum += manPred * weight;
-    bucket.weightSum += weight;
-    bucket.count += 1;
-
-    if (i % 25 === 0) await maybeYield();
+function saveCurrentForecast(automatic = false) {
+  const status = document.getElementById("forecastStatus");
+  const prediction = predict();
+  const schedule = getPrimaryScheduleForStore();
+  const scheduledStart = forecastScheduledStart(schedule);
+  if (!prediction || !scheduledStart || scheduledStart <= Date.now()) {
+    if (!automatic && status) status.textContent = "Choose a future scheduled inventory and a complete crew to save a forecast before the job starts.";
+    return;
   }
+  try {
+    const records = readSavedForecasts();
+    const payload = {
+      modelVersion: DurationModel.VERSION, dataFingerprint: state.dataFingerprint,
+      storeKey: state.selectedStoreKey, scheduledDate: schedule.date,
+      scheduledStart: new Date(scheduledStart).toISOString(),
+      plan: prediction.plan, config: prediction.config,
+      baseDuration: prediction.baseDuration, predictedDuration: prediction.onSiteDuration,
+      predictedManHours: prediction.manHours, crewAdjustmentHours: prediction.crewAdjustmentHours,
+      referenceVisits: prediction.matchingHistoryCount,
+      historyThrough: state.jobs.reduce((date, job) => job.date < prediction.plan.date && job.date > date ? job.date : date, ""),
+      kind: "planning-preview",
+    };
+    const signature = JSON.stringify(payload);
+    if (!records.some(record => record.signature === signature)) {
+      records.push({ ...payload, savedAt: new Date().toISOString(), signature });
+      localStorage.setItem(FORECAST_LOG_KEY, JSON.stringify(records));
+    }
+    renderSavedForecastStatus("Current forecast saved. ");
+  } catch (error) {
+    if (status) status.textContent = `Forecast was not saved: ${error.message}. Existing forecasts have not been removed.`;
+  }
+}
 
-  const allRows = Array.from(storeAgg.values()).map((b) => ({
-    storeKey: b.storeKey,
-    account: b.account,
-    accountKey: b.accountKey,
-    label: b.label,
-    mae: b.weightSum > 0 ? b.absErrWeightedSum / b.weightSum : 0,
-    mape: b.weightSum > 0 ? b.pctErrWeightedSum / b.weightSum : 0,
-    actualAvgDuration:
-      b.weightSum > 0 ? b.actualDurationWeightedSum / b.weightSum : 0,
-    predictedAvgDuration:
-      b.weightSum > 0 ? b.predictedDurationWeightedSum / b.weightSum : 0,
-    actualAvgManHours:
-      b.weightSum > 0 ? b.actualManHoursWeightedSum / b.weightSum : 0,
-    predictedAvgManHours:
-      b.weightSum > 0 ? b.predictedManHoursWeightedSum / b.weightSum : 0,
-    weightSum: b.weightSum,
-    count: b.count,
-  }));
+function evaluateSavedForecasts(records) {
+  const jobs = new Map(state.jobs.map(job => [`${job.date}||${job.storeKey}`, job]));
+  const latest = new Map();
+  for (const record of records) {
+    if (!(Date.parse(record.savedAt) < Date.parse(record.scheduledStart))) continue;
+    const key = `${record.scheduledDate}||${record.storeKey}`;
+    const job = jobs.get(key);
+    if (!job || !(job.duration > 0) || record.scheduledDate >= getLocalDateStamp()) continue;
+    // The source must have been refreshed since the forecast; never score against its own input file.
+    if (record.dataFingerprint === state.dataFingerprint) continue;
+    if (!latest.has(key) || record.savedAt > latest.get(key).savedAt) latest.set(key, record);
+  }
+  return Array.from(latest, ([key, record]) => ({ ...record, actual: jobs.get(key).duration, predicted: record.predictedDuration }));
+}
 
-  return {
-    mae: totalWeight > 0 ? totalAbs / totalWeight : 0,
-    mape: totalWeight > 0 ? totalPct / totalWeight : 0,
-    totalWeight,
-    counted,
-    allRows,
-  };
+function renderSavedForecastStatus(prefix = "") {
+  const status = document.getElementById("forecastStatus");
+  if (!status || PRECOMPUTE_ANALYTICS_MODE) return;
+  try {
+    const records = readSavedForecasts();
+    const observed = evaluateSavedForecasts(records);
+    const metrics = DurationModel.metrics(observed);
+    status.textContent = `${prefix}${records.length} forecasts saved on this browser. ${metrics.jobs ? `${metrics.jobs} inventories matched after a data refresh; average recorded-duration error ${formatNumber(metrics.durationMae, 2)} hrs. Uses the last saved preview before each scheduled start; planned crews may differ from actual attendance.` : "Matched results will appear after completed inventories arrive in a later export."}`;
+  } catch (error) { status.textContent = `Unable to read saved forecasts: ${error.message}`; }
+}
+
+function exportSavedForecasts() {
+  try {
+    const records = readSavedForecasts();
+    const payload = { exportedAt: new Date().toISOString(), forecasts: records, matchedOutcomes: evaluateSavedForecasts(records) };
+    const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = `schedule-forecasts-${getLocalDateStamp()}.json`;
+    link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (error) {
+    const status = document.getElementById("forecastStatus");
+    if (status) status.textContent = `Forecast export failed: ${error.message}`;
+  }
 }
 
 function renderAccuracyReport() {
   if (!state.analyticsReady) {
-    if (state.analyticsScheduled) {
-      dom.accuracySummary.textContent =
-        "Computing accuracy snapshot from historical jobs...";
-      dom.storeAccuracySummary.textContent =
-        "Selected store accuracy will appear when processing completes.";
-    } else {
-      dom.accuracySummary.textContent =
-        "Accuracy is not available yet. Click Compute Accuracy to retry.";
-      dom.storeAccuracySummary.textContent =
-        "Store accuracy is not computed yet.";
-    }
+    dom.accuracySummary.textContent = "Preparing predictions from earlier history...";
+    dom.storeAccuracySummary.textContent = "Historical validation will appear when processing completes.";
     dom.accuracyWorstBody.innerHTML = "";
     return;
   }
-
-  if (!state.jobs.length) {
-    dom.accuracySummary.textContent = "Load data to view model accuracy.";
-    dom.storeAccuracySummary.textContent =
-      "Choose a store to view its historical prediction error.";
+  const analytics = state.durationAnalytics;
+  const cache = state.accuracyCache;
+  if (!analytics || !cache?.counted) {
+    dom.accuracySummary.textContent = "Not enough dated jobs for a separate test period yet. Planning uses a duration baseline.";
+    dom.storeAccuracySummary.textContent = "No later-job test results are available for this store yet.";
     dom.accuracyWorstBody.innerHTML = "";
+    renderSavedForecastStatus();
     return;
   }
-
-  const accuracy = state.accuracyCache;
-  if (!accuracy || !(accuracy.counted > 0)) {
-    dom.accuracySummary.textContent =
-      "Not enough valid history to compute accuracy.";
-    dom.storeAccuracySummary.textContent =
-      "No valid historical jobs found for store accuracy.";
-    dom.accuracyWorstBody.innerHTML = "";
-    return;
-  }
-
-  const mae = safeNumber(accuracy.mae);
-  const mape = safeNumber(accuracy.mape);
-  const selectedAccount = dom.accuracyAccountFilter.value || "__all__";
-  const selectedAccountKey = getLinkedAccountKey(selectedAccount);
-  const allRows = accuracy.allRows || [];
-
-  const filteredRows =
-    selectedAccount === "__all__"
-      ? allRows
-      : allRows.filter(
-          (r) =>
-            (r.accountKey || getLinkedAccountKey(r.account)) ===
-            selectedAccountKey,
-        );
-
-  const filteredWeight = filteredRows.reduce(
-    (sum, row) => sum + safeNumber(row.weightSum),
-    0,
-  );
-  const filteredMae =
-    filteredWeight > 0
-      ? filteredRows.reduce(
-          (sum, row) => sum + safeNumber(row.mae) * safeNumber(row.weightSum),
-          0,
-        ) / filteredWeight
-      : 0;
-  const filteredMape =
-    filteredWeight > 0
-      ? filteredRows.reduce(
-          (sum, row) => sum + safeNumber(row.mape) * safeNumber(row.weightSum),
-          0,
-        ) / filteredWeight
-      : 0;
-  const filteredStoreCount = filteredRows.length;
-  const filteredJobCount = filteredRows.reduce(
-    (sum, row) => sum + row.count,
-    0,
-  );
-  const backtestText =
-    state.backtestMetrics.jobs > 0
-      ? ` | Holdout MAE: ${formatNumber(state.backtestMetrics.durationMae, 2)} hrs / ${formatNumber(state.backtestMetrics.manHoursMae, 2)} man-hours (${state.backtestMetrics.jobs} jobs since ${state.backtestMetrics.splitDate || "split"})`
-      : "";
-  dom.accuracySummary.textContent = `View: ${selectedAccount === "__all__" ? "All Accounts" : selectedAccount} | Average Store MAE: ${formatNumber(filteredMae || mae, 2)} hrs | Average Store MAPE: ${formatNumber(filteredMape || mape, 1)}% | Stores included: ${filteredStoreCount} | Jobs evaluated: ${filteredJobCount || safeNumber(accuracy.counted)}${backtestText}`;
-
-  const selectedStoreKey = state.selectedStoreKey;
-  const selectedStoreRow = allRows.find((r) => r.storeKey === selectedStoreKey);
-  if (selectedStoreRow) {
-    const durationDelta =
-      selectedStoreRow.predictedAvgDuration -
-      selectedStoreRow.actualAvgDuration;
-    const manHoursDelta =
-      selectedStoreRow.predictedAvgManHours -
-      selectedStoreRow.actualAvgManHours;
-    const trend = classifyAccuracyTrend(durationDelta);
-    const durationDiffClass = `accuracy-diff-${trend.key}`;
-    const manTrend = classifyAccuracyTrend(manHoursDelta, 0.75);
-    const manDiffClass = `accuracy-diff-${manTrend.key}`;
-    dom.storeAccuracySummary.innerHTML = [
-      `<span class="accuracy-status accuracy-status-${trend.key}">${escapeHtml(trend.label)}</span>`,
-      `<strong>Store:</strong> ${escapeHtml(selectedStoreRow.label)}`,
-      `<strong>Based On:</strong> Recency-weighted averages across ${selectedStoreRow.count} past inventories after model corrections`,
-      `<strong>Avg In-Store Time</strong> | Actual: ${formatNumber(selectedStoreRow.actualAvgDuration, 1)} hrs | Predicted: ${formatNumber(selectedStoreRow.predictedAvgDuration, 1)} hrs | Remaining Difference: <span class="accuracy-diff ${durationDiffClass}">${formatSigned(durationDelta, 1)} hrs</span>`,
-      `<strong>Avg Man-Hours</strong> | Actual: ${formatNumber(selectedStoreRow.actualAvgManHours, 1)} | Predicted: ${formatNumber(selectedStoreRow.predictedAvgManHours, 1)} | Remaining Difference: <span class="accuracy-diff ${manDiffClass}">${formatSigned(manHoursDelta, 1)}</span>`,
-    ].join("<br>");
+  const selected = dom.accuracyAccountFilter.value || "__all__";
+  const rows = cache.allRows.filter(row => selected === "__all__" || row.accountKey === getLinkedAccountKey(selected));
+  const count = rows.reduce((sum, row) => sum + row.count, 0);
+  const mae = count ? rows.reduce((sum, row) => sum + row.mae * row.count, 0) / count : 0;
+  const mape = count ? rows.reduce((sum, row) => sum + row.mape * row.count, 0) / count : 0;
+  const metrics = analytics.testMetrics;
+  dom.accuracySummary.textContent = `${selected === "__all__" ? "All accounts" : selected}: ${count} test inventories since ${metrics.splitDate}. Average error: ${formatNumber(mae, 2)} hrs (${formatNumber(mape, 1)}%). Each prediction uses only earlier dates; settings were chosen before this test period. These are retrospective checks of recorded employee duration; omitted employees and supervisors cannot be reconstructed. ${metrics.attempted - metrics.jobs} test inventories had no usable earlier baseline.`;
+  const storeRow = cache.allRows.find(row => row.storeKey === state.selectedStoreKey);
+  if (storeRow) {
+    const difference = storeRow.predictedAvgDuration - storeRow.actualAvgDuration;
+    const trend = classifyAccuracyTrend(difference);
+    dom.storeAccuracySummary.innerHTML = `<span class="accuracy-status accuracy-status-${trend.key}">${escapeHtml(trend.label)}</span><br>
+      ${storeRow.count} inventories in the later test period. Average absolute error: <strong>${formatNumber(storeRow.mae, 2)} hrs</strong>.<br>
+      Recorded duration: ${formatNumber(storeRow.actualAvgDuration, 1)} hrs | Predicted: ${formatNumber(storeRow.predictedAvgDuration, 1)} hrs | Average difference: ${formatSigned(difference, 1)} hrs.<br>
+      <span class="muted">Available employee time is a proxy for job duration. Historical labor totals are incomplete and are not used as an accuracy target.</span>`;
   } else {
-    dom.storeAccuracySummary.textContent =
-      "Selected store does not have enough valid historical jobs yet.";
+    dom.storeAccuracySummary.textContent = "This store has no scored inventory in the later test period. Its available history can still supply a planning baseline.";
   }
-
-  dom.accuracyWorstBody.innerHTML = "";
-  if (!filteredRows.length) {
-    dom.accuracyWorstBody.innerHTML = `<tr><td colspan="4" class="muted">No store history available for this account filter.</td></tr>`;
-    return;
-  }
-
-  const tr = document.createElement("tr");
-  tr.innerHTML = [
-    `<td>${escapeHtml(selectedAccount === "__all__" ? "All Accounts (Avg Across Stores)" : `${selectedAccount} (Avg Across Stores)`)}</td>`,
-    `<td>${formatNumber(filteredMae || mae, 2)}</td>`,
-    `<td>${formatNumber(filteredMape || mape, 1)}%</td>`,
-    `<td>${filteredJobCount}</td>`,
-  ].join("");
-  dom.accuracyWorstBody.appendChild(tr);
-}
-
-async function calibrateModelParameters() {
-  if (!state.jobs.length) return;
-  const maybeYield = createAnalyticsYieldController();
-
-  state.modelTuningByAccount = new Map();
-  state.modelTuningByAccountType = new Map();
-  state.modelTuningByAccountSegment = new Map();
-  state.baselineTuningByAccount = new Map();
-  state.baselineTuningByAccountType = new Map();
-  state.baselineTuningByAccountSegment = new Map();
-
-  const globalBundle = await calibrateParameterBundleForJobs(
-    state.jobs,
-    state.baseModelTuning,
-    state.baseBaselineTuning,
-    maybeYield,
-  );
-  state.modelTuning = globalBundle.modelTuning;
-  state.baselineTuning = globalBundle.baselineTuning;
-
-  const jobsByAccount = new Map();
-  const jobsByAccountType = new Map();
-  const jobsByAccountSegment = new Map();
-  for (let i = 0; i < state.jobs.length; i += 1) {
-    const job = state.jobs[i];
-    const accountKey = job.accountKey || getLinkedAccountKey(job.account);
-    if (!jobsByAccount.has(accountKey)) jobsByAccount.set(accountKey, []);
-    jobsByAccount.get(accountKey).push(job);
-
-    const typeKey = `${accountKey}||${job.typeOfInv || "Unknown"}`;
-    if (!jobsByAccountType.has(typeKey)) jobsByAccountType.set(typeKey, []);
-    jobsByAccountType.get(typeKey).push(job);
-
-    const segmentKey = state.storeSegmentByStoreKey.get(
-      job.storeKey,
-    )?.segmentKey;
-    if (segmentKey) {
-      if (!jobsByAccountSegment.has(segmentKey))
-        jobsByAccountSegment.set(segmentKey, []);
-      jobsByAccountSegment.get(segmentKey).push(job);
-    }
-    if (i % 150 === 0) await maybeYield();
-  }
-
-  for (const [account, jobs] of jobsByAccount.entries()) {
-    if (jobs.length < 40) continue;
-    const tuned = await calibrateParameterBundleForJobs(
-      jobs,
-      state.modelTuning,
-      state.baselineTuning,
-      maybeYield,
-    );
-    state.modelTuningByAccount.set(account, tuned.modelTuning);
-    state.baselineTuningByAccount.set(account, tuned.baselineTuning);
-    await maybeYield();
-  }
-
-  for (const [key, jobs] of jobsByAccountSegment.entries()) {
-    if (jobs.length < 28) continue;
-    const account = key.split("||")[0];
-    const accountModel =
-      state.modelTuningByAccount.get(account) || state.modelTuning;
-    const accountBaseline =
-      state.baselineTuningByAccount.get(account) || state.baselineTuning;
-    const tuned = await calibrateParameterBundleForJobs(
-      jobs,
-      accountModel,
-      accountBaseline,
-      maybeYield,
-    );
-    state.modelTuningByAccountSegment.set(key, tuned.modelTuning);
-    state.baselineTuningByAccountSegment.set(key, tuned.baselineTuning);
-    await maybeYield();
-  }
-
-  for (const [key, jobs] of jobsByAccountType.entries()) {
-    if (jobs.length < 20) continue;
-    const account = key.split("||")[0];
-    const accountModel =
-      state.modelTuningByAccount.get(account) || state.modelTuning;
-    const accountBaseline =
-      state.baselineTuningByAccount.get(account) || state.baselineTuning;
-    const tuned = await calibrateParameterBundleForJobs(
-      jobs,
-      accountModel,
-      accountBaseline,
-      maybeYield,
-    );
-    state.modelTuningByAccountType.set(key, tuned.modelTuning);
-    state.baselineTuningByAccountType.set(key, tuned.baselineTuning);
-    await maybeYield();
-  }
-}
-
-async function calibrateParameterBundleForJobs(
-  jobsSubset,
-  seedModelTuning,
-  seedBaselineTuning,
-  maybeYield = async () => {},
-) {
-  const split = splitJobsForBacktest(jobsSubset);
-  const evalJobs = split.holdout.length >= 8 ? split.holdout : split.train;
-  const modelTuning = await calibrateTuningForJobs(
-    split.train,
-    evalJobs,
-    seedModelTuning,
-    seedBaselineTuning,
-    maybeYield,
-  );
-  const baselineTuning = await calibrateBaselineForJobs(
-    split.train,
-    evalJobs,
-    modelTuning,
-    seedBaselineTuning,
-    maybeYield,
-  );
-  return { modelTuning, baselineTuning };
-}
-
-function splitJobsForBacktest(jobsSubset) {
-  const sorted = [...(jobsSubset || [])].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime(),
-  );
-  if (sorted.length < 16) return { train: sorted, holdout: [] };
-  const splitIndex = Math.max(8, Math.floor(sorted.length * 0.8));
-  return {
-    train: sorted.slice(0, splitIndex),
-    holdout: sorted.slice(splitIndex),
-  };
-}
-
-async function calibrateTuningForJobs(
-  trainJobs,
-  evalJobs,
-  seedTuning,
-  baselineTuning,
-  maybeYield = async () => {},
-) {
-  const overheadCandidates = [0.1, 0.2, 0.25, 0.3, 0.4, 0.5];
-  const midCandidates = [0.94, 0.96, 0.97, 0.98, 1.0];
-  const largeCandidates = [0.88, 0.91, 0.93, 0.95, 0.97, 1.0];
-  const crewThresholdCandidates = buildCrewThresholdCandidates(
-    trainJobs,
-    evalJobs,
-    seedTuning,
-  );
-  let best = {
-    score: Number.POSITIVE_INFINITY,
-    overheadScale: seedTuning.overheadScale,
-    effSmall: 1.0,
-    effMid: seedTuning.effMid,
-    effLarge: seedTuning.effLarge,
-    smallCrewMax: seedTuning.smallCrewMax || 8,
-    midCrewMax: seedTuning.midCrewMax || 15,
-  };
-
-  for (const overheadScale of overheadCandidates) {
-    for (const thresholds of crewThresholdCandidates) {
-      for (const effMid of midCandidates) {
-        for (const effLarge of largeCandidates) {
-          if (effLarge > effMid) continue;
-
-          const tuning = {
-            overheadScale,
-            effSmall: 1.0,
-            effMid,
-            effLarge,
-            smallCrewMax: thresholds.smallCrewMax,
-            midCrewMax: thresholds.midCrewMax,
-          };
-          const score = await replayScoreForParameters(
-            evalJobs,
-            tuning,
-            baselineTuning,
-            maybeYield,
-          );
-          if (score < best.score) {
-            best = { score, ...tuning };
-          }
-          await maybeYield();
-        }
-      }
+  const tableRows = [[selected === "__all__" ? "Model - all test jobs" : selected, mae, mape, count]];
+  if (selected === "__all__") {
+    for (const [label, result] of [["Model - same stores as baselines", analytics.benchmarks.pairedModel], ["Last earlier visit", analytics.benchmarks.lastVisit], ["Mean of last 3 earlier visits", analytics.benchmarks.recentStore], ["Model - no earlier store visit", analytics.benchmarks.newStores]]) {
+      tableRows.push([label, result.durationMae, result.mape, result.jobs]);
     }
   }
-
-  return {
-    overheadScale: best.overheadScale,
-    effSmall: best.effSmall,
-    effMid: best.effMid,
-    effLarge: best.effLarge,
-    smallCrewMax: best.smallCrewMax,
-    midCrewMax: best.midCrewMax,
-  };
-}
-
-function buildCrewThresholdCandidates(trainJobs, evalJobs, seedTuning = {}) {
-  const crewSizes = [...(trainJobs || []), ...(evalJobs || [])]
-    .map((job) => Math.round(safeNumber(job?.crewSize)))
-    .filter((n) => n > 0)
-    .sort((a, b) => a - b);
-  const seedSmall = Math.max(3, Math.round(safeNumber(seedTuning.smallCrewMax) || 8));
-  const seedMid = Math.max(seedSmall + 1, Math.round(safeNumber(seedTuning.midCrewMax) || 15));
-  const pairs = [
-    [seedSmall, seedMid],
-    [6, 12],
-    [8, 15],
-    [10, 18],
-    [12, 20],
-  ];
-
-  if (crewSizes.length) {
-    const p33 = Math.round(percentile(crewSizes, 33));
-    const p66 = Math.round(percentile(crewSizes, 66));
-    const p50 = Math.round(percentile(crewSizes, 50));
-    const p80 = Math.round(percentile(crewSizes, 80));
-    pairs.push(
-      [p33, p66],
-      [p50, p80],
-      [Math.max(3, p33 - 2), Math.max(p33 + 1, p66 + 2)],
-    );
-  }
-
-  const seen = new Set();
-  return pairs
-    .map(([smallCrewMax, midCrewMax]) => ({
-      smallCrewMax: Math.max(3, Math.round(safeNumber(smallCrewMax))),
-      midCrewMax: Math.max(
-        Math.max(3, Math.round(safeNumber(smallCrewMax))) + 1,
-        Math.round(safeNumber(midCrewMax)),
-      ),
-    }))
-    .filter((pair) => {
-      const key = `${pair.smallCrewMax}:${pair.midCrewMax}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-}
-
-async function calibrateBaselineForJobs(
-  _trainJobs,
-  evalJobs,
-  modelTuning,
-  seedBaselineTuning,
-  maybeYield = async () => {},
-) {
-  const storeModes = ["median", "trimmed", "recent"];
-  const contextModes = ["median", "trimmed", "recent"];
-  const storeKs = [2, 4, 6, 8];
-  const contextProfiles = [
-    {
-      segmentWeight: 0.45,
-      typeWeight: 0.25,
-      officeWeight: 0.2,
-      accountWeight: 0.05,
-      globalWeight: 0.05,
-    },
-    {
-      segmentWeight: 0.4,
-      typeWeight: 0.2,
-      officeWeight: 0.25,
-      accountWeight: 0.1,
-      globalWeight: 0.05,
-    },
-    {
-      segmentWeight: 0.3,
-      typeWeight: 0.3,
-      officeWeight: 0.2,
-      accountWeight: 0.1,
-      globalWeight: 0.1,
-    },
-  ];
-
-  let best = {
-    score: Number.POSITIVE_INFINITY,
-    ...seedBaselineTuning,
-  };
-
-  for (const storeMode of storeModes) {
-    for (const contextMode of contextModes) {
-      for (const storeShrinkK of storeKs) {
-        for (const profile of contextProfiles) {
-          const candidate = {
-            storeMode,
-            contextMode,
-            storeShrinkK,
-            ...profile,
-          };
-          const score = await replayScoreForParameters(
-            evalJobs,
-            modelTuning,
-            candidate,
-            maybeYield,
-          );
-          if (score < best.score) best = { score, ...candidate };
-          await maybeYield();
-        }
-      }
-    }
-  }
-
-  return {
-    storeMode: best.storeMode,
-    contextMode: best.contextMode,
-    storeShrinkK: best.storeShrinkK,
-    minStoreWeight: safeNumber(seedBaselineTuning?.minStoreWeight) || 0.45,
-    segmentWeight: best.segmentWeight,
-    typeWeight: best.typeWeight,
-    officeWeight: best.officeWeight,
-    accountWeight: best.accountWeight,
-    globalWeight: best.globalWeight,
-  };
-}
-
-async function replayScoreForParameters(
-  jobsSubset,
-  modelTuning,
-  baselineTuning,
-  maybeYield = async () => {},
-) {
-  let durationAbs = 0;
-  let manHoursAbs = 0;
-  let count = 0;
-
-  const replayInputs = getReplayInputs(jobsSubset || []);
-  for (let i = 0; i < replayInputs.length; i += 1) {
-    const input = replayInputs[i];
-    const baselinePieces = resolveReplayBaselinePieces(input, baselineTuning);
-    if (!(baselinePieces > 0) || !(input.crewSpeedRaw > 0)) continue;
-    const efficiency = getCrewEfficiencyFactor(input.crewSize, modelTuning);
-    const durationPred = Math.max(
-      0,
-      input.overheadBase * modelTuning.overheadScale +
-        baselinePieces / (input.crewSpeedRaw * efficiency),
-    );
-    const manHoursPred = durationPred * input.crewSize;
-    const durationErr = Math.abs(durationPred - input.duration);
-    const manErr = Math.abs(manHoursPred - input.totalManHours);
-    if (!Number.isFinite(durationErr) || !Number.isFinite(manErr)) {
-      continue;
-    }
-    durationAbs += clipOutlierError(durationErr, 12);
-    manHoursAbs += clipOutlierError(manErr, 60);
-    count += 1;
-  }
-
-  await maybeYield();
-
-  if (!(count > 0)) return Number.POSITIVE_INFINITY;
-  const durationMae = durationAbs / count;
-  const manHoursMae = manHoursAbs / count;
-  return durationMae * 0.75 + manHoursMae * 0.25;
-}
-
-const replayInputsCache = new WeakMap();
-
-function getReplayInputs(jobs) {
-  if (!Array.isArray(jobs) || !jobs.length) return [];
-  const cached = replayInputsCache.get(jobs);
-  if (cached) return cached;
-
-  const inputs = [];
-  for (const job of jobs) {
-    const store = state.stores.get(job.storeKey);
-    const duration = safeNumber(job.duration);
-    if (!store || !(duration > 0)) continue;
-
-    const crewSize = Math.max(1, safeNumber(job.crewSize));
-    const crewSpeedRaw = (job.employees || [])
-      .map((id) =>
-        effectiveEmployeeSpeed(
-          state.employees.get(id),
-          job.storeKey,
-          store.account,
-        ),
-      )
-      .filter((value) => value > 0)
-      .reduce((sum, value) => sum + value, 0);
-    if (!(crewSpeedRaw > 0)) continue;
-
-    const accountKey = store.accountKey || getLinkedAccountKey(store.account);
-    const segmentKey =
-      state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
-      `${accountKey}||S1`;
-    const typeKey = `${accountKey}||${job.typeOfInv || store.primaryType || "Unknown"}`;
-    const officeKey = `${accountKey}||${store.officeName || "Unknown"}`;
-    inputs.push({
-      duration,
-      totalManHours: safeNumber(job.totalManHours),
-      crewSize,
-      crewSpeedRaw,
-      overheadBase: resolveOverheadHours(store, 1).value,
-      store,
-      segmentStats: state.accountSegmentStats.get(segmentKey),
-      typeStats: state.accountTypeStats.get(typeKey),
-      officeStats: state.accountOfficeStats.get(officeKey),
-      accountStats: state.accountGlobalStats.get(accountKey),
-      baselineCache: new WeakMap(),
-    });
-  }
-  replayInputsCache.set(jobs, inputs);
-  return inputs;
-}
-
-function resolveReplayBaselinePieces(input, baselineTuning) {
-  if (baselineTuning && typeof baselineTuning === "object") {
-    const cached = input.baselineCache.get(baselineTuning);
-    if (cached !== undefined) return cached;
-  }
-  const storeMode = baselineTuning?.storeMode || "median";
-  const contextMode = baselineTuning?.contextMode || "median";
-  const storeCandidate = pickBaselineCandidate(input.store, storeMode);
-  const weightedCandidates = [
-    [input.segmentStats, baselineTuning?.segmentWeight],
-    [input.typeStats, baselineTuning?.typeWeight],
-    [input.accountStats, baselineTuning?.accountWeight],
-    [input.officeStats, baselineTuning?.officeWeight],
-    [state.global, baselineTuning?.globalWeight],
-  ];
-  let weightedTotal = 0;
-  let totalWeight = 0;
-  for (const [stats, rawWeight] of weightedCandidates) {
-    const value = pickBaselineCandidate(stats, contextMode);
-    const weight = safeNumber(rawWeight);
-    if (value > 0 && weight > 0) {
-      weightedTotal += value * weight;
-      totalWeight += weight;
-    }
-  }
-  const contextCandidate = totalWeight > 0 ? weightedTotal / totalWeight : 0;
-  if (!(storeCandidate > 0)) {
-    input.baselineCache.set(baselineTuning, contextCandidate);
-    return contextCandidate;
-  }
-  if (!(contextCandidate > 0)) {
-    input.baselineCache.set(baselineTuning, storeCandidate);
-    return storeCandidate;
-  }
-
-  const n = Math.max(0, safeNumber(input.store.jobCount));
-  const shrinkK = Math.max(1, safeNumber(baselineTuning?.storeShrinkK));
-  const rawStoreWeight = n / (n + shrinkK);
-  const minStoreWeight = Math.max(
-    0,
-    Math.min(0.9, safeNumber(baselineTuning?.minStoreWeight) || 0.45),
-  );
-  const storeWeight =
-    n > 0 ? Math.max(rawStoreWeight, minStoreWeight) : rawStoreWeight;
-  const result =
-    storeWeight * storeCandidate + (1 - storeWeight) * contextCandidate;
-  input.baselineCache.set(baselineTuning, result);
-  return result;
-}
-
-function clipOutlierError(value, cap) {
-  const n = safeNumber(value);
-  if (n <= 0) return 0;
-  return Math.min(n, Math.max(1, safeNumber(cap)));
-}
-
-async function buildResidualStats(jobsSubset) {
-  const maybeYield = createUiYieldController(10);
-  const byStore = new Map();
-  const byAccountSegment = new Map();
-  const byAccountType = new Map();
-  const byAccountOffice = new Map();
-  const byAccount = new Map();
-  const byStoreCrewBand = new Map();
-  const byStoreSupervisor = new Map();
-  const byAccountSupervisor = new Map();
-  const byAccountSegmentCrewBand = new Map();
-  const byAccountTypeCrewBand = new Map();
-  const byAccountCrewBand = new Map();
-  const globalCrewBand = new Map();
-  const globalResiduals = [];
-  const manByStore = new Map();
-  const manByAccountSegment = new Map();
-  const manByAccountType = new Map();
-  const manByAccountOffice = new Map();
-  const manByAccount = new Map();
-  const manByStoreCrewBand = new Map();
-  const manByStoreSupervisor = new Map();
-  const manByAccountSupervisor = new Map();
-  const manByAccountSegmentCrewBand = new Map();
-  const manByAccountTypeCrewBand = new Map();
-  const manByAccountCrewBand = new Map();
-  const manGlobalCrewBand = new Map();
-  const manGlobalResiduals = [];
-  const latestByStore = new Map();
-
-  const jobs = jobsSubset || [];
-  for (let i = 0; i < jobs.length; i += 1) {
-    const job = jobs[i];
-    const store = state.stores.get(job.storeKey);
-    if (!store || !(job.duration > 0)) {
-      if (i % 25 === 0) await maybeYield();
-      continue;
-    }
-
-    const predicted = computePredictionForJob(job, store, {
-      applyResiduals: false,
-    });
-    if (!predicted) {
-      if (i % 25 === 0) await maybeYield();
-      continue;
-    }
-
-    const residual = predicted.onSiteDuration - safeNumber(job.duration);
-    if (!Number.isFinite(residual)) {
-      if (i % 25 === 0) await maybeYield();
-      continue;
-    }
-    const manResidual = predicted.manHours - safeNumber(job.totalManHours);
-
-    const segmentKey = state.storeSegmentByStoreKey.get(
-      job.storeKey,
-    )?.segmentKey;
-    const accountKey = job.accountKey || getLinkedAccountKey(job.account);
-    const typeKey = `${accountKey}||${job.typeOfInv || "Unknown"}`;
-    const officeKey = `${accountKey}||${job.officeName || "Unknown"}`;
-    const supervisorKey = cleanText(job.supervisorNumber || "").toLowerCase();
-    const crewBand = getCrewBand(Math.max(1, safeNumber(job.crewSize)));
-    const storeCrewKey = `${job.storeKey}||${crewBand}`;
-    const segmentCrewKey = `${segmentKey || `${accountKey}||S1`}||${crewBand}`;
-    const typeCrewKey = `${typeKey}||${crewBand}`;
-    const accountCrewKey = `${accountKey}||${crewBand}`;
-
-    pushResidual(byStore, job.storeKey, residual);
-    pushResidual(byStoreCrewBand, storeCrewKey, residual);
-    if (supervisorKey) {
-      pushResidual(
-        byStoreSupervisor,
-        `${job.storeKey}||${supervisorKey}`,
-        residual,
-      );
-      pushResidual(
-        byAccountSupervisor,
-        `${accountKey}||${supervisorKey}`,
-        residual,
-      );
-    }
-    if (segmentKey) pushResidual(byAccountSegment, segmentKey, residual);
-    if (segmentKey)
-      pushResidual(byAccountSegmentCrewBand, segmentCrewKey, residual);
-    pushResidual(byAccountType, typeKey, residual);
-    pushResidual(byAccountOffice, officeKey, residual);
-    pushResidual(byAccountTypeCrewBand, typeCrewKey, residual);
-    pushResidual(byAccount, accountKey, residual);
-    pushResidual(byAccountCrewBand, accountCrewKey, residual);
-    pushResidual(globalCrewBand, crewBand, residual);
-    globalResiduals.push(residual);
-
-    if (Number.isFinite(manResidual)) {
-      pushResidual(manByStore, job.storeKey, manResidual);
-      pushResidual(manByStoreCrewBand, storeCrewKey, manResidual);
-      if (supervisorKey) {
-        pushResidual(
-          manByStoreSupervisor,
-          `${job.storeKey}||${supervisorKey}`,
-          manResidual,
-        );
-        pushResidual(
-          manByAccountSupervisor,
-          `${accountKey}||${supervisorKey}`,
-          manResidual,
-        );
-      }
-      if (segmentKey)
-        pushResidual(manByAccountSegment, segmentKey, manResidual);
-      if (segmentKey)
-        pushResidual(manByAccountSegmentCrewBand, segmentCrewKey, manResidual);
-      pushResidual(manByAccountType, typeKey, manResidual);
-      pushResidual(manByAccountOffice, officeKey, manResidual);
-      pushResidual(manByAccountTypeCrewBand, typeCrewKey, manResidual);
-      pushResidual(manByAccount, accountKey, manResidual);
-      pushResidual(manByAccountCrewBand, accountCrewKey, manResidual);
-      pushResidual(manGlobalCrewBand, crewBand, manResidual);
-      manGlobalResiduals.push(manResidual);
-    }
-
-    const stamp = new Date(job.date).getTime();
-    const previous = latestByStore.get(job.storeKey);
-    if (!previous || stamp > previous.stamp) {
-      latestByStore.set(job.storeKey, {
-        stamp,
-        durationResidual: residual,
-        manHoursResidual: manResidual,
-      });
-    }
-    if (i % 25 === 0) await maybeYield();
-  }
-
-  state.residualByStore = summarizeResidualMap(byStore);
-  state.residualByAccountSegment = summarizeResidualMap(byAccountSegment);
-  state.residualByAccountType = summarizeResidualMap(byAccountType);
-  state.residualByAccountOffice = summarizeResidualMap(byAccountOffice);
-  state.residualByAccount = summarizeResidualMap(byAccount);
-  state.residualByStoreCrewBand = summarizeResidualMap(byStoreCrewBand);
-  state.residualByStoreSupervisor = summarizeResidualMap(byStoreSupervisor);
-  state.residualByAccountSupervisor = summarizeResidualMap(byAccountSupervisor);
-  state.residualByAccountSegmentCrewBand = summarizeResidualMap(
-    byAccountSegmentCrewBand,
-  );
-  state.residualByAccountTypeCrewBand = summarizeResidualMap(
-    byAccountTypeCrewBand,
-  );
-  state.residualByAccountCrewBand = summarizeResidualMap(byAccountCrewBand);
-  state.residualGlobalCrewBand = summarizeResidualMap(globalCrewBand);
-  state.residualGlobal = summarizeResiduals(globalResiduals);
-  state.manHourResidualByStore = summarizeResidualMap(manByStore);
-  state.manHourResidualByAccountSegment =
-    summarizeResidualMap(manByAccountSegment);
-  state.manHourResidualByAccountType = summarizeResidualMap(manByAccountType);
-  state.manHourResidualByAccountOffice =
-    summarizeResidualMap(manByAccountOffice);
-  state.manHourResidualByAccount = summarizeResidualMap(manByAccount);
-  state.manHourResidualByStoreCrewBand =
-    summarizeResidualMap(manByStoreCrewBand);
-  state.manHourResidualByStoreSupervisor =
-    summarizeResidualMap(manByStoreSupervisor);
-  state.manHourResidualByAccountSupervisor = summarizeResidualMap(
-    manByAccountSupervisor,
-  );
-  state.manHourResidualByAccountSegmentCrewBand = summarizeResidualMap(
-    manByAccountSegmentCrewBand,
-  );
-  state.manHourResidualByAccountTypeCrewBand = summarizeResidualMap(
-    manByAccountTypeCrewBand,
-  );
-  state.manHourResidualByAccountCrewBand =
-    summarizeResidualMap(manByAccountCrewBand);
-  state.manHourResidualGlobalCrewBand = summarizeResidualMap(manGlobalCrewBand);
-  state.manHourResidualGlobal = summarizeResiduals(manGlobalResiduals);
-  state.lastDurationResidualByStore = latestByStore;
-  state.backtestMetrics = await computeHoldoutBacktestMetrics(
-    jobsSubset,
-    maybeYield,
-  );
-  const inSampleMae = await replayScoreForParameters(
-    jobsSubset,
-    state.modelTuning,
-    state.baselineTuning,
-    maybeYield,
-  );
-  const holdoutDurationMae = safeNumber(state.backtestMetrics.durationMae);
-  const ratio =
-    holdoutDurationMae > 0 && inSampleMae > 0
-      ? holdoutDurationMae / inSampleMae
-      : 1;
-  state.uncertaintyScale = Math.max(0.85, Math.min(1.5, ratio));
-}
-
-function pushResidual(map, key, value) {
-  if (!map.has(key)) map.set(key, []);
-  map.get(key).push(value);
-}
-
-function summarizeResidualMap(map) {
-  const result = new Map();
-  map.forEach((values, key) => {
-    result.set(key, summarizeResiduals(values));
-  });
-  return result;
-}
-
-function summarizeResiduals(values) {
-  const clean = [...(values || [])].map(safeNumber).filter(Number.isFinite);
-  if (!clean.length)
-    return { count: 0, mean: 0, p10: 0, p25: 0, p75: 0, p90: 0, stdDev: 0 };
-  return {
-    count: clean.length,
-    mean: mean(clean),
-    p10: percentile(clean, 10),
-    p25: percentile(clean, 25),
-    p75: percentile(clean, 75),
-    p90: percentile(clean, 90),
-    stdDev: stdDev(clean),
-  };
-}
-
-function blendResidualTowards(target, prior, n, k) {
-  if (!(n > 0)) return prior;
-  const w = n / (n + k);
-  return prior + w * (target - prior);
-}
-
-function resolveResidualAdjustmentForStore(store, crewSize, supervisorId = "") {
-  return resolveScopedResidualAdjustment({
-    store,
-    crewSize,
-    supervisorId,
-    globalStats: state.residualGlobal,
-    byStore: state.residualByStore,
-    bySegment: state.residualByAccountSegment,
-    byType: state.residualByAccountType,
-    byOffice: state.residualByAccountOffice,
-    byAccount: state.residualByAccount,
-    byStoreCrewBand: state.residualByStoreCrewBand,
-    byStoreSupervisor: state.residualByStoreSupervisor,
-    byAccountSupervisor: state.residualByAccountSupervisor,
-    bySegmentCrewBand: state.residualByAccountSegmentCrewBand,
-    byTypeCrewBand: state.residualByAccountTypeCrewBand,
-    byAccountCrewBand: state.residualByAccountCrewBand,
-    byGlobalCrewBand: state.residualGlobalCrewBand,
-    shrinkageKs: state.residualShrinkageKs,
-    profilesByDensity: state.residualProfilesByDensity,
-  });
-}
-
-function resolveManHourAdjustmentForStore(store, crewSize, supervisorId = "") {
-  return resolveScopedResidualAdjustment({
-    store,
-    crewSize,
-    supervisorId,
-    globalStats: state.manHourResidualGlobal,
-    byStore: state.manHourResidualByStore,
-    bySegment: state.manHourResidualByAccountSegment,
-    byType: state.manHourResidualByAccountType,
-    byOffice: state.manHourResidualByAccountOffice,
-    byAccount: state.manHourResidualByAccount,
-    byStoreCrewBand: state.manHourResidualByStoreCrewBand,
-    byStoreSupervisor: state.manHourResidualByStoreSupervisor,
-    byAccountSupervisor: state.manHourResidualByAccountSupervisor,
-    bySegmentCrewBand: state.manHourResidualByAccountSegmentCrewBand,
-    byTypeCrewBand: state.manHourResidualByAccountTypeCrewBand,
-    byAccountCrewBand: state.manHourResidualByAccountCrewBand,
-    byGlobalCrewBand: state.manHourResidualGlobalCrewBand,
-    shrinkageKs: state.manHourShrinkageKs,
-    profilesByDensity: state.residualProfilesByDensity,
-  });
-}
-
-function resolveScopedResidualAdjustment(config) {
-  const store = config.store;
-  const crewBand = getCrewBand(crewSizeOrDefault(config.crewSize));
-  const globalStats = config.globalStats || {
-    count: 0,
-    mean: 0,
-    p10: 0,
-    p25: 0,
-    p75: 0,
-    p90: 0,
-    stdDev: 0,
-  };
-  const segmentKey =
-    state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
-    `${store.accountKey || getLinkedAccountKey(store.account)}||S1`;
-  const accountKey = store.accountKey || getLinkedAccountKey(store.account);
-  const typeKey = `${accountKey}||${store.primaryType || "Unknown"}`;
-  const officeKey = `${accountKey}||${store.officeName || "Unknown"}`;
-  const storeKey = store.storeKey;
-  const supervisorKey = cleanText(config.supervisorId || "").toLowerCase();
-  const profileDensity = getResidualProfileDensity(store);
-  const profile =
-    config.profilesByDensity?.[profileDensity] ||
-    config.profilesByDensity?.dense ||
-    null;
-
-  const scoped = {
-    account: config.byAccount?.get(accountKey),
-    segment: config.bySegment?.get(segmentKey),
-    type: config.byType?.get(typeKey),
-    office: config.byOffice?.get(officeKey),
-    store: config.byStore?.get(storeKey),
-    supervisor:
-      supervisorKey && config.byStoreSupervisor
-        ? config.byStoreSupervisor.get(`${storeKey}||${supervisorKey}`)
-        : null,
-    accountSupervisor:
-      supervisorKey && config.byAccountSupervisor
-        ? config.byAccountSupervisor.get(`${accountKey}||${supervisorKey}`)
-        : null,
-    accountBand: config.byAccountCrewBand?.get(`${accountKey}||${crewBand}`),
-    segmentBand: config.bySegmentCrewBand?.get(`${segmentKey}||${crewBand}`),
-    typeBand: config.byTypeCrewBand?.get(`${typeKey}||${crewBand}`),
-    storeBand: config.byStoreCrewBand?.get(`${storeKey}||${crewBand}`),
-    globalBand: config.byGlobalCrewBand?.get(crewBand),
-  };
-
-  const ks = config.shrinkageKs || {};
-  const profileKs = profile?.ks || {};
-  const profileMins = profile?.mins || {};
-  const kOf = (key, fallback) => {
-    if (Number.isFinite(profileKs[key])) return profileKs[key];
-    if (Number.isFinite(ks[key])) return ks[key];
-    return fallback;
-  };
-  const minOf = (key, fallback) => {
-    if (Number.isFinite(profileMins[key])) return profileMins[key];
-    return fallback;
-  };
-  const floorOf = (key, fallback = 0) => {
-    const floors = profile?.floors || {};
-    if (Number.isFinite(floors[key])) return floors[key];
-    return fallback;
-  };
-  let biasHours = safeNumber(globalStats.mean);
-  biasHours = blendFromScope(scoped.account, biasHours, kOf("account", 24));
-  biasHours = blendFromScope(scoped.segment, biasHours, kOf("segment", 14));
-  biasHours = blendFromScope(scoped.type, biasHours, kOf("type", 16));
-  biasHours = blendFromScope(scoped.office, biasHours, kOf("office", 16));
-  biasHours = blendFromScope(
-    scoped.store,
-    biasHours,
-    kOf("store", 8),
-    floorOf("minStoreWeight", 0.3),
-    (scoped.store?.count || 0) <= 2 ? 0.6 : Number.POSITIVE_INFINITY,
-  );
-  biasHours = blendFromScope(
-    scoped.accountSupervisor,
-    biasHours,
-    kOf("accountSupervisor", 10),
-  );
-  biasHours = blendFromScope(
-    scoped.supervisor,
-    biasHours,
-    kOf("storeSupervisor", 6),
-  );
-  // Keep final bias direction anchored to known store tendency (high/low)
-  // so live estimates reflect the Selected Store Accuracy trend more clearly.
-  const storeCount = Math.max(0, safeNumber(scoped.store?.count));
-  const storeMean = safeNumber(scoped.store?.mean);
-  const anchorShare = Math.max(
-    0,
-    Math.min(
-      1,
-      floorOf("anchorMinShare", profileDensity === "sparse" ? 0.55 : 0.4),
-    ),
-  );
-  const anchorWeightFloor = Math.max(
-    0,
-    Math.min(
-      1,
-      floorOf("anchorMinWeight", profileDensity === "sparse" ? 0.45 : 0.35),
-    ),
-  );
-  const anchorK = Math.max(
-    1,
-    floorOf("anchorK", profileDensity === "sparse" ? 6 : 8),
-  );
-  const anchorMaxAbs = Math.max(
-    0,
-    floorOf("anchorMaxAbsHours", profileDensity === "sparse" ? 0.9 : 0.7),
-  );
-  if (storeCount > 0 && Math.abs(storeMean) > 0) {
-    const desiredRaw = storeMean * anchorShare;
-    const desired = Math.max(-anchorMaxAbs, Math.min(anchorMaxAbs, desiredRaw));
-    const oppositeDirection = Math.sign(biasHours) !== Math.sign(desired);
-    if (oppositeDirection) {
-      biasHours = desired;
-    } else if (Math.abs(biasHours) < Math.abs(desired)) {
-      const anchorWeight = Math.max(
-        anchorWeightFloor,
-        storeCount / (storeCount + anchorK),
-      );
-      biasHours = biasHours + anchorWeight * (desired - biasHours);
-    }
-  }
-
-  const rangeCandidates = [
-    {
-      scope: "store+crew-band",
-      stats: scoped.storeBand,
-      min: minOf("storeBand", 5),
-    },
-    {
-      scope: "store+supervisor",
-      stats: scoped.supervisor,
-      min: minOf("storeSupervisor", 6),
-    },
-    { scope: "store", stats: scoped.store, min: minOf("store", 8) },
-    {
-      scope: "account+supervisor",
-      stats: scoped.accountSupervisor,
-      min: minOf("accountSupervisor", 10),
-    },
-    {
-      scope: "account+segment+crew-band",
-      stats: scoped.segmentBand,
-      min: minOf("segmentBand", 10),
-    },
-    {
-      scope: "account+segment",
-      stats: scoped.segment,
-      min: minOf("segment", 16),
-    },
-    {
-      scope: "account+type+crew-band",
-      stats: scoped.typeBand,
-      min: minOf("typeBand", 12),
-    },
-    { scope: "account+type", stats: scoped.type, min: minOf("type", 18) },
-    { scope: "account+office", stats: scoped.office, min: minOf("office", 16) },
-    {
-      scope: "account+crew-band",
-      stats: scoped.accountBand,
-      min: minOf("accountBand", 16),
-    },
-    { scope: "account", stats: scoped.account, min: minOf("account", 24) },
-    {
-      scope: "global+crew-band",
-      stats: scoped.globalBand,
-      min: minOf("globalBand", 20),
-    },
-  ];
-  let chosen = { scope: "global", stats: globalStats };
-  rangeCandidates.some((item) => {
-    if ((item.stats?.count || 0) >= item.min) {
-      chosen = item;
-      return true;
-    }
-    return false;
-  });
-
-  return {
-    biasHours,
-    // "Likely" range uses central quartiles instead of 10/90 to reduce interval width.
-    lowOffset: biasHours - safeNumber(chosen.stats?.p75),
-    highOffset: biasHours - safeNumber(chosen.stats?.p25),
-    rangeScope: chosen.scope,
-    rangeCount: safeNumber(chosen.stats?.count),
-    profileDensity,
-  };
-}
-
-function blendFromScope(
-  scopeStats,
-  prior,
-  k,
-  minWeight = 0,
-  maxDeltaAbs = Number.POSITIVE_INFINITY,
-) {
-  if (!(scopeStats?.count > 0)) return prior;
-  const n = scopeStats.count;
-  const rawWeight = n / (n + k);
-  const weight = Math.max(Math.min(1, rawWeight), Math.max(0, minWeight));
-  const target = safeNumber(scopeStats.mean);
-  const delta = target - prior;
-  const limitedDelta = Number.isFinite(maxDeltaAbs)
-    ? Math.max(-Math.abs(maxDeltaAbs), Math.min(Math.abs(maxDeltaAbs), delta))
-    : delta;
-  return prior + weight * limitedDelta;
-}
-
-function getResidualProfileDensity(store) {
-  const n = Math.max(0, safeNumber(store?.jobCount));
-  return n < 10 ? "sparse" : "dense";
-}
-
-function crewSizeOrDefault(value) {
-  const n = Math.round(safeNumber(value));
-  return n > 0 ? n : 4;
-}
-
-function getCrewBand(crewSize) {
-  const n = Math.max(1, Math.round(safeNumber(crewSize)));
-  if (n <= 5) return "C1_5";
-  if (n <= 10) return "C6_10";
-  if (n <= 15) return "C11_15";
-  return "C16P";
-}
-
-async function computeHoldoutBacktestMetrics(
-  jobsSubset,
-  maybeYield = async () => {},
-) {
-  const split = splitJobsForBacktest(jobsSubset || []);
-  const holdout = split.holdout.length >= 8 ? split.holdout : [];
-  if (!holdout.length) {
-    return { durationMae: 0, manHoursMae: 0, jobs: 0, splitDate: "" };
-  }
-
-  let durationAbs = 0;
-  let manAbs = 0;
-  let count = 0;
-  for (let i = 0; i < holdout.length; i += 1) {
-    const job = holdout[i];
-    const store = state.stores.get(job.storeKey);
-    if (!store || !(job.duration > 0)) {
-      if (i % 25 === 0) await maybeYield();
-      continue;
-    }
-    const predicted = computePredictionForJob(job, store, {
-      applyResiduals: true,
-    });
-    if (!predicted) {
-      if (i % 25 === 0) await maybeYield();
-      continue;
-    }
-    durationAbs += Math.abs(
-      predicted.onSiteDuration - safeNumber(job.duration),
-    );
-    manAbs += Math.abs(predicted.manHours - safeNumber(job.totalManHours));
-    count += 1;
-    if (i % 25 === 0) await maybeYield();
-  }
-
-  return {
-    durationMae: count > 0 ? durationAbs / count : 0,
-    manHoursMae: count > 0 ? manAbs / count : 0,
-    jobs: count,
-    splitDate: holdout[0]?.date || "",
-  };
-}
-
-function getLastCrewOverlapRate(storeKey, selectedCrew) {
-  const lastCrew = state.storeLastCrew.get(storeKey) || [];
-  if (!lastCrew.length || !(selectedCrew || []).length) return 0;
-  const selectedSet = new Set((selectedCrew || []).filter(Boolean));
-  const overlap = lastCrew.filter((id) => selectedSet.has(id)).length;
-  return overlap / Math.max(1, selectedSet.size);
-}
-
-function getTuningForStore(store) {
-  if (!store) {
-    return {
-      tuning: state.modelTuning,
-      scope: "global",
-      label: "Global tuned parameters",
-    };
-  }
-
-  const segmentKey =
-    state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
-    `${store.accountKey || getLinkedAccountKey(store.account)}||S1`;
-  if (state.modelTuningByAccountSegment.has(segmentKey)) {
-    return {
-      tuning: state.modelTuningByAccountSegment.get(segmentKey),
-      scope: "account_segment",
-      label: `Account+Segment tuned (${segmentKey})`,
-    };
-  }
-
-  const accountKey = store.accountKey || getLinkedAccountKey(store.account);
-  const typeKey = `${accountKey}||${store.primaryType || "Unknown"}`;
-  if (state.modelTuningByAccountType.has(typeKey)) {
-    return {
-      tuning: state.modelTuningByAccountType.get(typeKey),
-      scope: "account_type",
-      label: `Account+Type tuned (${store.account} / ${store.primaryType || "Unknown"})`,
-    };
-  }
-
-  if (state.modelTuningByAccount.has(accountKey)) {
-    return {
-      tuning: state.modelTuningByAccount.get(accountKey),
-      scope: "account",
-      label: `Account tuned (${store.account})`,
-    };
-  }
-
-  return {
-    tuning: state.modelTuning,
-    scope: "global",
-    label: "Global tuned parameters",
-  };
-}
-
-function getBaselineTuningForStore(store) {
-  if (!store) {
-    return {
-      tuning: state.baselineTuning,
-      scope: "global",
-      label: "Global baseline tuning",
-    };
-  }
-
-  const segmentKey =
-    state.storeSegmentByStoreKey.get(store.storeKey)?.segmentKey ||
-    `${store.accountKey || getLinkedAccountKey(store.account)}||S1`;
-  if (state.baselineTuningByAccountSegment.has(segmentKey)) {
-    return {
-      tuning: state.baselineTuningByAccountSegment.get(segmentKey),
-      scope: "account_segment",
-      label: `Account+Segment baseline (${segmentKey})`,
-    };
-  }
-
-  const accountKey = store.accountKey || getLinkedAccountKey(store.account);
-  const typeKey = `${accountKey}||${store.primaryType || "Unknown"}`;
-  if (state.baselineTuningByAccountType.has(typeKey)) {
-    return {
-      tuning: state.baselineTuningByAccountType.get(typeKey),
-      scope: "account_type",
-      label: `Account+Type baseline (${typeKey})`,
-    };
-  }
-
-  if (state.baselineTuningByAccount.has(accountKey)) {
-    return {
-      tuning: state.baselineTuningByAccount.get(accountKey),
-      scope: "account",
-      label: `Account baseline (${store.account})`,
-    };
-  }
-
-  return {
-    tuning: state.baselineTuning,
-    scope: "global",
-    label: "Global baseline tuning",
-  };
-}
-
-function getTuningForJob(job, store) {
-  if (!job || !store) return state.modelTuning;
-  const segmentKey = state.storeSegmentByStoreKey.get(job.storeKey)?.segmentKey;
-  if (segmentKey && state.modelTuningByAccountSegment.has(segmentKey))
-    return state.modelTuningByAccountSegment.get(segmentKey);
-  const accountKey = job.accountKey || getLinkedAccountKey(job.account);
-  const typeKey = `${accountKey}||${job.typeOfInv || "Unknown"}`;
-  if (state.modelTuningByAccountType.has(typeKey))
-    return state.modelTuningByAccountType.get(typeKey);
-  if (state.modelTuningByAccount.has(accountKey))
-    return state.modelTuningByAccount.get(accountKey);
-  return state.modelTuning;
-}
-
-function getBaselineTuningForJob(job, store) {
-  if (!job || !store) return state.baselineTuning;
-  const segmentKey = state.storeSegmentByStoreKey.get(job.storeKey)?.segmentKey;
-  if (segmentKey && state.baselineTuningByAccountSegment.has(segmentKey)) {
-    return state.baselineTuningByAccountSegment.get(segmentKey);
-  }
-  const accountKey = job.accountKey || getLinkedAccountKey(job.account);
-  const typeKey = `${accountKey}||${job.typeOfInv || "Unknown"}`;
-  if (state.baselineTuningByAccountType.has(typeKey)) {
-    return state.baselineTuningByAccountType.get(typeKey);
-  }
-  if (state.baselineTuningByAccount.has(accountKey)) {
-    return state.baselineTuningByAccount.get(accountKey);
-  }
-  return state.baselineTuning;
+  dom.accuracyWorstBody.innerHTML = tableRows.map(([label, error, pct, jobs]) => `<tr><td>${escapeHtml(label)}</td><td>${jobs ? formatNumber(error, 2) : "-"}</td><td>${jobs ? formatNumber(pct, 1) + "%" : "-"}</td><td>${jobs}</td></tr>`).join("");
+  renderSavedForecastStatus();
 }
 
 function persistToStorage() {
@@ -7416,226 +5637,25 @@ function buildDataFingerprintFromJsonText(text) {
   return `${input.length}:${unsigned.toString(16)}`;
 }
 
-function mapToEntries(map) {
-  return map instanceof Map ? Array.from(map.entries()) : [];
-}
-
-function entriesToMap(entries) {
-  return new Map(Array.isArray(entries) ? entries : []);
-}
-
-function normalizeModelTuning(tuning, fallback = state.baseModelTuning) {
-  const source = tuning || {};
-  const base = fallback || state.baseModelTuning;
-  const smallCrewMax = Math.max(
-    3,
-    Math.round(safeNumber(source.smallCrewMax) || safeNumber(base.smallCrewMax) || 8),
-  );
-  const midCrewMax = Math.max(
-    smallCrewMax + 1,
-    Math.round(safeNumber(source.midCrewMax) || safeNumber(base.midCrewMax) || 15),
-  );
-  return {
-    overheadScale:
-      safeNumber(source.overheadScale) || safeNumber(base.overheadScale) || 0.25,
-    effSmall: safeNumber(source.effSmall) || safeNumber(base.effSmall) || 1,
-    effMid: safeNumber(source.effMid) || safeNumber(base.effMid) || 0.97,
-    effLarge: safeNumber(source.effLarge) || safeNumber(base.effLarge) || 0.93,
-    smallCrewMax,
-    midCrewMax,
-  };
-}
-
-function normalizeModelTuningMap(map) {
-  const normalized = new Map();
-  if (!(map instanceof Map)) return normalized;
-  map.forEach((value, key) => {
-    normalized.set(key, normalizeModelTuning(value, state.modelTuning));
-  });
-  return normalized;
-}
-
 function buildAnalyticsSnapshot(fingerprint) {
   return {
-    id: ANALYTICS_DB_SNAPSHOT_ID,
-    version: 7,
-    fingerprint: String(fingerprint || ""),
-    createdAt: new Date().toISOString(),
-    modelTuning: state.modelTuning,
-    baselineTuning: state.baselineTuning,
-    modelTuningByAccount: mapToEntries(state.modelTuningByAccount),
-    modelTuningByAccountType: mapToEntries(state.modelTuningByAccountType),
-    modelTuningByAccountSegment: mapToEntries(
-      state.modelTuningByAccountSegment,
-    ),
-    baselineTuningByAccount: mapToEntries(state.baselineTuningByAccount),
-    baselineTuningByAccountType: mapToEntries(
-      state.baselineTuningByAccountType,
-    ),
-    baselineTuningByAccountSegment: mapToEntries(
-      state.baselineTuningByAccountSegment,
-    ),
-    residualByStore: mapToEntries(state.residualByStore),
-    residualByAccountSegment: mapToEntries(state.residualByAccountSegment),
-    residualByAccountType: mapToEntries(state.residualByAccountType),
-    residualByAccountOffice: mapToEntries(state.residualByAccountOffice),
-    residualByAccount: mapToEntries(state.residualByAccount),
-    residualGlobal: state.residualGlobal,
-    residualByStoreCrewBand: mapToEntries(state.residualByStoreCrewBand),
-    residualByStoreSupervisor: mapToEntries(state.residualByStoreSupervisor),
-    residualByAccountSupervisor: mapToEntries(
-      state.residualByAccountSupervisor,
-    ),
-    residualByAccountSegmentCrewBand: mapToEntries(
-      state.residualByAccountSegmentCrewBand,
-    ),
-    residualByAccountTypeCrewBand: mapToEntries(
-      state.residualByAccountTypeCrewBand,
-    ),
-    residualByAccountCrewBand: mapToEntries(state.residualByAccountCrewBand),
-    residualGlobalCrewBand: mapToEntries(state.residualGlobalCrewBand),
-    manHourResidualByStore: mapToEntries(state.manHourResidualByStore),
-    manHourResidualByAccountSegment: mapToEntries(
-      state.manHourResidualByAccountSegment,
-    ),
-    manHourResidualByAccountType: mapToEntries(
-      state.manHourResidualByAccountType,
-    ),
-    manHourResidualByAccountOffice: mapToEntries(
-      state.manHourResidualByAccountOffice,
-    ),
-    manHourResidualByAccount: mapToEntries(state.manHourResidualByAccount),
-    manHourResidualGlobal: state.manHourResidualGlobal,
-    manHourResidualByStoreCrewBand: mapToEntries(
-      state.manHourResidualByStoreCrewBand,
-    ),
-    manHourResidualByStoreSupervisor: mapToEntries(
-      state.manHourResidualByStoreSupervisor,
-    ),
-    manHourResidualByAccountSupervisor: mapToEntries(
-      state.manHourResidualByAccountSupervisor,
-    ),
-    manHourResidualByAccountSegmentCrewBand: mapToEntries(
-      state.manHourResidualByAccountSegmentCrewBand,
-    ),
-    manHourResidualByAccountTypeCrewBand: mapToEntries(
-      state.manHourResidualByAccountTypeCrewBand,
-    ),
-    manHourResidualByAccountCrewBand: mapToEntries(
-      state.manHourResidualByAccountCrewBand,
-    ),
-    manHourResidualGlobalCrewBand: mapToEntries(
-      state.manHourResidualGlobalCrewBand,
-    ),
-    lastDurationResidualByStore: mapToEntries(
-      state.lastDurationResidualByStore,
-    ),
-    uncertaintyScale: state.uncertaintyScale,
-    backtestMetrics: state.backtestMetrics,
-    accuracyCache: state.accuracyCache,
+    id: ANALYTICS_DB_SNAPSHOT_ID, version: 8, modelVersion: DurationModel.VERSION,
+    fingerprint: String(fingerprint || ""), createdAt: new Date().toISOString(),
+    durationAnalytics: state.durationAnalytics,
   };
 }
 
 function applyAnalyticsSnapshot(snapshot) {
-  state.modelTuning = normalizeModelTuning(snapshot.modelTuning, state.modelTuning);
-  state.baselineTuning = snapshot.baselineTuning || state.baselineTuning;
-  state.modelTuningByAccount = normalizeModelTuningMap(
-    entriesToMap(snapshot.modelTuningByAccount),
-  );
-  state.modelTuningByAccountType = normalizeModelTuningMap(
-    entriesToMap(snapshot.modelTuningByAccountType),
-  );
-  state.modelTuningByAccountSegment = normalizeModelTuningMap(
-    entriesToMap(snapshot.modelTuningByAccountSegment),
-  );
-  state.baselineTuningByAccount = entriesToMap(
-    snapshot.baselineTuningByAccount,
-  );
-  state.baselineTuningByAccountType = entriesToMap(
-    snapshot.baselineTuningByAccountType,
-  );
-  state.baselineTuningByAccountSegment = entriesToMap(
-    snapshot.baselineTuningByAccountSegment,
-  );
-  state.residualByStore = entriesToMap(snapshot.residualByStore);
-  state.residualByAccountSegment = entriesToMap(
-    snapshot.residualByAccountSegment,
-  );
-  state.residualByAccountType = entriesToMap(snapshot.residualByAccountType);
-  state.residualByAccountOffice = entriesToMap(
-    snapshot.residualByAccountOffice,
-  );
-  state.residualByAccount = entriesToMap(snapshot.residualByAccount);
-  state.residualGlobal = snapshot.residualGlobal || state.residualGlobal;
-  state.residualByStoreCrewBand = entriesToMap(
-    snapshot.residualByStoreCrewBand,
-  );
-  state.residualByStoreSupervisor = entriesToMap(
-    snapshot.residualByStoreSupervisor,
-  );
-  state.residualByAccountSupervisor = entriesToMap(
-    snapshot.residualByAccountSupervisor,
-  );
-  state.residualByAccountSegmentCrewBand = entriesToMap(
-    snapshot.residualByAccountSegmentCrewBand,
-  );
-  state.residualByAccountTypeCrewBand = entriesToMap(
-    snapshot.residualByAccountTypeCrewBand,
-  );
-  state.residualByAccountCrewBand = entriesToMap(
-    snapshot.residualByAccountCrewBand,
-  );
-  state.residualGlobalCrewBand = entriesToMap(snapshot.residualGlobalCrewBand);
-  state.manHourResidualByStore = entriesToMap(snapshot.manHourResidualByStore);
-  state.manHourResidualByAccountSegment = entriesToMap(
-    snapshot.manHourResidualByAccountSegment,
-  );
-  state.manHourResidualByAccountType = entriesToMap(
-    snapshot.manHourResidualByAccountType,
-  );
-  state.manHourResidualByAccountOffice = entriesToMap(
-    snapshot.manHourResidualByAccountOffice,
-  );
-  state.manHourResidualByAccount = entriesToMap(
-    snapshot.manHourResidualByAccount,
-  );
-  state.manHourResidualGlobal =
-    snapshot.manHourResidualGlobal || state.manHourResidualGlobal;
-  state.manHourResidualByStoreCrewBand = entriesToMap(
-    snapshot.manHourResidualByStoreCrewBand,
-  );
-  state.manHourResidualByStoreSupervisor = entriesToMap(
-    snapshot.manHourResidualByStoreSupervisor,
-  );
-  state.manHourResidualByAccountSupervisor = entriesToMap(
-    snapshot.manHourResidualByAccountSupervisor,
-  );
-  state.manHourResidualByAccountSegmentCrewBand = entriesToMap(
-    snapshot.manHourResidualByAccountSegmentCrewBand,
-  );
-  state.manHourResidualByAccountTypeCrewBand = entriesToMap(
-    snapshot.manHourResidualByAccountTypeCrewBand,
-  );
-  state.manHourResidualByAccountCrewBand = entriesToMap(
-    snapshot.manHourResidualByAccountCrewBand,
-  );
-  state.manHourResidualGlobalCrewBand = entriesToMap(
-    snapshot.manHourResidualGlobalCrewBand,
-  );
-  state.lastDurationResidualByStore = entriesToMap(
-    snapshot.lastDurationResidualByStore,
-  );
-  state.uncertaintyScale = safeNumber(snapshot.uncertaintyScale) || 1;
-  state.backtestMetrics = snapshot.backtestMetrics || state.backtestMetrics;
-  state.accuracyCache = snapshot.accuracyCache || null;
+  state.durationAnalytics = snapshot.durationAnalytics;
+  state.backtestMetrics = snapshot.durationAnalytics.testMetrics;
+  state.accuracyCache = snapshot.durationAnalytics.accuracyCache;
 }
 
 function isValidAnalyticsSnapshot(snapshot, fingerprint) {
-  return Boolean(
-    snapshot &&
-      snapshot.version === 7 &&
-      String(snapshot.fingerprint || "") === String(fingerprint || ""),
-  );
+  return Boolean(snapshot && snapshot.version === 8 && snapshot.modelVersion === DurationModel.VERSION
+    && snapshot.durationAnalytics?.version === DurationModel.VERSION
+    && snapshot.durationAnalytics?.config && snapshot.durationAnalytics?.testMetrics
+    && String(snapshot.fingerprint || "") === String(fingerprint || ""));
 }
 
 function openAnalyticsCacheDb() {
@@ -7755,20 +5775,20 @@ function getModasHistoryWeight(jobCount) {
   return 0.85;
 }
 
-function getAccountModasMedian(accountKey) {
-  if (!state.modasMedianCache.has(accountKey)) {
-    const speeds = Array.from(state.employees.values())
+function getAccountModasMedian(accountKey, context = state) {
+  if (!context.modasMedianCache.has(accountKey)) {
+    const speeds = Array.from(context.employees.values())
       .map(employee => getBlendedAccountSpeed(employee.modasAccountStats?.[accountKey]))
       .filter(speed => speed > 0);
-    state.modasMedianCache.set(accountKey, speeds.length ? median(speeds) : 0);
+    context.modasMedianCache.set(accountKey, speeds.length ? median(speeds) : 0);
   }
-  return state.modasMedianCache.get(accountKey);
+  return context.modasMedianCache.get(accountKey);
 }
 
-function getModasPlanningSource(employee, accountKey) {
+function getModasPlanningSource(employee, accountKey, context = state) {
   const matching = employee?.modasAccountStats?.[accountKey];
   const modeSpeed = getBlendedAccountSpeed(matching);
-  const accountMedian = getAccountModasMedian(accountKey);
+  const accountMedian = getAccountModasMedian(accountKey, context);
   if (modeSpeed > 0) {
     const otherSpeed = getBlendedAccountSpeed(employee?.regularAccountStats?.[accountKey]);
     const weight = otherSpeed > 0 ? getModasHistoryWeight(matching.jobCount) : 1;
@@ -7784,7 +5804,7 @@ function getModasPlanningSource(employee, accountKey) {
       accountMedian,
     };
   }
-  const peerEstimate = getPeerAdjustedAccountEstimate(employee, accountKey, true);
+  const peerEstimate = getPeerAdjustedAccountEstimate(employee, accountKey, true, context);
   if (peerEstimate?.speed > 0) return {
     speed: peerEstimate.speed, source: "modasPeer", label: "Similar-peer Modas account estimate", peerEstimate,
   };
@@ -7794,12 +5814,12 @@ function getModasPlanningSource(employee, accountKey) {
   return null;
 }
 
-function getEmployeePlanningSpeedSource(employee, account = getSelectedAccount(), inventoryMode = getStoreModasMode()) {
+function getEmployeePlanningSpeedSource(employee, account = getSelectedAccount(), inventoryMode = getStoreModasMode(), context = state) {
   if (inventoryMode === true) {
-    const modasSource = getModasPlanningSource(employee, getLinkedAccountKey(account));
+    const modasSource = getModasPlanningSource(employee, getLinkedAccountKey(account), context);
     if (modasSource) return modasSource;
   }
-  const fallback = safeNumber(state.global.medianEmployeeSpeed);
+  const fallback = safeNumber(context.global.medianEmployeeSpeed);
   if (!employee) {
     return {
       speed: fallback,
@@ -7830,7 +5850,7 @@ function getEmployeePlanningSpeedSource(employee, account = getSelectedAccount()
     };
   }
 
-  const peerEstimate = getPeerAdjustedAccountEstimate(employee, accountKey);
+  const peerEstimate = getPeerAdjustedAccountEstimate(employee, accountKey, false, context);
   if (peerEstimate && peerEstimate.speed > 0) {
     return {
       speed: peerEstimate.speed,
@@ -7860,24 +5880,24 @@ function getEmployeePlanningSpeedSource(employee, account = getSelectedAccount()
   };
 }
 
-function getPeerAdjustedAccountEstimate(employee, accountKey, modasOnly = false) {
+function getPeerAdjustedAccountEstimate(employee, accountKey, modasOnly = false, context = state) {
   if (!employee || !accountKey || !employee.accountStats) return null;
   if (!modasOnly && employee.accountStats?.[accountKey]?.jobCount >= 1) return null;
   const cacheKey = `${employee.employee || ""}||${accountKey}||${modasOnly ? "modas" : "all"}`;
-  if (state.peerAccountEstimateCache?.has(cacheKey)) {
-    return state.peerAccountEstimateCache.get(cacheKey);
+  if (context.peerAccountEstimateCache?.has(cacheKey)) {
+    return context.peerAccountEstimateCache.get(cacheKey);
   }
 
-  const targetGlobalSpeed = getBlendedGlobalEmployeeSpeed(employee);
-  const fallback = safeNumber(state.global.medianEmployeeSpeed);
+  const targetGlobalSpeed = getBlendedGlobalEmployeeSpeed(employee, context);
+  const fallback = safeNumber(context.global.medianEmployeeSpeed);
   const targetAccountEntries = getComparableAccountEntries(employee, modasOnly ? null : accountKey);
   if (!targetAccountEntries.length) {
-    state.peerAccountEstimateCache?.set(cacheKey, null);
+    context.peerAccountEstimateCache?.set(cacheKey, null);
     return null;
   }
 
   const candidates = [];
-  state.employees.forEach((peer) => {
+  context.employees.forEach((peer) => {
     if (!peer || peer.employee === employee.employee) return;
     const peerTargetAccount = (modasOnly ? peer.modasAccountStats : peer.accountStats)?.[accountKey];
     const peerTargetSpeed = getBlendedAccountSpeed(peerTargetAccount);
@@ -7938,7 +5958,7 @@ function getPeerAdjustedAccountEstimate(employee, accountKey, modasOnly = false)
     if (candidateSpeed > 0 && support > 0) {
       candidates.push({
         employee: peer.employee,
-        displayName: getEmployeeDisplayName(peer.employee),
+        displayName: peer.displayName || peer.employee,
         speed: candidateSpeed,
         weight: support,
         sharedCount: shared.length,
@@ -7962,14 +5982,14 @@ function getPeerAdjustedAccountEstimate(employee, accountKey, modasOnly = false)
   });
 
   if (candidates.length < 2) {
-    state.peerAccountEstimateCache?.set(cacheKey, null);
+    context.peerAccountEstimateCache?.set(cacheKey, null);
     return null;
   }
   candidates.sort((a, b) => b.weight - a.weight);
   const selected = candidates.slice(0, 8);
   const totalWeight = selected.reduce((sum, item) => sum + item.weight, 0);
   if (!(totalWeight > 0.35)) {
-    state.peerAccountEstimateCache?.set(cacheKey, null);
+    context.peerAccountEstimateCache?.set(cacheKey, null);
     return null;
   }
 
@@ -7978,7 +5998,7 @@ function getPeerAdjustedAccountEstimate(employee, accountKey, modasOnly = false)
     totalWeight;
   const baseSpeed = targetGlobalSpeed > 0 ? targetGlobalSpeed : fallback;
   if (!(baseSpeed > 0) || !(peerSpeed > 0)) {
-    state.peerAccountEstimateCache?.set(cacheKey, null);
+    context.peerAccountEstimateCache?.set(cacheKey, null);
     return null;
   }
 
@@ -8005,7 +6025,7 @@ function getPeerAdjustedAccountEstimate(employee, accountKey, modasOnly = false)
       shared: item.shared,
     })),
   };
-  state.peerAccountEstimateCache?.set(cacheKey, estimate);
+  context.peerAccountEstimateCache?.set(cacheKey, estimate);
   return estimate;
 }
 
@@ -8029,7 +6049,7 @@ function getBlendedAccountSpeed(accountStat) {
   );
 }
 
-function getBlendedGlobalEmployeeSpeed(employee) {
+function getBlendedGlobalEmployeeSpeed(employee, context = state) {
   if (!employee || safeNumber(employee.globalJobCount) < 1) return 0;
   return shrinkTowardFallback(
     blendRecentAndLongSpeed(
@@ -8037,7 +6057,7 @@ function getBlendedGlobalEmployeeSpeed(employee) {
       employee.avgPiecesPerHrGlobal,
       employee.globalJobCount,
     ),
-    safeNumber(state.global.medianEmployeeSpeed),
+    safeNumber(context.global.medianEmployeeSpeed),
     employee.globalJobCount,
     4,
   );
@@ -8191,16 +6211,9 @@ function chooseRobustBaseline(stats) {
   return stats.avgPieces > 0 ? stats.avgPieces : 0;
 }
 
-function getCrewEfficiencyFactor(crewSize, tuning = state.modelTuning) {
-  const model = normalizeModelTuning(tuning, state.modelTuning);
-  if (crewSize <= model.smallCrewMax) return model.effSmall;
-  if (crewSize <= model.midCrewMax) return model.effMid;
-  return model.effLarge;
-}
-
 function summarizeJobGroup(jobGroup) {
   const jobs = Array.isArray(jobGroup) ? jobGroup : [];
-  const pieces = jobs.map((j) => safeNumber(j.totalPieces));
+  const pieces = jobs.filter(j => Number.isFinite(j.totalPieces)).map(j => j.totalPieces);
   const trimmedPieces = trimExtremes(pieces, 0.05);
   const durations = jobs.map((j) => safeNumber(j.duration));
   const manHours = jobs.map((j) => safeNumber(j.totalManHours));
@@ -8212,7 +6225,7 @@ function summarizeJobGroup(jobGroup) {
     medianPieces: median(pieces),
     trimmedMeanPieces: mean(trimmedPieces.length >= 2 ? trimmedPieces : pieces),
     recentWeightedPieces: recentWeightedAverage(
-      jobs.map((j) => ({ date: j.date, value: safeNumber(j.totalPieces) })),
+      jobs.filter(j => Number.isFinite(j.totalPieces)).map(j => ({ date: j.date, value: j.totalPieces })),
       5,
     ),
     avgDuration: mean(durations),
