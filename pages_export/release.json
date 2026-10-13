@@ -1,0 +1,35 @@
+{
+  "schema": 3,
+  "authPolicy": "existing-client-ui-gate-public-data",
+  "version": "2f3abc6668e5fbffb901b88a37101e9f335fb07fdaa2f2f34dcc3738e4c81034",
+  "cutoff": "2026-10-12",
+  "validThrough": "2026-10-18",
+  "files": {
+    "predictor": {
+      "path": "predictor.8a7db38b44b34600debba3a3ff7ccc2050efb576c9120003a61902a676ea11c8.js",
+      "sha256": "8a7db38b44b34600debba3a3ff7ccc2050efb576c9120003a61902a676ea11c8"
+    },
+    "planner": {
+      "path": "planner.43b120ab27577cb15928d114a155d8a5b7c8aa1af5f3fe57996a470fa93ab253.js",
+      "sha256": "43b120ab27577cb15928d114a155d8a5b7c8aa1af5f3fe57996a470fa93ab253"
+    },
+    "auth": {
+      "path": "auth.14280291ff0b3fadcb4f0b34ed313c77f167ab652cf73f3a6e32e9079e08a2a7.js",
+      "sha256": "14280291ff0b3fadcb4f0b34ed313c77f167ab652cf73f3a6e32e9079e08a2a7"
+    },
+    "app": {
+      "path": "app.5a277115586024c9692d054ff8b15a22fecf002bc7cb0890b2679e24ffd07159.js",
+      "sha256": "5a277115586024c9692d054ff8b15a22fecf002bc7cb0890b2679e24ffd07159"
+    },
+    "style": {
+      "path": "style.616fe4e1e5efbe0042d23a2f18297ebfd126ae5e2eacbc4aeeac994b0da235c6.css",
+      "sha256": "616fe4e1e5efbe0042d23a2f18297ebfd126ae5e2eacbc4aeeac994b0da235c6"
+    },
+    "planning": {
+      "path": "planning.2ce22424c0def5b01ae40fc9de0cf52f1d533e4537359e09d4f9b3b20b930b7a.json",
+      "sha256": "2ce22424c0def5b01ae40fc9de0cf52f1d533e4537359e09d4f9b3b20b930b7a"
+    }
+  },
+  "shellSha256": "cb1ba90dc5a81783b685ad93edf4702ee3647e73493f18d1c3f239dcb7ee32d3",
+  "bootstrapSha256": "49e3e8d31c9a35b28f11557f9ddb301fcb8657d39784bd281911198a7a31839e"
+}

@@ -1,4 +1,5 @@
 const state = {
+  fullOnsiteData: null, fullOnsiteContexts: new Map(), fullOnsiteEnabled: false, fullOnsiteLoadError: null,
   durationHistory: null,
   durationAnalytics: null,
   durationContextCache: new Map(),
@@ -14,6 +15,8 @@ const state = {
   peerAccountEstimateCache: new Map(),
   modasMedianCache: new Map(),
   activeEmployeeIds: new Set(),
+  hasExplicitRoster: false,
+  historyMetadata: null,
   suggestedSupervisorByStore: new Map(),
   global: {
     avgPieces: 0,
@@ -95,9 +98,10 @@ const ANALYTICS_DB_NAME = "crew_predictor_analytics";
 const ANALYTICS_DB_VERSION = 1;
 const ANALYTICS_DB_STORE = "snapshots";
 const ANALYTICS_DB_SNAPSHOT_ID = "latest";
-const DATA_ASSET_VERSION = "20260928-203919";
+const DATA_ASSET_VERSION = "20261013-163025";
 const withDataAssetVersion = (path) => `${path}?v=${DATA_ASSET_VERSION}`;
 const HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
+const RETAINED_HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionHistory.json");
 const ACTIVE_EMPLOYEE_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
 const SCHEDULE_JSON_PATH = withDataAssetVersion("data/ScheduleFinalFull.json");
 const PRECOMPUTED_ANALYTICS_JSON_PATH = withDataAssetVersion(
@@ -1031,6 +1035,7 @@ function disableInputAutofill() {
 }
 
 function bindEvents() {
+  document.getElementById("exportForecastsBtn")?.addEventListener("click", exportSavedForecasts);
   dom.storeSearch.addEventListener("input", renderStoreSelect);
   dom.clearStoreSearchBtn.addEventListener("click", clearStoreSearch);
   dom.storeScheduleFilter?.addEventListener(
@@ -1118,7 +1123,7 @@ async function loadJsonData() {
       precomputedAnalyticsResult,
     ] =
       await Promise.all([
-        fetchRequiredJson(HISTORY_JSON_PATH),
+        fetchHistoryJson(),
         fetchOptionalJson(ACTIVE_EMPLOYEE_JSON_PATH),
         fetchOptionalJson(SCHEDULE_JSON_PATH),
         fetchOptionalScheduleDataApi(),
@@ -1126,10 +1131,17 @@ async function loadJsonData() {
           ? Promise.resolve(null)
           : fetchOptionalJsonQuiet(PRECOMPUTED_ANALYTICS_JSON_PATH),
       ]);
+    try {
+      const full = await fetchOptionalJsonQuiet("data/FullAttendanceHistory.json");
+      state.fullOnsiteData = full ? FullOnsiteModel.validate(full.payload) : null;
+      state.fullOnsiteContexts.clear();
+      state.fullOnsiteLoadError = state.fullOnsiteData ? null : "Full attendance history unavailable; existing predictor remains available.";
+    } catch (error) { state.fullOnsiteData = null; state.fullOnsiteLoadError = error.message; }
     const fingerprint = buildDataFingerprintFromJsonText(
       historyResult.rawJsonText,
     );
     const rawRows = extractRowsFromJson(historyResult.payload);
+    state.historyMetadata = historyResult.payload?._meta || null;
     const activeEmployeeRows = extractRowsFromJson(
       activeEmployeeResult?.payload,
     );
@@ -1152,6 +1164,18 @@ async function loadJsonData() {
       finishAnalyticsPrecompute(false, { message });
     }
   }
+}
+
+async function fetchHistoryJson() {
+  const response = await fetch(RETAINED_HISTORY_JSON_PATH, { cache: "no-store" });
+  if (response.status === 404) return fetchRequiredJson(HISTORY_JSON_PATH);
+  if (!response.ok) throw new Error(`Retained history unavailable (HTTP ${response.status}); refusing to silently discard older records.`);
+  const rawJsonText = await response.text();
+  const payload = JSON.parse(rawJsonText);
+  if (payload?._meta?.schemaVersion !== 1 || !Array.isArray(payload.EmployeeProductionHistory)) {
+    throw new Error("Retained history is damaged or unsupported; restore it from the local archive.");
+  }
+  return { payload, rawJsonText };
 }
 
 function hasScheduleDataApiConfig() {
@@ -1264,8 +1288,9 @@ async function loadRows(
   }
   state.peerAccountEstimateCache = new Map();
   state.modasMedianCache = new Map();
+  state.hasExplicitRoster = Array.isArray(state.historyMetadata?.latestEmployeeIds);
   state.activeEmployeeIds = buildActiveEmployeeIds(
-    activeEmployeeRawRows,
+    state.hasExplicitRoster ? state.historyMetadata.latestEmployeeIds.map(Employee => ({ Employee })) : activeEmployeeRawRows,
     state.employees,
   );
   state.suggestedSupervisorByStore = buildStoreSupervisorMap(normalizedRows);
@@ -1636,6 +1661,9 @@ function normalizeRow(row) {
   );
   const totalExtQty = toNumber(firstValue(normalized, ["totalextqty"]));
   const piecesPerHr = toNumber(firstValue(normalized, ["piecesperhr"]));
+  const telemetry = firstValue(normalized, ["avgdelta"]);
+  const isModas = telemetry == null || String(telemetry).trim() === "" || !Number.isFinite(Number(telemetry))
+    ? null : Number(telemetry) > 0 ? true : Number(telemetry) === 0 ? false : null;
 
   const storeKey = `${account}||${store}`;
   const jobKey = `${date}||${account}||${store}`;
@@ -1658,7 +1686,11 @@ function normalizeRow(row) {
     manHours,
     totalExtQty,
     piecesPerHr,
-    isModas: toNumber(firstValue(normalized, ["avgdelta"])) > 0,
+    isModas,
+    timeIn: cleanText(firstValue(normalized, ["timein"])),
+    timeOut: cleanText(firstValue(normalized, ["timeout"])),
+    reportedRateBasis: isRx ? "export RX-adjusted (observed Expr1 minus 2.5h; rationale unverified)" : "export attendance hours",
+    provenance: row._history || null,
     jobKey,
   };
 }
@@ -1687,6 +1719,7 @@ function buildJobs(rows) {
         nonSupervisorDuration: 0,
         modasRows: 0,
         regularRows: 0,
+        unknownModeRows: 0,
         rxEmployees: new Set(),
       });
     }
@@ -1715,8 +1748,9 @@ function buildJobs(rows) {
       isSupervisorRole(row.role);
     if (row.isRx) job.rxEmployees.add(row.employee);
     if (!isDaySupervisor && !row.isRx) {
-      if (row.isModas) job.modasRows++;
-      else job.regularRows++;
+      if (row.isModas === true) job.modasRows++;
+      else if (row.isModas === false) job.regularRows++;
+      else job.unknownModeRows++;
     }
     if (!job.employeeStats.has(row.employee)) {
       job.employeeStats.set(row.employee, {
@@ -1748,7 +1782,7 @@ function buildJobs(rows) {
     ...job,
     duration: job.nonSupervisorDuration || job.durationIncludingSupervisor,
     crewSize: job.employees.size,
-    inventoryMode: job.modasRows && !job.regularRows ? true : job.regularRows && !job.modasRows ? false : null,
+    inventoryMode: job.unknownModeRows ? null : job.modasRows && !job.regularRows ? true : job.regularRows && !job.modasRows ? false : null,
     rxEmployees: Array.from(job.rxEmployees),
     employees: Array.from(job.employees),
     employeeDetails: Array.from(job.employeeStats.values()).map((stat) => ({
@@ -1984,6 +2018,8 @@ function buildAccountGlobalStats(jobs) {
 }
 
 function buildEmployeeStats(rows) {
+  // Stable same-day tie handling for recent observations and peer iteration.
+  rows = [...rows].sort((a, b) => a.date.localeCompare(b.date) || a.jobKey.localeCompare(b.jobKey) || a.employee.localeCompare(b.employee));
   const grouped = new Map();
   const maxRowTimestamp = (rows || [])
     .map((row) => Date.parse(row.date || ""))
@@ -2065,7 +2101,7 @@ function buildEmployeeStats(rows) {
       bucket.recentWeightSumGlobal += recencyWeight;
     }
 
-    bucket.jobKeysGlobal.add(row.jobKey);
+    if (speed > 0 && weight > 0) bucket.jobKeysGlobal.add(row.jobKey);
 
     const accountKey = row.accountKey || getLinkedAccountKey(row.account);
     if (!bucket.accountBuckets.has(accountKey)) {
@@ -2100,7 +2136,7 @@ function buildEmployeeStats(rows) {
       accountBucket.mostRecentStoreKey = row.storeKey;
       accountBucket.mostRecentAccount = row.account;
     }
-    accountBucket.jobKeys.add(row.jobKey);
+    if (speed > 0 && weight > 0) accountBucket.jobKeys.add(row.jobKey);
   });
 
   const stats = new Map();
@@ -2119,6 +2155,7 @@ function buildEmployeeStats(rows) {
               accountBucket.recentWeightSum
             : 0,
         jobCount: accountBucket.jobKeys.size,
+        lastObservedDate: accountBucket.mostRecentTimestamp ? new Date(accountBucket.mostRecentTimestamp).toISOString().slice(0, 10) : "",
         mostRecentPiecesPerHr: accountBucket.mostRecentSpeed,
         mostRecentStoreName: accountBucket.mostRecentStoreName,
         mostRecentStoreKey: accountBucket.mostRecentStoreKey,
@@ -2167,11 +2204,11 @@ function buildActiveEmployeeIds(rows, employees) {
     }),
   ).filter((id) => employees.has(id));
 
-  return new Set(ids.length ? ids : Array.from(employees.keys()));
+  return new Set(ids.length || state.hasExplicitRoster ? ids : Array.from(employees.keys()));
 }
 
 function getSchedulableEmployeeIds() {
-  if (state.activeEmployeeIds?.size > 0) {
+  if (state.hasExplicitRoster || state.activeEmployeeIds?.size > 0) {
     return Array.from(state.activeEmployeeIds).filter((id) =>
       state.employees.has(id),
     );
@@ -2422,9 +2459,12 @@ function durationRateResolver(context) {
     if (cache.has(key)) return cache.get(key);
     const employee = context.employees.get(id);
     const source = getEmployeePlanningSpeedSource(employee, account, inventoryMode, context);
+    const direct = typeof inventoryMode === "boolean" ? employee?.[inventoryMode ? "modasAccountStats" : "regularAccountStats"]?.[getLinkedAccountKey(account)] : null;
+    const ageDays = direct?.lastObservedDate && context.asOfDate ? Math.max(0, (Date.parse(context.asOfDate) - Date.parse(direct.lastObservedDate)) / 86400000) : 0;
     const result = {
       speed: resolveEmployeePlanningBaseSpeed(employee, account, { inventoryMode, useRecentAccountProduction, employeeContext: context }),
       known: Boolean(employee?.globalJobCount > 0 && source.source !== "globalMedian"),
+      evidence: direct?.jobCount > 0 ? Math.min(1, direct.jobCount / 5) * Math.pow(0.5, ageDays / 180) : 0,
     };
     cache.set(key, result);
     return result;
@@ -2437,18 +2477,26 @@ async function buildDurationReplayRecords(rows, jobs, maybeYield = async () => {
   const sortedJobs = [...jobs].sort((a, b) => a.date.localeCompare(b.date));
   const records = [];
   let rowEnd = 0, jobIndex = 0;
+  let contextCutoff = "", rateFor = null;
   while (jobIndex < sortedJobs.length) {
     const date = sortedJobs[jobIndex].date;
-    while (rowEnd < sortedRows.length && sortedRows[rowEnd].date < date) rowEnd++;
-    // No held-out job, same-day row, later employee rate or planner selection enters this context.
-    const rateFor = durationRateResolver(buildDurationEmployeeContext(sortedRows.slice(0, rowEnd)));
+    const cutoff = DurationModel.weekStart(date);
+    while (rowEnd < sortedRows.length && sortedRows[rowEnd].date < cutoff) rowEnd++;
+    // Freeze ALL history/rates at Monday for every job in that week. Receiving
+    // day is not known retrospectively; real archive receipt times are separate.
+    if (contextCutoff !== cutoff) {
+      const context = buildDurationEmployeeContext(sortedRows.slice(0, rowEnd));
+      context.asOfDate = cutoff;
+      rateFor = durationRateResolver(context);
+      contextCutoff = cutoff;
+    }
     let next = jobIndex;
     while (next < sortedJobs.length && sortedJobs[next].date === date) {
       const job = sortedJobs[next++];
       if (!(job.duration > 0)) continue;
-      const input = DurationModel.prepare(history, DurationModel.historicalPlan(job), rateFor);
+      const input = DurationModel.prepare(history, { ...DurationModel.historicalPlan(job), historyCutoff: cutoff }, rateFor);
       if (input) records.push({
-        date, storeKey: job.storeKey, account: job.account, accountKey: job.accountKey,
+        date, historyCutoff: cutoff, storeKey: job.storeKey, account: job.account, accountKey: job.accountKey,
         label: `${job.account} | ${job.storeName}`, actual: job.duration, input,
       });
     }
@@ -2478,6 +2526,7 @@ function getDurationPlanningDate(storeKey) {
 function getDurationRateResolver(date) {
   if (!state.durationContextCache.has(date)) {
     const context = buildDurationEmployeeContext(state.rows.filter(row => row.date < date));
+    context.asOfDate = getLocalDateStamp();
     state.durationContextCache.set(date, durationRateResolver(context));
   }
   return state.durationContextCache.get(date);
@@ -2497,7 +2546,7 @@ function makeDurationPlan(storeKey, crewIds, roles, modes, options = {}) {
   };
 }
 
-function predictDurationPlan(plan, options = {}) {
+function predictIncumbentDurationPlan(plan, options = {}) {
   if (!plan) return null;
   const analytics = state.durationAnalytics;
   const config = options.config || analytics?.byAccount?.[plan.accountKey] || analytics?.config || DurationModel.DEFAULT_CONFIG;
@@ -2508,16 +2557,36 @@ function predictDurationPlan(plan, options = {}) {
   if (!prediction) return null;
   const storeErrors = analytics?.errorByStore?.[plan.storeKey];
   const accountErrors = analytics?.errorByAccount?.[plan.accountKey];
-  const errors = storeErrors?.count >= 8 ? storeErrors : accountErrors?.count >= 20 ? accountErrors : analytics?.errorGlobal;
+  const errors = storeErrors?.count >= 20 ? storeErrors : accountErrors?.count >= 40 ? accountErrors : analytics?.errorGlobal;
   const fallback = prediction.baseDuration * 0.25;
-  const low = errors?.count ? errors.p25 : -fallback;
-  const high = errors?.count ? errors.p75 : fallback;
+  const low = errors?.count >= 20 ? errors.p10 : -fallback;
+  const high = errors?.count >= 20 ? errors.p90 : fallback;
   return {
     ...prediction, plan,
     confidenceLow: Math.max(0, Math.min(prediction.onSiteDuration, prediction.onSiteDuration + low)),
     confidenceHigh: Math.max(prediction.onSiteDuration, prediction.onSiteDuration + high),
     rangeSampleCount: errors?.count || 0,
+    rangeMethod: errors?.count >= 20 ? "earlier-calibration" : "sparse-history-heuristic",
   };
+}
+
+function setFullOnsiteEnabled(enabled) {
+  state.fullOnsiteEnabled = Boolean(enabled);
+  updateResults();
+}
+
+function predictDurationPlan(plan, options = {}) {
+  const incumbent = predictIncumbentDurationPlan(plan, options);
+  if (!plan || !incumbent) return incumbent;
+  let candidate = null;
+  if (state.fullOnsiteData && typeof FullOnsiteModel !== "undefined") {
+    const cutoff = plan.historyCutoff || plan.date;
+    if (!state.fullOnsiteContexts.has(cutoff)) state.fullOnsiteContexts.set(cutoff, FullOnsiteModel.context(state.fullOnsiteData, cutoff));
+    candidate = FullOnsiteModel.predict(state.fullOnsiteData, plan, state.fullOnsiteData.config, state.fullOnsiteContexts.get(cutoff));
+  }
+  const old = { ...incumbent, modelVersion: DurationModel.VERSION, target: "recorded-attendance-proxy", pairedFullOnsite: candidate };
+  if (!state.fullOnsiteEnabled || !candidate) return { ...old, fullOnsiteFallback: state.fullOnsiteEnabled ? (state.fullOnsiteLoadError || "Insufficient full-attendance history; showing the existing attendance-proxy estimate.") : null };
+  return { ...candidate, incumbentComparison: { modelVersion: DurationModel.VERSION, predictedDuration: incumbent.onSiteDuration, target: "recorded-attendance-proxy" }, pairedFullOnsite: candidate };
 }
 
 function onAccuracyFilterChange() {
@@ -4810,7 +4879,7 @@ function updateResults() {
   applyMetricTone(recommendation.tone);
 
   setPredictionMeta(
-    buildPlainEnglishEstimateReason(prediction),
+    prediction.fullOnsiteFallback || (prediction.modelVersion === FullOnsiteModel.VERSION ? `Full physical visit, including review/recounts. ${prediction.matchingHistoryCount} prior visits; ${prediction.rangeMethod === "sparse-history-heuristic" ? "heuristic range" : "development error range"}. Planned crew and roles affect this estimate. Accuracy target not yet met.` : buildPlainEnglishEstimateReason(prediction)),
     "info",
   );
   renderStoreStats();
@@ -4855,15 +4924,17 @@ function getRecommendationForPrediction(prediction) {
   const absDelta = Math.abs(deltaValue);
   const riskBand = prediction.delta.mode === "manhours" ? 2 : 0.5;
   if (absDelta <= riskBand) return { label: "On Target", tone: "success" };
-  if (deltaValue > 0) return { label: "Likely Understaffed", tone: "risk" };
+  if (deltaValue > 0) return { label: "Estimate Exceeds Goal", tone: "risk" };
   return { label: "Ahead of Goal", tone: "success" };
 }
 
 function buildPlainEnglishEstimateReason(prediction) {
   const parts = [
+    "This estimates on-site time including recounts and review, using recorded employee attendance as a proxy.",
     `The duration baseline is ${formatNumber(prediction.baseDuration, 1)} hrs from ${prediction.baselineSource}.`,
     `The planned crew changes this by ${formatSigned(prediction.crewAdjustmentHours, 1)} hrs; adjustments are limited because exported crews may be incomplete.`,
     `Planned labor assumes all ${prediction.crewSize} selected employees stay for the estimated duration.`,
+    prediction.rangeMethod === "earlier-calibration" ? "The range uses earlier calibration errors (10th–90th percentiles); it is not guaranteed coverage." : "The range is a ±25% planning heuristic because earlier calibration history is sparse; it has no validated coverage.",
   ];
   if (!prediction.supervisorComparable) parts.push("Supervisor production is missing from some reference crews; those comparisons use counters on both sides.");
   if (!prediction.hasStoreHistory) parts.push("No earlier store visit is available; this estimate uses broader duration history without a crew adjustment.");
@@ -5300,13 +5371,17 @@ function renderAccountSegmentBreakout(store) {
 }
 
 function renderBaselineDetail(prediction) {
+  if (prediction?.target === "physical-first-arrival-last-departure-v1") return `<p><strong>${formatNumber(prediction.baseDuration, 1)} hrs</strong> from ${escapeHtml(prediction.baselineSource)}.</p><p>First validated arrival to last departure, including supervisor review and recounts. Prior workload peers and planned crew/role contributions inform the estimate. ${prediction.storeHistoryCount} same-store visits. Model: ${escapeHtml(prediction.modelVersion)}.</p><p class="muted">Development evidence, not a ±15-minute guarantee. Account mappings and largest-count revision selections retain historical uncertainty. The existing predictor remains available.</p>`;
+
   if (!prediction) return `<p class="muted">Complete a plan to view its duration baseline.</p>`;
   return `<p><strong>${formatNumber(prediction.baseDuration, 1)} hrs</strong> from ${escapeHtml(prediction.baselineSource)}</p>
     <p>Method: ${escapeHtml(prediction.baselineMethod)}. Earlier store visits: ${prediction.storeHistoryCount}. Reference visits used: ${prediction.matchingHistoryCount}.</p>
-    <p class="muted">Duration is the longest recorded non-supervisor employee time, or longest recorded employee time if no counter is present. The export can omit former employees and supervisors. Recorded pieces and labor are partial totals and do not set this baseline.</p>`;
+    <p class="muted">On-site duration is the longest recorded non-supervisor employee time, or longest recorded employee time if no counter is present; it includes post-count attendance. Counting-finish time is not a predictor target. The export can omit former employees and supervisors. Recorded pieces and labor are partial totals and do not set this baseline. Reported PPH uses attendance hours, with an observed 2.5-hour RX adjustment whose rationale is unverified; no break deduction is assumed.</p>`;
 }
 
 function renderPredictionDifferenceImpact(prediction) {
+  if (prediction?.target === "physical-first-arrival-last-departure-v1") return `<p>${formatNumber(prediction.baseDuration, 2)} hrs historical baseline → ${formatNumber(prediction.onSiteDuration, 2)} hrs with the selected crew and roles. ${formatNumber(prediction.features.overhead, 2)} hrs of prior post-count allowance is kept separate from the capacity adjustment.</p><p class="muted">Role contributions are planning assumptions. Actual-staffing historical comparisons are not proof of causal staffing effects.</p>`;
+
   if (!prediction) return `<p class="muted">Complete a plan to view the crew adjustment.</p>`;
   return `<p><strong>${formatSigned(prediction.crewAdjustmentHours, 2)} hrs</strong> from the crew comparison.</p>
     <p>${formatNumber(prediction.baseDuration, 2)} hrs baseline &rarr; ${formatNumber(prediction.onSiteDuration, 2)} hrs planned duration.</p>
@@ -5422,7 +5497,7 @@ function saveCurrentForecast(automatic = false) {
   try {
     const records = readSavedForecasts();
     const payload = {
-      modelVersion: DurationModel.VERSION, dataFingerprint: state.dataFingerprint,
+      modelVersion: prediction.modelVersion || DurationModel.VERSION, dataFingerprint: state.dataFingerprint,
       storeKey: state.selectedStoreKey, scheduledDate: schedule.date,
       scheduledStart: new Date(scheduledStart).toISOString(),
       plan: prediction.plan, config: prediction.config,
@@ -5430,6 +5505,16 @@ function saveCurrentForecast(automatic = false) {
       predictedManHours: prediction.manHours, crewAdjustmentHours: prediction.crewAdjustmentHours,
       referenceVisits: prediction.matchingHistoryCount,
       historyThrough: state.jobs.reduce((date, job) => job.date < prediction.plan.date && job.date > date ? job.date : date, ""),
+      sourceSnapshotId: state.historyMetadata?.snapshotId || null,
+      sourceExportSha256: state.historyMetadata?.latestExportSha256 || null,
+      sourceImportedAt: state.historyMetadata?.importedAt || null,
+      target: prediction.target || "recorded on-site duration proxy including post-count work",
+      fullAttendanceSnapshot: state.fullOnsiteData?.fingerprint || null,
+      pairedForecasts: prediction.pairedFullOnsite ? [
+        { modelVersion: DurationModel.VERSION, predictedDuration: prediction.incumbentComparison?.predictedDuration ?? prediction.onSiteDuration, target: "recorded-attendance-proxy" },
+        { modelVersion: FullOnsiteModel.VERSION, predictedDuration: prediction.pairedFullOnsite.onSiteDuration, target: FullOnsiteModel.TARGET, config: prediction.pairedFullOnsite.config, features: prediction.pairedFullOnsite.features },
+      ] : null,
+      intervalLow: prediction.confidenceLow, intervalHigh: prediction.confidenceHigh,
       kind: "planning-preview",
     };
     const signature = JSON.stringify(payload);
@@ -5440,10 +5525,11 @@ function saveCurrentForecast(automatic = false) {
     renderSavedForecastStatus("Current forecast saved. ");
   } catch (error) {
     if (status) status.textContent = `Forecast was not saved: ${error.message}. Existing forecasts have not been removed.`;
+    else console.error("Forecast was not saved; existing records preserved:", error);
   }
 }
 
-function evaluateSavedForecasts(records) {
+function evaluateLegacySavedForecasts(records) {
   const jobs = new Map(state.jobs.map(job => [`${job.date}||${job.storeKey}`, job]));
   const latest = new Map();
   for (const record of records) {
@@ -5455,7 +5541,25 @@ function evaluateSavedForecasts(records) {
     if (record.dataFingerprint === state.dataFingerprint) continue;
     if (!latest.has(key) || record.savedAt > latest.get(key).savedAt) latest.set(key, record);
   }
-  return Array.from(latest, ([key, record]) => ({ ...record, actual: jobs.get(key).duration, predicted: record.predictedDuration }));
+  return Array.from(latest, ([key, record]) => ({ ...record, actual: jobs.get(key).duration, predicted: record.predictedDuration,
+    outcomeDataFingerprint: state.dataFingerprint, outcomeSnapshotId: state.historyMetadata?.snapshotId || null,
+    outcomeImportedAt: state.historyMetadata?.importedAt || null }));
+}
+
+function evaluateSavedForecasts(records) {
+  const legacy = evaluateLegacySavedForecasts(records.filter(r => !r.pairedForecasts));
+  const latest = new Map();
+  for (const record of records.filter(r => r.pairedForecasts)) {
+    if (!(Date.parse(record.savedAt) < Date.parse(record.scheduledStart)) || record.fullAttendanceSnapshot === state.fullOnsiteData?.fingerprint) continue;
+    const storeId = record.pairedForecasts.find(p => p.target === "physical-first-arrival-last-departure-v1")?.features?.storeId;
+    const outcome = state.fullOnsiteData?.jobs.find(j => j.storeId === storeId && j.date === record.scheduledDate);
+    if (!outcome || !(Date.parse(record.savedAt) < Date.parse(outcome.arrivalLocal)) || record.scheduledDate >= getLocalDateStamp()) continue;
+    for (const forecast of record.pairedForecasts) {
+      const key = `${record.scheduledDate}||${record.storeKey}||${forecast.modelVersion}`;
+      if (!latest.has(key) || record.savedAt > latest.get(key).savedAt) latest.set(key, { ...record, modelVersion: forecast.modelVersion, actual: outcome.duration, predicted: forecast.predictedDuration, outcomeTarget: "physical-first-arrival-last-departure-v1", outcomeDataFingerprint: state.fullOnsiteData.fingerprint });
+    }
+  }
+  return [...legacy, ...latest.values()];
 }
 
 function renderSavedForecastStatus(prefix = "") {
@@ -5464,7 +5568,7 @@ function renderSavedForecastStatus(prefix = "") {
   try {
     const records = readSavedForecasts();
     const observed = evaluateSavedForecasts(records);
-    const metrics = DurationModel.metrics(observed);
+    const metrics = DurationModel.metrics(observed.filter(r => r.modelVersion === (state.fullOnsiteEnabled ? FullOnsiteModel.VERSION : DurationModel.VERSION)));
     status.textContent = `${prefix}${records.length} forecasts saved on this browser. ${metrics.jobs ? `${metrics.jobs} inventories matched after a data refresh; average recorded-duration error ${formatNumber(metrics.durationMae, 2)} hrs. Uses the last saved preview before each scheduled start; planned crews may differ from actual attendance.` : "Matched results will appear after completed inventories arrive in a later export."}`;
   } catch (error) { status.textContent = `Unable to read saved forecasts: ${error.message}`; }
 }
@@ -5639,7 +5743,7 @@ function buildDataFingerprintFromJsonText(text) {
 
 function buildAnalyticsSnapshot(fingerprint) {
   return {
-    id: ANALYTICS_DB_SNAPSHOT_ID, version: 8, modelVersion: DurationModel.VERSION,
+    id: ANALYTICS_DB_SNAPSHOT_ID, version: 9, modelVersion: DurationModel.VERSION,
     fingerprint: String(fingerprint || ""), createdAt: new Date().toISOString(),
     durationAnalytics: state.durationAnalytics,
   };
@@ -5652,7 +5756,7 @@ function applyAnalyticsSnapshot(snapshot) {
 }
 
 function isValidAnalyticsSnapshot(snapshot, fingerprint) {
-  return Boolean(snapshot && snapshot.version === 8 && snapshot.modelVersion === DurationModel.VERSION
+  return Boolean(snapshot && snapshot.version === 9 && snapshot.modelVersion === DurationModel.VERSION
     && snapshot.durationAnalytics?.version === DurationModel.VERSION
     && snapshot.durationAnalytics?.config && snapshot.durationAnalytics?.testMetrics
     && String(snapshot.fingerprint || "") === String(fingerprint || ""));
@@ -6122,8 +6226,7 @@ function inferSpeed(row) {
 
 function inferWeight(row) {
   if (row.manHours > 0) return row.manHours;
-  if (row.totalExtQty > 0) return row.totalExtQty;
-  return 1;
+  return 0; // Never mix pieces and hours as weights, or invent missing exposure.
 }
 
 function getSelectedAccount() {

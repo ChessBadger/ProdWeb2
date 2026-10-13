@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import io
 import base64
 import http.server
 import json
@@ -20,6 +21,7 @@ import urllib.request
 from pathlib import Path
 
 import pandas as pd
+from export_history import archive_export, atomic_write, default_archive_dir, json_bytes, verify_archive
 
 DEFAULT_REPO = Path(r"C:\Users\Laptop 122\Desktop\Store Prep\06 Employee Reports\Website")
 DEFAULT_WORKBOOK_NAMES = (
@@ -50,13 +52,14 @@ def get_excel_engine(excel_path: Path) -> str | None:
     return None
 
 
-def convert_excel_to_json(excel_path: Path, json_path: Path):
+def read_excel_payload(excel_path: Path):
     """
-    Read each sheet from the Excel file, replace NaNs with 0, and write to JSON.
+    Capture a workbook once; preserve absent values separately from measured zero.
     """
     engine = get_excel_engine(excel_path)
+    captured = excel_path.read_bytes()
     try:
-        sheets = pd.read_excel(excel_path, sheet_name=None, engine=engine)
+        sheets = pd.read_excel(io.BytesIO(captured), sheet_name=None, engine=engine)
     except ImportError as exc:
         if excel_path.suffix.lower() == ".xls":
             raise ImportError(
@@ -65,13 +68,39 @@ def convert_excel_to_json(excel_path: Path, json_path: Path):
             ) from exc
         raise
     data = {
-        name: df.fillna(0).to_dict(orient="records")
+        name: df.astype(object).where(pd.notna(df), None).to_dict(orient="records")
         for name, df in sheets.items()
     }
-    json_path.parent.mkdir(parents=True, exist_ok=True)
-    with json_path.open("w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False, default=str)
-    logging.info("Converted %s sheet(s) -> %s", len(sheets), json_path)
+    return captured, data
+
+
+def convert_excel_to_json(excel_path: Path, json_path: Path):
+    _, data = read_excel_payload(excel_path)
+    atomic_write(json_path, json_bytes(data))
+    return data
+
+
+def import_production_export(excel_path, repo_root, archive_dir, archive_only=False):
+    captured, data = read_excel_payload(excel_path)
+    result = archive_export(excel_path, data, archive_dir, repo_root, source_bytes=captured)
+    payload = result["payload"]
+    meta = payload["_meta"]
+    logging.info("%s archive: %s", "Already archived; not added again" if result["duplicate"] else "Saved immutable", archive_dir)
+    logging.info("Snapshot %s; %s retained history rows", meta["snapshotId"], len(payload["EmployeeProductionHistory"]))
+    if archive_only:
+        return result
+    # Publish the latest COMMITTED snapshot, even if an older identical file was
+    # accidentally re-imported. Absence from an export never deletes old history.
+    current_rows = [{k: v for k, v in row.items() if k != "_history"}
+                    for row in payload["EmployeeProductionHistory"]
+                    if row["_history"]["sourceSha256"] == meta["latestExportSha256"]]
+    current_payload = {"EmployeeProductionExport": current_rows}
+    # Each output is atomic and reproducible from the durable archive. A failure
+    # stops the workflow; rerunning retries publication without duplicating rows.
+    for directory in [repo_root, *(repo_root / p for p in DEFAULT_COPY_TARGETS)]:
+        atomic_write(directory / "EmployeeProductionExport.json", json_bytes(current_payload))
+        atomic_write(directory / "EmployeeProductionHistory.json", json_bytes(payload))
+    return result
 
 
 def copy_json_to_targets(json_path: Path, repo_root: Path, targets: list[str]):
@@ -85,7 +114,7 @@ def copy_json_to_targets(json_path: Path, repo_root: Path, targets: list[str]):
         if json_path.resolve() == dest_file.resolve():
             logging.info("JSON already in target -> %s", dest_file)
             continue
-        shutil.copy2(json_path, dest_file)
+        atomic_write(dest_file, json_path.read_bytes())
         logging.info("Copied JSON -> %s", dest_file)
 
 
@@ -568,8 +597,8 @@ def choose_run_mode(args: argparse.Namespace) -> str:
     if args.full:
         return MODE_FULL
     if not sys.stdin.isatty():
-        logging.info("No interactive input available; running full workflow.")
-        return MODE_FULL
+        logging.info("No interactive input available; running local workflow without git.")
+        return MODE_LOCAL_ONLY
 
     print("Choose what to run:")
     print("  1) Local update: convert, copy JSON, and build without git")
@@ -587,6 +616,13 @@ def main():
     parser = argparse.ArgumentParser(
         description="Convert one or more Excel workbooks to JSON, copy to data dirs, build, and optionally push."
     )
+    parser.add_argument(
+        "--archive-dir", type=Path,
+        help="Local archive outside the repository (default: LOCALAPPDATA/EmployeePredictor/ExportHistory/<repo-id>)."
+    )
+    parser.add_argument("--archive-only", action="store_true", help="Archive production workbook only; do not replace current JSON, build, or publish.")
+    parser.add_argument("--verify-archive", action="store_true", help="Verify local archive hashes without importing or building.")
+    parser.add_argument("--skip-build", action="store_true", help="Import local data without running the website build.")
     parser.add_argument(
         "paths",
         type=Path,
@@ -638,6 +674,10 @@ def main():
     )
 
     repo_root, positional_excel_paths = infer_repo_root(args.paths, args.repo)
+    archive_dir = args.archive_dir or default_archive_dir(repo_root)
+    if args.verify_archive:
+        logging.info("Verified %s archived snapshots in %s", verify_archive(archive_dir), archive_dir)
+        return 0
     excel_paths = resolve_excel_paths(repo_root, positional_excel_paths)
 
     if args.output and len(excel_paths) != 1:
@@ -648,9 +688,16 @@ def main():
             logging.error(format_missing_workbook_error(excel_path))
             return 1
 
-    run_mode = choose_run_mode(args)
+    run_mode = MODE_LOCAL_ONLY if args.archive_only else choose_run_mode(args)
 
     for excel_path in excel_paths:
+        if excel_path.stem.casefold().startswith("employeeproductionexport"):
+            if args.output:
+                parser.error("Production imports use canonical output names; omit --output.")
+            import_production_export(excel_path, repo_root, archive_dir, args.archive_only)
+            continue
+        if args.archive_only:
+            continue
         json_path = args.output or (repo_root / f"{excel_path.stem}.json")
         convert_excel_to_json(excel_path, json_path)
         copy_json_to_targets(
@@ -659,13 +706,20 @@ def main():
             targets=DEFAULT_COPY_TARGETS,
         )
 
+    if args.archive_only:
+        return 0
     if not args.skip_analytics_precompute:
-        if not precompute_analytics_snapshot(repo_root, args.analytics_timeout):
+        # Node VM has no fetch/auth/browser bindings: precompute stays offline.
+        node = shutil.which("node")
+        if not node:
+            logging.error("Node is required for offline analytics; import archived safely. Retry with --skip-analytics-precompute if needed.")
             return 1
+        subprocess.run([node, "scripts/benchmark-planner.mjs", "--write-snapshot"],
+                       cwd=repo_root, check=True, timeout=args.analytics_timeout)
 
     bump_schedule_planning_asset_versions(repo_root)
 
-    if not run_npm_build(repo_root):
+    if not args.skip_build and not run_npm_build(repo_root):
         return 1
     if run_mode == MODE_LOCAL_ONLY:
         logging.info("Local-only mode complete; skipped git add, commit, and push.")

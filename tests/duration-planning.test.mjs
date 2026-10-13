@@ -121,6 +121,7 @@ console.log("Live, assigned-crew and replay parity plus snapshot invalidation/re
 const storage = new Map();
 context.localStorage = { getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value) };
 vm.runInContext(`
+  state.historyMetadata = { snapshotId: "test-snapshot", latestExportSha256: "test-source-hash", importedAt: "2026-01-01T00:00:00Z" };
   state.scheduleByStoreKey.set(state.selectedStoreKey, [{ date: "2099-01-01", startTimeText: "8:00 AM", typeOfInv: "Grocery" }]);
   saveCurrentForecast(); saveCurrentForecast();
   globalThis.loggedOnce = readSavedForecasts();
@@ -130,6 +131,10 @@ vm.runInContext(`
   globalThis.midnightFallback = forecastScheduledStart({ date: "2099-01-01", startTimeText: "" });
 `, context);
 assert.equal(context.loggedOnce.length, 1, "identical previews should be deduplicated");
+assert.equal(context.loggedOnce[0].sourceSnapshotId, "test-snapshot");
+assert.equal(context.loggedOnce[0].sourceExportSha256, "test-source-hash");
+assert.equal(context.loggedOnce[0].modelVersion, model.VERSION);
+assert.ok(Date.parse(context.loggedOnce[0].savedAt) < Date.parse(context.loggedOnce[0].scheduledStart));
 assert.equal(context.loggedTwice.length, 2, "a new export produces a new immutable forecast");
 assert.deepEqual(plain(context.loggedOnce[0]), plain(context.loggedTwice[0]));
 assert.ok(Number.isFinite(context.midnightFallback));

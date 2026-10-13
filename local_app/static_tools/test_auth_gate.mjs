@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';import {createGate} from '../static_source/auth.mjs';
+let clock=1000,opened=[],closed=[],errors=[],timer=null,signouts=0,stops=0;
+const make=(email,expires=100000)=>({email,uid:email,getIdTokenResult:async()=>({expirationTime:new Date(expires).toISOString()})});
+const gate=createGate({allowed:['approved@example.test','planner@example.test'],now:()=>clock,setTimer:fn=>(timer=fn,1),clearTimer:()=>{timer=null},signOut:async()=>{signouts++},onOpen:async(user)=>{opened.push({email:user.email});return ()=>stops++},onClose:m=>closed.push(m),onError:e=>errors.push(e.message)});
+await gate.userChanged(null);assert.equal(opened.length,0);
+await gate.userChanged(make('denied@example.test'));assert.equal(opened.length,0);assert.equal(signouts,1);assert.match(closed.at(-1),/Unauthorized/);
+await gate.userChanged(null);assert.match(closed.at(-1),/Unauthorized/);
+await gate.userChanged(make('APPROVED@example.test'));assert.equal(opened.length,1);
+await gate.logout();assert.equal(stops,1);assert.equal(signouts,2);
+await gate.userChanged(make('planner@example.test'));clock=100001;timer();assert.match(closed.at(-1),/Session expired/);assert.equal(stops,2);
+await gate.userChanged(make('approved@example.test',100000));assert.match(closed.at(-1),/Session expired/);assert.equal(opened.length,2);
+let release,lateOpens=0,lateStops=0;clock=1000;const delayed=createGate({allowed:['approved@example.test'],now:()=>clock,setTimer:()=>1,clearTimer:()=>{},signOut:async()=>{},onClose:()=>{},onError:()=>{},onOpen:async(user,isCurrent)=>{await new Promise(r=>release=r);if(isCurrent())lateOpens++;return ()=>lateStops++}});
+const pending=delayed.userChanged(make('approved@example.test'));await Promise.resolve();await Promise.resolve();await delayed.logout();release();await pending;assert.equal(lateOpens,0);assert.equal(lateStops,1);
+gate.stop();delayed.stop();console.log(JSON.stringify({passed:true,signedOut:true,denied:true,approved:true,logoutClearsUI:true,expiredSession:true,raceAfterLogout:true,usesFixturesOnly:true,staticDataPrivacyClaim:false}));

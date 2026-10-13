@@ -1,0 +1,160 @@
+SHARED SHIFT CREW PLANNER - FINISHED UPDATE WORKFLOW
+
+ACCESS MODEL YOU CHOSE
+The site repeats the existing Firebase Google sign-in and approved-email UI gate.
+The main approved-email list is unchanged; the deprecated board list is not bundled. No new accounts, grants,
+credentials, provider settings or backend were created. The old analytics-query
+login bypass is absent.
+This is INTERFACE access control only. Static employee names, derived productivity,
+model weights, planning data and the main client email allowlist remain downloadable
+independently of the login screen. A private Git repository does not by itself make
+a public Pages site private. This limitation is also displayed on the sign-in screen
+and in the site footer. Raw production exports and timesheets are not published.
+
+YOUR ROUTINE UPDATE: LOCAL IMPORT -> BUILD -> COMMIT/PUSH -> EVERYONE GETS UPDATE
+1. Double-click StartLocalSite.cmd. In Update history, upload the received production
+   workbook. Select Historical backfill - preserve current roster for exports that
+   contain current/former workers. Use Current-employee export only for a verified
+   current roster source. Wait for imports to finish and review the activity/mappings.
+2. Double-click BuildWeeklyPages.cmd. It refreshes validated local history and builds
+   the current Monday-Sunday package without retraining model weights. Other weeks:
+     BuildWeeklyPages.cmd --week YYYY-MM-DD
+   The date must be a Monday. Restored profiles:
+     BuildWeeklyPages.cmd --data-dir "full restored SiteHistory directory"
+3. Review pages_export\export-allowlist.json. The only publishing folder is
+   Website\pages_repository. It contains approved derived planning data and site code.
+   Never publish the parent Website repository, docs, public/data or their Git history.
+4. INSIDE pages_repository, verify the root and remote BEFORE staging:
+     git rev-parse --show-toplevel
+   It MUST end in /Website/pages_repository, not /Website.
+     git remote -v
+   Current verified origin is https://github.com/ChessBadger/Production-Predictor.git
+   Do not add/change an existing remote unnecessarily. Do not run git init again.
+     git status --short
+     python tools/verify_pages.py pages_export
+   The verifier checks exact filenames, SHA-256 hashes, current roster, minimal data,
+   no visitor file inputs, declared interface-only login policy and separate Git root.
+5. Only after verification succeeds, stage the exact generated scope:
+     git add -A -- pages_export .github/workflows/pages.yml tools/verify_pages.py README.txt
+     git diff --cached --name-only
+     git diff --cached --stat
+   All staged paths must be within those listed locations. The planning.<hash>.json
+   is INTENDED approved derived data. No XLS/XLSX/XLSM, SQLite, ZIP, raw exports,
+   source receipts, local paths, private seed or credentials should appear.
+     git commit -m "Update shared weekly crew planner"
+     git push -u origin main
+   Later pushes may use git push origin main. These commands are for YOU; Codex has
+   not committed, pushed, created a remote repository or deployed anything.
+6. Main pushes automatically run Publish shared crew planner. After deployment,
+   visitors get the same data/version on load. Open online tabs check for updates on
+   focus, visibility and every 60 seconds. A changed release reloads the application
+   cleanly; settings and old saved forecasts persist, with their original versions.
+   GitHub/CDN publication can take time. Check the displayed week and version.
+
+FIRST PAGES SETUP FOR THE REPOSITORY YOU ALREADY PREPARED
+The clean folder is already a separate Git repository with the Production-Predictor
+origin. Do not reuse the parent origin (ProdWeb2), and do not import its history.
+After your reviewed first commit/push:
+1. GitHub Production-Predictor > Settings > Pages > Source: GitHub Actions.
+2. Actions > Publish shared crew planner. If the first push ran before Pages was
+   configured, rerun it, or Run workflow and check the derived-data review checkbox.
+   Subsequent main pushes deploy automatically; manual dispatch is also available.
+3. Open the successful deployment URL, normally:
+     https://chessbadger.github.io/Production-Predictor/
+4. Test actual Google sign-in with an existing approved account. The completed live popup/account flow remains a user check. A read-only query of the
+   existing Firebase SDK project configuration confirmed localhost, 127.0.0.1 and
+   chessbadger.github.io are already authorized; no provider changes were made.
+   The new repository path uses the same chessbadger.github.io host as the old repo;
+   a path change is not a new domain. If Firebase reports auth/unauthorized-domain,
+   check Firebase Console > Authentication > Settings > Authorized domains for
+   chessbadger.github.io. Any provider change remains your explicit decision; none
+   was made here. Do not publish service-account keys or tokens to fix this.
+
+LOCAL PREVIEW
+From Website run:
+  "C:\Users\Laptop 122\AppData\Local\Programs\Python\Python312\python.exe" -B -m http.server 8778 --bind 127.0.0.1
+Open http://localhost:8778/pages_export/. Sign in with the existing Google account;
+planning data then loads automatically. No planner/forecast file selectors exist.
+Both localhost and 127.0.0.1 are already authorized in the existing project.
+The reported auth/internal-error was an app CSP defect blocking the Google API
+loader. Its specific Google/Firebase dependencies are now allowed. Hard-refresh
+with Ctrl+Shift+R before retrying sign-in. The isolated browser QA used a mocked
+identity provider and did not sign into real accounts or change provider settings.
+The full local import/backup app remains at StartLocalSite.cmd (usually port 8765).
+
+RESTORED FAMILIAR WORKFLOWS
+Setup > Select Store > Goal > Choose Crew > Assign Roles > Plan Preview remains the
+planning sequence. The shared site provides account/store search and clear controls,
+all store choices and manual prediction dates, name-based bulk crew entry, Use Last Crew, clear/reset, automatic safe
+recalculation and a Calculate shortcut. Settings and per-store plans,
+and previsit forecasts persist in this browser and user scope across reloads/updates.
+Ambiguous names require an unambiguous name or direct checkbox selection.
+
+Two-store assignment has separate stores/goals/supervisors/contributions, shared RX/
+training/early-late roles, linked groups and locked workers. Conflicts fail visibly.
+Small searches are exhaustive (up to 12 free linked units); larger searches use a
+labelled greedy multi-seed method, not a claim of global optimality. Required RX roles
+and supervisor constraints are retained. Review either suggested crew in the planner.
+
+SCENARIO AND LABOR SEMANTICS
+- The integrated full-onsite model remains the default and its weights are unchanged.
+- Uncheck its toggle for the original attendance-proxy reference. Stores without mapped
+  full history retain that explicitly labelled reference fallback instead of disappearing.
+- Modas/latest-account, shrink, supervisor/RX contribution, training and early/late
+  controls reuse the original rate resolver and minimum-role-factor/shrink rules.
+- Manual integrated scenarios are: unchanged integrated estimate + (original reference
+  under assumptions minus its default reference). These are transparent assumption-based
+  scenarios, NOT a retrained/independently validated predictor or causal staffing effect.
+- The original reference retains its validated code's bounded crew adjustments and may
+  show little/no duration change where missing crew evidence prevents a reliable comparison.
+- Labor Hours is duration x full headcount, the original duration-model definition.
+  Effective Counting Hours applies counting-contribution factors; it is not actual payroll
+  or attendance labor. Early/late percentages are contribution assumptions, not clock entries.
+- 100% shrink retains the original 1% numerical floor. All-zero contribution crews are rejected.
+- Production rows show rank, rate, latest-account arrows, adjusted rate, projected pieces
+  and evidence/fallback labels. Projections are not promised actual counts.
+- Goal deltas/recommendations and hypothetical one-person staffing comparisons are labelled.
+
+HONEST HISTORICAL EVIDENCE
+The integrated model has 29.05-minute MAE on 325 explored chronological development
+predictions, no fresh holdout. The 19-minute goal remains unmet. Archived original
+reference later-split metrics cover 705 different visits and predate the full-export
+backfill; they are not a refreshed-site accuracy score or a direct 325-fold comparison.
+Archived calibration error offsets and per-store metrics remain accessible. No new
+integrated/scenario confidence interval, fresh score or accuracy gain is fabricated.
+
+INTENTIONAL REMOVAL AND DATA-SCOPE LIMITS
+The Schedule Board is deprecated and removed at the user's explicit request.
+Its navigation/routes, schedule-specific date filters/hints, run state/logic,
+ingestion/bundled schedule fields and separate board allowlist are absent.
+Generic prediction dates, manual start times, forecast timestamps, store history,
+two-store assignment and all 856 store choices remain. Original site files and
+raw history/workbooks were preserved; this change did not delete source data.
+Former employees are not publicly named/selectable. Last Crew contains current
+members only, so it may be smaller than the actual historical crew.
+
+EXACT EXPOSED / EXCLUDED DATA
+Published: current employee names/opaque keys; derived speed/evidence/recent-hour/
+residual summaries; role/account rates and experience; regular/Modas/latest-account
+variants; store choices and derived workload/duration/crew/seasonal summaries; limited
+reference capacities/durations/current-member overlaps needed for parity; archived
+aggregate accuracy/error metrics; frozen inference weights; version/hash metadata; the existing Firebase browser
+identifiers and readable main UI email allowlist. The list is readable and is not secret access control.
+Excluded: raw workbooks/export rows; employee numbers/former identities; detailed
+attendance/visit rows, physical clock times and raw quantities; historical visit dates;
+source archives/receipts/SQLite/ZIP backups; machine paths, bearer tokens, service-account
+credentials and the private persistence-identity salt. Check the exact generated inventory.
+Saved user-created forecasts remain in the visitor's browser and downloaded backups.
+
+SOURCE PRESERVATION AND VERIFICATION
+Lashaun backfill remains 18,277 rows / 3,459 jobs: 4,271 added rows, 226 omitted older
+rows retained, current roster unchanged. Original workbook SHA-256 remains:
+d0b18c911c733d8c93d1e1746e86445e23ad891c9ec2ce1e759791fa6fb994eb
+Source and model preservation, native scenario/base parity, browser workflows and
+publication audits are under local_app\verification. Model/source backups remain local;
+continue the local backup workflow and preserve the complete Website software/seed folder.
+The builder rejects unknown files and staged user work and preserves nested .git/config.
+Never run ProductionExtractor deletion paths or broadly stage the parent repository.
+
+Official Pages workflow reference:
+https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages

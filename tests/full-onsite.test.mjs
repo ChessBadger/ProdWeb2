@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import vm from 'node:vm';
+import {createPlannerContext,initializeData} from '../scripts/planner-context.mjs';
+const c=createPlannerContext(),M=c.FullOnsiteModel,run=s=>vm.runInContext(s,c),plain=x=>JSON.parse(JSON.stringify(x));
+const job=(date,duration=6)=>({id:'1|'+date,storeId:'1',date,accountKey:'a',duration,quantity:12000,employees:['0001','0002','0003'],supervisor:'0001',rx:[],employeeDetails:[1,2,3].map(id=>({id:String(id).padStart(4,'0'),hours:6,quantity:4000})),postCountHours:.5,mappingConfidence:'direct_schedule',arrivalLocal:date+'T06:00:00'});
+const data={schemaVersion:1,target:M.TARGET,fingerprint:'fixture-v1',aliases:{'A||S':'1'},jobs:[job('2025-01-01'),job('2025-02-01')]};M.validate(data);
+const plan={date:'2025-03-01',storeKey:'A||S',accountKey:'a',employees:['1','2','3'],roles:{supervisor:'1'},modes:{supervisor:'p50'}};
+const p=M.predict(data,plan,{elasticity:.3});assert.ok(p.onSiteDuration>0);
+assert.deepEqual(plain(M.predict({...data,jobs:[...data.jobs,job(plan.date,17),job('2025-04-01',18)]},plan,{elasticity:.3})),plain(p),'same-day/future attendance must not leak');
+assert.ok(M.predict(data,{...plan,employees:['1','2','3','4']},{elasticity:.3}).onSiteDuration<p.onSiteDuration,'adding capacity shortens estimate');
+assert.ok(M.predict(data,{...plan,employees:['1','2']},{elasticity:.3}).onSiteDuration>p.onSiteDuration,'removing capacity lengthens estimate');
+assert.ok(M.predict(data,{...plan,modes:{supervisor:'none'}},{elasticity:.3}).onSiteDuration>p.onSiteDuration,'supervisor contribution changes estimate');
+assert.ok(M.predict(data,{...plan,roles:{supervisor:'1',training:['2']},modes:{supervisor:'p50',training:'p30'}},{elasticity:.3}).onSiteDuration>p.onSiteDuration);
+assert.ok(M.predict(data,{...plan,workloadPieces:24000},{elasticity:.3}).onSiteDuration>p.onSiteDuration,'known planned workload changes estimate');
+assert.equal(M.predict(data,{...plan,employees:['1'],modes:{supervisor:'none'}}),null);
+assert.equal(M.predict(data,{...plan,storeKey:'new',accountKey:'missing'}),null);
+assert.ok(M.predict(data,{...plan,storeKey:'new'}).onSiteDuration>0,'known-account missing-store fallback');
+assert.throws(()=>M.validate({...data,jobs:[...data.jobs,data.jobs[0]]}),/duplicate/);
+assert.throws(()=>M.predict(data,plan,{},M.context(data,'2025-01-01')),/cutoff/);
+const big={...data,jobs:data.jobs.map(j=>({...j,duration:10,quantity:100000,employees:Array.from({length:24},(_,i)=>String(i+1).padStart(4,'0'))}))};
+const bigPlan={...plan,employees:Array.from({length:24},(_,i)=>String(i+1))};const bp=M.predict(big,bigPlan);assert.ok(Number.isFinite(bp.onSiteDuration)&&bp.confidenceLow<=bp.onSiteDuration&&bp.confidenceHigh>=bp.onSiteDuration);
+// Live/assigned-crew routing and retained importer roster are preserved.
+initializeData(c,JSON.stringify({EmployeeProductionHistory:[{Employee:1,AccountName:'A',StoreName:'S',DateOfInv:'2025-01-01',Expr1:4,Total_Ext_Qty:400,PiecesPerHr:100,SupervisorNumber:1}],_meta:{latestEmployeeIds:['1']}}));c.full=data;c.plan=plan;
+run('state.fullOnsiteData=full;state.fullOnsiteContexts.clear();state.fullOnsiteEnabled=false');
+const old=run('predictDurationPlan(plan)');assert.equal(old.modelVersion,c.DurationModel.VERSION);assert.ok(old.pairedFullOnsite);
+run('state.fullOnsiteEnabled=true');const live=run('predictDurationPlan(plan)');assert.equal(live.modelVersion,M.VERSION);assert.ok(live.incumbentComparison);assert.equal(live.target,M.TARGET);
+run('state.fullOnsiteData=null');assert.ok(run('predictDurationPlan(plan).fullOnsiteFallback'));
+// Pair evaluation requires a later full-attendance snapshot and saving before actual arrival.
+c.futureData={...data,fingerprint:'new',jobs:[job('2025-02-01')]};c.record={storeKey:'A||S',scheduledDate:'2025-02-01',scheduledStart:'2025-02-01T06:00:00',savedAt:'2025-01-31T12:00:00',fullAttendanceSnapshot:'old',pairedForecasts:[{modelVersion:c.DurationModel.VERSION,predictedDuration:4},{modelVersion:M.VERSION,predictedDuration:5,target:M.TARGET,features:{storeId:'1'}}]};
+run('state.fullOnsiteData=futureData');assert.equal(run('evaluateSavedForecasts([record]).length'),2);
+assert.equal(run('evaluateSavedForecasts([{...record,savedAt:"2025-02-01T06:30:00",scheduledStart:"2025-02-01T07:00:00"}]).length'),0,'early actual arrival blocks post-arrival preview');
+assert.equal(run('evaluateSavedForecasts([{...record,fullAttendanceSnapshot:"new"}]).length'),0);
+console.log('Full onsite: crew/roles/workload, large crews, leakage, fallback, paired prearrival outcomes and import preservation passed.');

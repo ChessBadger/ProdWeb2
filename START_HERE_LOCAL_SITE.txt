@@ -1,0 +1,38 @@
+LOCAL INVENTORY PLANNER - START HERE
+
+Double-click StartLocalSite.cmd in this Website folder. Keep its console open while using the site. The printed address normally is http://127.0.0.1:8765/ (the launcher opens your browser). Close the console to stop; launch again to resume. History is stored on disk independently of the browser. This local application requires the installed Python 3.12, NumPy, pandas, openpyxl, xlrd and Node.js. It does not use Firebase or upload data.
+
+PLAN A VISIT
+Select a store, inventory date, scheduled start and the actual planned crew. Assign supervisor/RX roles where applicable. Include historical employees to select people absent from the newest export. Calculate, then save the previsit forecast before its scheduled start. Estimates represent full elapsed onsite time, including review/recounts, not summed employee labor. Unsupported history is reported rather than silently supplying a number.
+
+UPDATE HISTORY
+Use Update history > EmployeeProduction export to choose each received workbook. The same filename is allowed. Do not overwrite the original Website workbook first. Choose Historical backfill - preserve current roster for all-current/former employee files. Choose Current-employee export - update active roster only for a verified current-employee export. The full Lashaun workbook has been applied as a historical backfill: 18,277 rows, 3,459 jobs, 61 active employees unchanged. Each distinct file is archived; identical receipts are no-ops. Later changed rows supersede matching effective rows, while missing historical jobs/employees are retained. An old identical receipt cannot roll history backward.
+
+For timesheets, place received files within the existing LOCAL Desktop\Store Prep\Timesheets History copy. The application never opens the shared BIS timesheet source. Search by customer/date/name and import selected files, up to 100 per batch. This is explicit import, not a background folder watcher. Every valid import automatically refreshes attendance and model-ready history. Earlier raw receipts and revisions are retained. Invalid or conflicting files are reported in Import activity; correct the local file and retry. Files with changed customer/date require review because they are distinct event keys, not deletions of the old event.
+
+Complete production visits require matching numeric customer/date/employee identities and compatible complete crew evidence. Confirm customer-to-export-store mappings in the UI where needed. Incomplete production remains attendance-only; missing counts are never zero-filled. The initial seed contains 2,303 complete visits and 7,471 structurally corroborated attendance candidates, not all workbooks in the copied folder. Attendance candidates are further gated against prior anchors when forecasting. Historical names not present in exports display as employee IDs.
+
+BACKUP AND RECOVERY
+Backup & recovery > Create verified backup writes a ZIP and offers download. Keep a copy in an approved offline/local backup location. It contains the database, forecasts, immutable receipts and production archive. Also preserve this ENTIRE Website folder, including local_app\seed: backups are data backups, not standalone software installers. Private model/history seed files are outside public/docs and ignored by Git.
+
+Restore creates a NEW sibling data directory; it does not overwrite the current one. The UI displays its path. Stop the running app, then run:
+  StartLocalSite.cmd "full path to restored directory"
+Restored production imports use the archive within that recovered copy. If an import was interrupted, restart and review Import activity, then retry its original file. Committed archive history is recovered; duplicate imports remain harmless. Filesystem/drive loss still requires your separate backup copy.
+
+Storage locations are displayed in the UI. Default site database:
+  %LOCALAPPDATA%\EmployeePredictor\SiteHistory\<Website path hash>\history.sqlite3
+Existing versioned production archive:
+  %LOCALAPPDATA%\EmployeePredictor\ExportHistory\<Website path hash>
+Do not delete these folders or raw receipts. The original Website planner, imports and model remain present. StartLocalSite.cmd opens the new local application; npm run dev/build remain the original Website workflow.
+
+MODEL EVIDENCE AND LIMITS
+Integrated model: validated-history-unified-v1, frozen before 2026-03-09, with 49 features and a capped residual over the richer baseline. Same 325 chronological training predictions: 29.05 minutes MAE, prior unified control 30.25, original 44.99. These explored folds are not independent evaluation. This exact candidate has no fresh holdout score. The 19-minute goal is NOT met. New imports refresh historical inputs; they do not silently retrain model weights. Retrospective crew/role evidence is not proof that changing staffing causes the displayed duration difference. Future saved forecasts support later honest evaluation.
+
+LOCAL VERIFICATION
+Tests and redacted result summaries are under local_app\verification. Synthetic import cases and recovery copies remain in the audit workspace, outside the live profile. Tests cover duplicates, same-name corrections, history retention, invalid files, interruption/restart, saved forecasts, restored copies, selected-crew browser workflows and preservation of the original Website regression suite.
+
+SHARED WEBSITE UPDATES
+After local imports finish, double-click BuildWeeklyPages.cmd. It builds approved current-roster names and derived planning data into the clean pages_repository folder. Review its allowlist, commit and push that clean folder to main; Pages Actions publishes the update for everyone. Visitors do not choose or upload files. Do not publish the parent Website repository. Exact steps and exposed fields are in PAGES_WEEKLY_GUIDE.txt.
+
+LATEST SHARED SITE
+The familiar planner, persistent browser forecasts and scenario/two-store controls are restored. The deprecated Schedule Board and related code/data were removed by request. The shared site uses the existing Google/email UI gate; static derived planning data remains downloadable. Firebase loader CSP is repaired and its local/Pages hosts are already authorized. Hard-refresh before retrying sign-in. See PAGES_WEEKLY_GUIDE.txt for exact root checks and scoped user commit/push commands.

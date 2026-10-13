@@ -22,3 +22,15 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Private local predictor evidence (not web assets)
+local_app/seed/
+local_app/__pycache__/
+
+# Local verification and independent clean Pages repository staging
+local_app/verification/
+local_app/static_tools/__pycache__/
+pages_repository/
+
+# Private full-history workbook; never a web asset
+/EmployeeProductionExportLashaunfull.xlsx

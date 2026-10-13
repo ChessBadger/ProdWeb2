@@ -1,0 +1,38 @@
+name: Publish shared crew planner
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      confirm_code_only:
+        description: 'I reviewed the approved current-roster derived planning data'
+        type: boolean
+        required: true
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'push' || inputs.confirm_code_only == true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify exact public file allowlist and hashes
+        run: python tools/verify_pages.py pages_export
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v4
+        with:
+          path: pages_export
+      - name: Deploy reviewed shared planner
+        id: deployment
+        uses: actions/deploy-pages@v4

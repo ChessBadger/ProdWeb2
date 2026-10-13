@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Shift Crew Planner</title>
-  <link rel="stylesheet" href="scheduleplanningstyle.css?v=20260928-203919" />
+  <link rel="stylesheet" href="scheduleplanningstyle.css?v=20261013-163025" />
 </head>
 <body>
   <header class="topbar">
@@ -164,7 +164,8 @@
       </section>
     </aside>
 
-    <section class="panel results planner-results">
+    <section class="surface" aria-label="Full attendance model status"><label><input id="fullOnsiteMode" type="checkbox" onchange="setFullOnsiteEnabled(this.checked)"> Use new full-onsite model — work in progress</label><p class="meta muted">Predicts physical arrival through final departure, including review and recounts. Historical paired comparison: 32.9 vs 40.4 minutes average error; the required 2× improvement is not yet met. Existing predictor stays the default. Saved previews capture both models when full history is available.</p></section>
+      <section class="panel results planner-results">
       <div class="results-hero">
         <div>
           <p class="eyebrow">Review</p>
@@ -178,7 +179,7 @@
 
       <div class="cards">
         <article class="card metric-card">
-          <h3>Estimated Time</h3>
+          <h3>Estimated On-Site Time</h3>
           <p id="predDuration" class="value">-</p>
         </article>
         <article class="card metric-card">
@@ -186,7 +187,7 @@
           <p id="predManHours" class="value">-</p>
         </article>
         <article class="card metric-card">
-          <h3>Likely Range</h3>
+          <h3>Historical Error Range</h3>
           <p id="predBand" class="value">-</p>
         </article>
         <article class="card metric-card">
@@ -197,6 +198,7 @@
 
       <section class="surface confidence-surface">
         <h3>Historical Accuracy</h3>
+        <p class="meta muted">Weekly replay uses history before Monday, assuming the prior week’s export was available then. Earlier errors calibrate the range; a separate later period tests it. Missing past employees and actual receipt delays remain unknown.</p>
         <div id="storeAccuracySummary" class="summary-lines">Choose a store to view historical accuracy.</div>
       </section>
 
@@ -401,8 +403,14 @@
   </div>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
+  <section class="card" style="margin: 1rem;">
+    <h3>Local Forecast History</h3>
+    <p id="forecastStatus" class="meta muted">Valid future scheduled previews are saved on this browser. Keep this browser’s data and download a backup periodically.</p>
+    <button id="exportForecastsBtn" type="button" class="btn subtle">Download Forecast Backup</button>
+  </section>
   <script src="runtime-config.js?v=20260501-1"></script>
-  <script src="durationmodel.js?v=20260928-203919"></script>
-  <script src="scheduleplanningapp.js?v=20260928-203919"></script>
+  <script src="onsitemodel.js?v=20261012-full-onsite"></script>
+  <script src="durationmodel.js?v=20261013-163025"></script>
+  <script src="scheduleplanningapp.js?v=20261013-163025"></script>
 </body>
 </html>

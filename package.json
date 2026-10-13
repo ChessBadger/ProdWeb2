@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "test": "node tests/modas-planning.test.mjs && node tests/duration-planning.test.mjs",
+    "test": "node tests/modas-planning.test.mjs && node tests/duration-planning.test.mjs && node tests/weekly-planning.test.mjs && python -B tests/test_export_history.py && python -B tests/test_import_wrapper.py && node tests/full-onsite.test.mjs",
     "benchmark:planner": "node scripts/benchmark-planner.mjs"
   },
   "dependencies": {
