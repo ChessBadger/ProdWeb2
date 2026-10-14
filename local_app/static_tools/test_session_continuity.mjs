@@ -1,0 +1,13 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';import vm from 'node:vm';
+import {createGate} from '../static_source/auth.mjs';
+let now=0,expiry=3600000,opened=0,stopped=0,closed=0,force=[],network=false,authorized;let seq=0;const timers=new Map();
+const user={uid:'u',email:'approved@test',getIdTokenResult:async forced=>{force.push(forced);if(network)throw Object.assign(Error('offline'),{code:'auth/network-request-failed'});return {expirationTime:new Date(expiry).toISOString()}}};
+const gate=createGate({allowed:[user.email],now:()=>now,setTimer:(fn,delay)=>{const id=++seq;timers.set(id,{fn,at:now+delay});return id},clearTimer:id=>timers.delete(id),onOpen:async(u,a)=>{opened++;authorized=a;return()=>stopped++},onClose:()=>closed++,onError:()=>{},signOut:async()=>{}});
+const next=async()=>{const [id,t]=[...timers].sort((a,b)=>a[1].at-b[1].at)[0];timers.delete(id);now=t.at;await t.fn()};
+await gate.userChanged(user);const baselineCloses=closed;assert.equal(timers.size,2);expiry=7200000;await next();assert.equal(force.at(-1),true);assert.equal(opened,1);assert.equal(stopped,0);assert.equal(closed,baselineCloses);assert.ok(authorized());
+network=true;await next();assert.equal(stopped,0);assert.ok(authorized());assert.equal(timers.size,2);network=false;expiry=10800000;await next();assert.equal(opened,1);assert.equal(stopped,0);await gate.logout();assert.equal(timers.size,0);assert.equal(stopped,1);assert.equal(authorized(),false);
+const source=fs.readFileSync('local_app/static_source/bootstrap.mjs','utf8').replace(/\r\n/g,'\n');const updateCode=source.slice(source.indexOf('let checking=false;'),source.lastIndexOf('\n}\nload()'));
+let interval,focus,notice,reloads=0;const main={prepend:n=>{notice=n}},element=()=>({append(...x){this.children=x},setAttribute(){},addEventListener(name,fn){this[name]=fn}});
+const ctx={navigator:{onLine:true},release:{version:'old'},current:async()=>({version:'new'}),document:{documentElement:{dataset:{release:'old'}},getElementById:()=>notice,createElement:element,querySelector:()=>main,addEventListener(){}},window:{addEventListener:(event,fn)=>{if(event==='focus')focus=fn}},location:{reload:()=>reloads++},setInterval:fn=>interval=fn};vm.runInNewContext(updateCode,ctx);await interval();assert.equal(reloads,0);assert.equal(notice.children[1].textContent,'Load update');const first=notice;await focus();assert.equal(notice,first);assert.equal(reloads,0);notice.children[1].click();assert.equal(reloads,1);
+console.log('Passed: proactive forced token refresh, transient network retry without remount, logout cancels timers, update detection preserves active page, update reload requires a click.');

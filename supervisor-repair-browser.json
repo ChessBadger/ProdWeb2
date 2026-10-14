@@ -1,0 +1,15 @@
+{
+  "checks": [
+    {
+      "name": "Justin non-Modas estimate uses reconciled history",
+      "passed": true
+    },
+    {
+      "name": "Modas assumption explains the actual evidence gap",
+      "passed": true
+    }
+  ],
+  "release": "bba62fdb96aacda435f93b00e9e8de5f0fb93267d22a66fe4354a91c220f76fe",
+  "runtimeErrors": [],
+  "passed": true
+}

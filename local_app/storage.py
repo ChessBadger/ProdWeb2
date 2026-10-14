@@ -7,6 +7,7 @@ from export_history import archive_lock,archive_export,default_archive_dir,load_
 from convert_xl_to_json import read_excel_payload
 from timesheet_parser import audit,clock
 from features import identity,week
+from counting_mode import counting_mode
 now=lambda:datetime.datetime.now(datetime.timezone.utc).isoformat()
 sha=lambda b:hashlib.sha256(b).hexdigest()
 def signature(path):
@@ -79,6 +80,12 @@ class Store:
    if before.st_size>30*1024*1024:raise ValueError('Timesheet exceeds 30MB limit.')
    raw=source.read_bytes();after=source.stat()
    if (before.st_size,before.st_mtime_ns)!=(after.st_size,after.st_mtime_ns):raise ValueError('Timesheet changed while reading; retry after it is saved.')
+   return self.import_timesheet_bytes(source.name,raw,fail_before_commit)
+ def import_timesheet_bytes(self,name,raw,fail_before_commit=False):
+  with self.lock:
+   source=pathlib.Path(pathlib.PureWindowsPath(name).name)
+   if source.suffix.lower() not in ['.xls','.xlsx','.xlsm']:raise ValueError('Choose an Excel timesheet.')
+   if not raw or len(raw)>30*1024*1024:raise ValueError('Choose a nonempty timesheet no larger than 30MB.')
    digest,path=self.raw('timesheets',source.name,raw)
    with self.db() as db:
     if db.execute('SELECT 1 FROM receipts WHERE hash=?',(digest,)).fetchone():return {'duplicate':True,'hash':digest,'message':'Identical timesheet already imported; effective history unchanged.'}
@@ -106,7 +113,7 @@ class Store:
    with self.db() as db:
     prior=db.execute('SELECT receipt FROM events WHERE event_key=?',(eid,)).fetchone();payload=json.dumps(event);db.execute('INSERT INTO receipts VALUES(?,?,?,?,?,?)',(digest,'timesheet',source.name,event['receivedAt'],str(path.relative_to(self.root)),payload));db.execute('INSERT INTO event_versions VALUES(?,?,?,?)',(eid,digest,event['receivedAt'],payload));db.execute('INSERT OR REPLACE INTO events VALUES(?,?,?)',(eid,digest,payload))
    self.invalidate();return {'duplicate':False,'revision':bool(prior),'event':eid,'hash':digest,'message':'Timesheet archived; attendance and model eligibility refreshed. Unmatched production remains attendance-only.'}
- def import_production(self,name,data,fail_after_archive=False,import_mode="current"):
+ def import_production(self,name,data,fail_after_archive=False,import_mode="current",publish_parent=True):
   with self.lock:
    if pathlib.Path(name).suffix.lower() not in ['.xlsx','.xlsm','.xls']:raise ValueError('Choose an EmployeeProduction Excel workbook.')
    
@@ -116,11 +123,11 @@ class Store:
    result['payload']=json.loads(json_bytes(result['payload']))
    with self.db() as db:db.execute('INSERT OR REPLACE INTO settings VALUES(?,?)',('export_payload',json.dumps(result['payload'])))
    # Existing importer archive is the source of truth; publish only derived JSON, never replace source workbook.
-   if not self.isolated and import_mode=="current":
+   if publish_parent and not self.isolated and import_mode=="current" and not result.get("rosterReclassified"):
     history=result['payload'];meta=history['_meta'];current=[{k:v for k,v in r.items() if k!='_history'} for r in history['EmployeeProductionHistory'] if r['_history']['sourceSha256']==meta['latestExportSha256']]
     for directory in [WEBSITE,WEBSITE/'public/data',WEBSITE/'docs/data',WEBSITE/'data']:
      atomic(directory/'EmployeeProductionHistory.json',json_bytes(history));atomic(directory/'EmployeeProductionExport.json',json_bytes({'EmployeeProductionExport':current}))
-   self.invalidate();return {'duplicate':result['duplicate'],'snapshot':result['payload']['_meta']['snapshotId'],'historyRows':len(result['payload']['EmployeeProductionHistory']),'importMode':import_mode,'activeEmployeeCount':len(result['payload']['_meta']['latestEmployeeIds']),'archive':str(self.export_dir),'message':'Production history archived and reconciled; earlier employees/jobs remain retained.'}
+   self.invalidate();return {'duplicate':result['duplicate'],'rosterReclassified':result.get('rosterReclassified',False),'snapshot':result['payload']['_meta']['snapshotId'],'historyRows':len(result['payload']['EmployeeProductionHistory']),'importMode':import_mode,'activeEmployeeCount':len(result['payload']['_meta']['latestEmployeeIds']),'archive':str(self.export_dir),'message':('Identical workbook data retained; explicit current-roster reclassification applied without changing production revisions.' if result.get('rosterReclassified') else 'Production history archived and reconciled; earlier employees/jobs remain retained.')}
  def map_store(self,store,alias):
   if not re.fullmatch(r'\d{8}',store):raise ValueError('Numeric customer ID must have eight digits.')
   aliases={s['alias'] for s in self.catalog()['stores']}
@@ -138,6 +145,11 @@ class Store:
    aliases=s['history']['aliases'];aliases.update({v:k for k,v in mappings.items()});jobs={j['id']:j for j in s['history']['jobs']};rows=s['exportHistory']['EmployeeProductionHistory'];bykey=collections_default();accountkeys={alias.split('||')[0]:next((j['accountKey'] for j in jobs.values() if j['storeId']==sid),alias.split('||')[0].strip().lower()) for alias,sid in aliases.items()}
    for r in rows:
     alias=str(r.get('AccountName') or r.get('Account') or '').strip()+'||'+str(r.get('StoreName') or '').strip();bykey.setdefault((alias,str(r.get('DateOfInv',''))[:10]),{})[identity(r['Employee'])]=r
+   # Refresh derived mode metadata from visit telemetry, never from account-level TypeOfInv.
+   mode_by_visit={key:counting_mode(list(prod.values())) for key,prod in bykey.items()}
+   for metadata in s['meta']['jobs']:
+    key=(metadata.get('storeKey'),metadata.get('date'))
+    metadata['inventoryMode']=mode_by_visit.get(key)
    # Newly received changed production rows update matching seed evidence only when physical hours and identifiers agree.
    production_changed_ids=set();production_review=[];corroborated=0;supplemental_overlap_skipped=0
    for alias,sid in list(aliases.items()):
@@ -172,7 +184,7 @@ class Store:
       hours=(clock(r.get('TimeOut'))-clock(r.get('TimeIn')))/3600;q=float(r['Total_Ext_Qty']);assert 0<hours<=18 and q>=0
      except (ValueError,TypeError,KeyError,AssertionError):continue
      s['extraRates']=[x for x in s['extraRates'] if not (x['date']==day and x['employee']==emp and x.get('storeId')==sid and (sid is not None or x.get('storeAlias')==alias))]
-     s['extraRates'].append({'date':day,'storeId':sid,'accountKey':acct,'globalSkillGroup':group,'employee':emp,'quantity':q,'physicalHours':hours,'supervisor':identity(r.get('SupervisorNumber',''))==emp,'rx':bool(r.get('Rx')),'inventoryMode':True if (r.get('AVG_DELTA') or 0)>0 else False if r.get('AVG_DELTA')==0 else None,'typeOfInv':r.get('TypeOfInv','Unknown'),'storeAlias':alias,'records':float(r['Count_Record']) if r.get('Count_Record') is not None else None})
+     s['extraRates'].append({'date':day,'storeId':sid,'accountKey':acct,'globalSkillGroup':group,'employee':emp,'quantity':q,'physicalHours':hours,'supervisor':identity(r.get('SupervisorNumber',''))==emp,'rx':bool(r.get('Rx')),'inventoryMode':counting_mode(list(prod.values())),'typeOfInv':r.get('TypeOfInv','Unknown'),'storeAlias':alias,'records':float(r['Count_Record']) if r.get('Count_Record') is not None else None})
    pending=[];candidates={r['store']+'|'+r['date']:r for r in s['attendance']['accepted_candidates']};anchors={(r['store'],r['date']):r for r in s['attendance']['anchors']}
    for a in events:
     eid=a['store']+'|'+a['date'];known=[k for k,v in aliases.items() if v==a['store']];alias=mappings.get(a['store']) or (known[0] if len(known)==1 else next((k for k in known if (k,a['date']) in bykey),None));old=jobs.get(eid) or a.get('previousProduction',{}).get('job');acct=old['accountKey'] if old else accountkeys.get(alias.split('||')[0],alias.split('||')[0].strip().lower()) if alias else None;prod=bykey.get((alias,a['date']),{}) if alias else {};details=[];records={};valid=bool(alias) and set(prod)==set(a['employees'])
@@ -187,14 +199,14 @@ class Store:
     if valid:
      jobs[eid]={'id':eid,'storeId':a['store'],'date':a['date'],'accountKey':acct,'duration':a['duration'],'quantity':sum(e['quantity'] for e in details),'employees':a['employees'],'supervisor':a['supervisor'],'rx':a['rx'],'employeeDetails':details,'postCountHours':a['postCountHours'],'arrivalLocal':a['date']+'T'+str(datetime.timedelta(seconds=int(min(x['time_in_s'] for x in a['attendance'])))).zfill(8),'mappingConfidence':'explicit_user_mapping' if a['store'] in mappings else 'retained_alias','revisionPolicy':'latest_received_validated_timesheet','sourceHash':a['sourceHash']};s['records'][eid]={'employeeRecords':records,'totalAttributedRecords':sum(records.values())};anchors[(a['store'],a['date'])]={'store':a['store'],'date':a['date'],'signature':a['signature'],'mapping':jobs[eid]['mappingConfidence']};candidates.pop(eid,None)
      if prod:
-      types={r.get('TypeOfInv','Unknown') for r in prod.values()};modes={True if (r.get('AVG_DELTA') or 0)>0 else False if r.get('AVG_DELTA')==0 else None for r in prod.values()};s['meta']['jobs']=[m for m in s['meta']['jobs'] if not (m.get('storeKey')==alias and m['date']==a['date'])]+[{'storeKey':alias,'date':a['date'],'typeOfInv':next(iter(types)) if len(types)==1 else 'Unknown','inventoryMode':next(iter(modes)) if len(modes)==1 else None}]
+      types={r.get('TypeOfInv','Unknown') for r in prod.values()};modes={counting_mode(list(prod.values()))};s['meta']['jobs']=[m for m in s['meta']['jobs'] if not (m.get('storeKey')==alias and m['date']==a['date'])]+[{'storeKey':alias,'date':a['date'],'typeOfInv':next(iter(types)) if len(types)==1 else 'Unknown','inventoryMode':next(iter(modes)) if len(modes)==1 else None}]
     else:
      jobs.pop(eid,None);candidates[eid]=a;pending.append({'event':eid,'sourceName':a['sourceName'],'store':a['store'],'reason':'Map customer to an export store.' if not alias else 'Attendance retained; complete matching production/clock evidence is not yet available.'})
    fullkeys={(j['storeId'],j['date'],e['id']) for j in jobs.values() for e in j['employeeDetails']};s['extraRates']=[e for e in s['extraRates'] if (e.get('storeId'),e['date'],e['employee']) not in fullkeys];s['salvage']=[e for e in s['salvage'] if (e.get('storeId'),e['date'],e['employee']) not in fullkeys];s['history']['jobs']=sorted(jobs.values(),key=lambda j:(j['date'],j['storeId']));s['attendance']['accepted_candidates']=list(candidates.values());s['attendance']['anchors']=list(anchors.values());changed_ids={a['store']+'|'+a['date'] for a in events}|production_changed_ids;paired={r['storeId']+'|'+r['date']:r for r in s['paired']}
    for r in residuals:paired[r['storeId']+'|'+r['date']]=r
    for eid in changed_ids:
     if eid in paired and eid in jobs:paired[eid]={**paired[eid],'actual':jobs[eid]['duration']}
-   s['paired']=list(paired.values());s['changedIds']=list(changed_ids);s['pending']=pending;s['importedEvents']=events;s['productionReview']={'corroboratedSeedEmployeeRows':corroborated,'conflictingSeedEmployeeRows':production_review,'supplementalOverlapSkipped':supplemental_overlap_skipped};s['fingerprint']=sha(json.dumps({'jobs':s['history']['jobs'],'events':events,'export':s['exportHistory'].get('_meta',{}),'model':s['modelHash']},sort_keys=True).encode());self.cached=s;return s
+   s['paired']=list(paired.values());s['changedIds']=list(changed_ids);s['pending']=pending;s['importedEvents']=events;s['productionReview']={'corroboratedSeedEmployeeRows':corroborated,'conflictingSeedEmployeeRows':production_review,'supplementalOverlapSkipped':supplemental_overlap_skipped};s['fingerprint']=sha(json.dumps({'jobs':s['history']['jobs'],'events':events,'export':s['exportHistory'].get('_meta',{}),'model':s['modelHash'],'planningRules':'four-field-mode-supervisors-and-layered-rx-v4'},sort_keys=True).encode());self.cached=s;return s
  def refresh(self):
   from features import bridge
   self.invalidate();s=self.state();seed_ids={r['storeId']+'|'+r['date'] for r in self.seed['paired']};existing={r['storeId']+'|'+r['date'] for r in s['paired']};todo=[j for j in s['history']['jobs'] if (j.get('sourceHash') or j['id'] in s.get('changedIds',[])) and j['id'] not in existing];count=0

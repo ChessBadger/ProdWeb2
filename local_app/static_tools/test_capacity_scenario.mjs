@@ -1,0 +1,53 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {predictPlan,DurationModel} from '../static_source/planner.mjs';
+import {supervisorRows,supervisorEstimate} from '../supervisor-production.mjs';
+const snapshot=JSON.parse(fs.readFileSync(process.argv[2]));
+const store=snapshot.stores.find(s=>s.name.includes('METRO #434'));
+const names=['JUSTIN LEE','ANISHA VANCE','MONICA GARCIA-AVINA','ASHLEY PORTER','MATT KOHL','SONIA TU','SANCHAI THAO','ZAKIYAH KEARNEY','KIRSTEN ENGEL','NATE CARLSON','LISA XIONG','GAEL MUNOZ','ISSAC HIPP','JORDAN TANULA','TOM GRACZYK','JOSEPH SMITH','QIANA BATTON'];
+const id=name=>{const p=snapshot.persons.find(p=>p.name===name);assert.ok(p,name);return p.key;};
+const plan={storeKey:store.key,date:snapshot.cutoff,hasScheduledJob:false,notes:{},employees:names.map(id),roles:{supervisor:id('JUSTIN LEE'),rx:['JOSEPH SMITH','QIANA BATTON'].map(id),training:[id('NATE CARLSON')],earlyLate:[]},modes:{...DurationModel.DEFAULT_MODES,supervisor:'auto'},countingMode:'modas',model:'integrated',goalMode:'duration',shrink:{percent:0,mode:'none',employeeIds:[]}};
+const results=Object.fromEntries(['none','p30','p50','p70','full','auto'].map(mode=>[mode,predictPlan(snapshot,{...plan,modes:{...plan.modes,supervisor:mode}})]));
+const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-7,`${a} != ${b}`);
+assert.equal(results.auto.crew.find(p=>p.id===plan.roles.supervisor).factor,.5);
+assert.equal(results.auto.crew.find(p=>p.id===plan.roles.supervisor).supervisorContribution.supported,false);
+for(const [a,b] of [['none','p30'],['p30','p50'],['p50','p70'],['p70','full']])assert.ok(results[a].displayHours>results[b].displayHours);
+for(const result of Object.values(results)){
+ near(result.main.predictedHours,results.auto.main.predictedHours);
+ near(result.reference.onSiteDuration,results.auto.reference.onSiteDuration); // incompatible records remain gated
+ near(result.crew.reduce((n,p)=>n+p.predictedPieces,0),results.auto.capacityScenario.workload);
+ near(result.supervisorOnsiteHours-result.displayHours,results.auto.supervisorOnsiteHours-results.auto.displayHours);
+}
+assert.equal(results.none.crew.find(p=>p.id===plan.roles.supervisor).predictedPieces,0);
+const neutral=predictPlan(snapshot,{...plan,roles:{...plan.roles,training:[]},modes:{...DurationModel.DEFAULT_MODES}});
+near(neutral.displayHours,neutral.main.predictedHours-neutral.crewTiming.correctionHours);
+const shrink=predictPlan(snapshot,{...plan,shrink:{percent:20,mode:'all',employeeIds:[]}});
+near(shrink.displayHours,results.auto.displayHours/0.8);
+assert.throws(()=>predictPlan(snapshot,{...plan,roles:{...plan.roles,training:plan.employees},modes:{...plan.modes,training:'none'}}),/No counting/);
+assert.throws(()=>predictPlan(snapshot,{...plan,shrink:{percent:100,mode:'all',employeeIds:[]}}),/No counting|18 hours/);
+const timedSnapshot=structuredClone(snapshot),timedStore=timedSnapshot.stores.find(s=>s.key===store.key);
+timedStore.scenario.scheduleJobs=[{key:'test',date:plan.date,startTime:'06:00',typeOfInv:'MODAS-SCAN'}];
+const timed=predictPlan(timedSnapshot,{...plan,hasScheduledJob:true,scheduleJobKey:'test',notes:{[id('ANISHA VANCE')]:'until 10am'}});
+assert.equal(timed.availabilityConverged,true);assert.ok(timed.displayHours>results.auto.displayHours);
+near(timed.crew.reduce((n,p)=>n+p.predictedPieces,0),results.auto.capacityScenario.workload);
+const compatible=structuredClone(snapshot);
+for(const variant of Object.values(compatible.stores.find(s=>s.key===store.key).scenario.variants))for(const k of variant.kernels){k.compatible=true;k.eligible=true;}
+const compatibleFull=predictPlan(compatible,{...plan,modes:{...plan.modes,supervisor:'full'}}),compatibleNone=predictPlan(compatible,{...plan,modes:{...plan.modes,supervisor:'none'}});
+assert.ok(compatibleNone.displayHours>compatibleFull.displayHours);
+near(compatibleNone.capacityScenario.workload,compatibleFull.capacityScenario.workload);
+const history=Array.from({length:6},(_,i)=>({id:'0001',account:'other',store:'A',inventoryMode:true,typeOfInv:'SCAN',speed:990,date:`2026-01-0${i+1}`}));
+assert.equal(supervisorEstimate(history,'1','target','A',1000,true,'SCAN').supported,false);
+history.forEach(r=>r.account='target');
+assert.equal(supervisorEstimate(history,'1','target','A',1000,false,'SCAN').supported,false);
+assert.equal(supervisorEstimate(history,'1','target','A',1000,true,'OTHER').supported,true);
+near(supervisorEstimate(history,'1','target','A',1000,true,'SCAN').factor,.99);
+history.forEach(r=>r.typeOfInv=' scan ');near(supervisorEstimate(history,'1','target','A',1000,true,'SCAN').factor,.99);
+history.forEach(r=>r.inventoryMode=null);
+assert.equal(supervisorEstimate(history,'1','target','A',1000,true,'SCAN').supported,false);
+const raw={DateOfInv:'2026-01-01',Employee:1,SupervisorNumber:1,TimeIn:'06:00:00',TimeOut:'08:00:00',Total_Ext_Qty:1000,AccountName:'target',StoreName:'A',TypeOfInv:'SCAN'};
+for(const value of ['',null,undefined])assert.equal(supervisorRows([{...raw,AVG_DELTA:value}],'2026-10-12')[0].inventoryMode,false);
+assert.equal(supervisorRows([{...raw,AVG_DELTA:'bad'}],'2026-10-12')[0].inventoryMode,null);
+assert.equal(supervisorRows([{...raw,AVG_DELTA:-1}],'2026-10-12')[0].inventoryMode,true);
+assert.equal(supervisorRows([{...raw,AVG_DELTA:0}],'2026-10-12')[0].inventoryMode,false);
+assert.equal(supervisorRows([{...raw,AVG_DELTA:1}],'2026-10-12')[0].inventoryMode,true);
+console.log(JSON.stringify({passed:true,store:store.name,results:Object.fromEntries(Object.entries(results).map(([mode,r])=>[mode,{crewHours:r.displayHours,supervisorHours:r.supervisorOnsiteHours,pieces:r.crew.reduce((n,p)=>n+p.predictedPieces,0)}])),timedAvailability:true,frozenBaseline:true,comparableHistory:true},null,2));

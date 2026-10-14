@@ -1,3 +1,5 @@
+For easy online predictor updates, double-click UpdatePredictor.cmd. See UPDATE_PREDICTOR.txt for the three steps.
+
 LOCAL INVENTORY PLANNER - START HERE
 
 Double-click StartLocalSite.cmd in this Website folder. Keep its console open while using the site. The printed address normally is http://127.0.0.1:8765/ (the launcher opens your browser). Close the console to stop; launch again to resume. History is stored on disk independently of the browser. This local application requires the installed Python 3.12, NumPy, pandas, openpyxl, xlrd and Node.js. It does not use Firebase or upload data.

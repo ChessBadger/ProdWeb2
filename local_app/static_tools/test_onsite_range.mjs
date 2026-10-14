@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import {onsitePlanningRange} from '../static_source/planner.mjs';
+const snapshot={evidence:{onsiteRange:{integrated:{count:26,medianAbsoluteErrorHours:.55},reference:{count:31,medianAbsoluteErrorHours:.7}}}},plan={model:'integrated'},result={mainAvailable:true,crewTiming:{},displayHours:5,capacityScenario:{ratio:1}};
+const r=onsitePlanningRange(snapshot,plan,result);
+assert.equal(r.lowerHours,4+25/60);assert.equal(r.upperHours,5+35/60);
+assert.equal(onsitePlanningRange(snapshot,plan,{...result,crewTiming:null}),null);
+assert.equal(onsitePlanningRange(snapshot,plan,{...result,mainAvailable:false}),null);
+assert.equal(onsitePlanningRange({},plan,result),null);
+assert.ok(onsitePlanningRange(snapshot,{model:'reference'},result).upperHours>r.upperHours);
+assert.ok(onsitePlanningRange(snapshot,plan,{...result,capacityScenario:{ratio:2}}).upperHours>r.upperHours);
+assert.equal(onsitePlanningRange(snapshot,plan,{...result,capacityScenario:{ratio:.5}}).upperHours,r.upperHours);
+assert.equal(onsitePlanningRange(snapshot,plan,{...result,displayHours:.25}).lowerHours,0);
+assert.ok(onsitePlanningRange(snapshot,plan,{...result,displayHours:18}).upperHours>18);
+assert.equal(result.displayHours,5);
+console.log('On-site range checks passed.');

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Shift Crew Planner</title>
-  <link rel="stylesheet" href="scheduleplanningstyle.css?v=20261013-163025" />
+  <link rel="stylesheet" href="scheduleplanningstyle.css?v=20261014-171620" />
 </head>
 <body>
   <header class="topbar">
@@ -15,6 +15,7 @@
     </div>
     <div class="topbar-actions">
       <nav class="topbar-nav">
+        <a class="btn" href="https://chessbadger.github.io/Production-Predictor/">Open new predictor</a>
         <a id="scheduleBoardLink" class="btn subtle is-hidden" href="scheduleboard.html">Schedule Board</a>
       </nav>
       <div class="topbar-auth">
@@ -164,7 +165,6 @@
       </section>
     </aside>
 
-    <section class="surface" aria-label="Full attendance model status"><label><input id="fullOnsiteMode" type="checkbox" onchange="setFullOnsiteEnabled(this.checked)"> Use new full-onsite model — work in progress</label><p class="meta muted">Predicts physical arrival through final departure, including review and recounts. Historical paired comparison: 32.9 vs 40.4 minutes average error; the required 2× improvement is not yet met. Existing predictor stays the default. Saved previews capture both models when full history is available.</p></section>
       <section class="panel results planner-results">
       <div class="results-hero">
         <div>
@@ -401,6 +401,21 @@
       <p id="computeWaitOverlayText">Please wait while we compute the initial accuracy snapshot. This first run may take a few minutes.</p>
     </div>
   </div>
+  <dialog id="newPredictorNotice" aria-labelledby="newPredictorTitle" aria-describedby="newPredictorDescription">
+    <h2 id="newPredictorTitle">Try the new Production Predictor</h2>
+    <p id="newPredictorDescription">Build your plan on the new site. You can switch between the new and old prediction models at the top of Plan preview.</p>
+    <div class="predictor-notice-actions">
+      <a class="btn" href="https://chessbadger.github.io/Production-Predictor/" autofocus>Open new predictor</a>
+      <button id="stayOnOldPredictor" class="btn subtle" type="button">Stay on this site</button>
+    </div>
+  </dialog>
+  <script>
+    (() => {
+      const notice = document.getElementById('newPredictorNotice');
+      document.getElementById('stayOnOldPredictor').addEventListener('click', () => notice.close());
+      notice.showModal();
+    })();
+  </script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.4/firebase-auth-compat.js"></script>
   <section class="card" style="margin: 1rem;">
@@ -410,7 +425,7 @@
   </section>
   <script src="runtime-config.js?v=20260501-1"></script>
   <script src="onsitemodel.js?v=20261012-full-onsite"></script>
-  <script src="durationmodel.js?v=20261013-163025"></script>
-  <script src="scheduleplanningapp.js?v=20261013-163025"></script>
+  <script src="durationmodel.js?v=20261014-171620"></script>
+  <script src="scheduleplanningapp.js?v=20261014-171620"></script>
 </body>
 </html>

@@ -5,14 +5,15 @@ ROOT=pathlib.Path(__file__).resolve().parent
 sys.path.insert(0,str(ROOT))
 from storage import Store,atomic
 from features import forecast,week,identity
+OWNER_VERSION='owner-v1-'+hashlib.sha256(b''.join((ROOT/name).read_bytes() for name in ['server.py','storage.py','owner_publish.py'])).hexdigest()[:12]
 class App:
- def __init__(self,store):self.store=store;self.token=secrets.token_urlsafe(32);self.worker=concurrent.futures.ThreadPoolExecutor(max_workers=1);self.predictions={};self.lock=threading.RLock()
- def submit(self,kind,fn):
+ def __init__(self,store):self.store=store;self.token=secrets.token_urlsafe(32);self.worker=concurrent.futures.ThreadPoolExecutor(max_workers=1);self.predictions={};self.owner_batch=None;self.lock=threading.RLock()
+ def submit(self,kind,fn,with_progress=False):
   oid=self.store.operation(kind)
   def run():
    self.store.op(oid,'running','Processing locally; raw originals and prior committed history are preserved.')
    try:
-    result=fn();self.store.op(oid,'complete',json.dumps(result))
+    result=fn(lambda message:self.store.op(oid,'running',message)) if with_progress else fn();self.store.op(oid,'complete',json.dumps(result))
    except Exception as e:self.store.op(oid,'failed',str(e))
   self.worker.submit(run);return {'operation':oid}
  def prediction(self,p):
@@ -42,7 +43,8 @@ class Handler(BaseHTTPRequestHandler):
   if not self.valid_host():return self.send(403,{'error':'Local host only.'})
   try:
    path=urllib.parse.urlsplit(self.path);q=urllib.parse.parse_qs(path.query);app=self.server.app
-   if path.path=='/api/status':return self.send(200,{**app.store.catalog(),'token':app.token})
+   if path.path=='/api/identity':return self.send(200,{'dataDirectory':str(app.store.root),'modelSha256':app.store.seed['modelHash'],'ownerWorkflowVersion':OWNER_VERSION})
+   if path.path=='/api/status':return self.send(200,{**app.store.catalog(),'token':app.token,'ownerWorkflowVersion':OWNER_VERSION})
    if path.path=='/api/forecasts':return self.send(200,{'forecasts':app.store.forecasts()})
    if path.path=='/api/operations':
     with app.store.db() as db:rows=[dict(r) for r in db.execute('SELECT * FROM operations ORDER BY created DESC LIMIT 30')]
@@ -61,6 +63,11 @@ class Handler(BaseHTTPRequestHandler):
     name=q.get('name',[''])[0];p=(app.store.root/'backups'/name).resolve()
     if p.parent!=(app.store.root/'backups').resolve() or not p.is_file():return self.send(404,{'error':'Backup not found.'})
     return self.file(p,download=True)
+   if path.path=='/api/owner/deployment':
+    from owner_publish import deployment_status
+    return self.send(200,deployment_status(app.store))
+   if path.path=='/owner':return self.file(ROOT/'web/owner.html')
+   if path.path in ['/owner.js','/owner.css']:return self.file(ROOT/'web'/path.path[1:])
    if path.path=='/':return self.file(ROOT/'web/index.html')
    if path.path in ['/app.js','/style.css']:return self.file(ROOT/'web'/path.path[1:])
    return self.send(404,{'error':'Not found'})
@@ -79,9 +86,30 @@ class Handler(BaseHTTPRequestHandler):
    size=int(self.headers.get('Content-Length','0'));path=urllib.parse.urlsplit(self.path).path;limit=2*1024**3 if path=='/api/restore' else 50*1024**2
    if not 0<size<=limit:raise ValueError('Request is empty or too large.')
    raw=self.rfile.read(size)
+   if path.startswith('/api/owner/'):
+    if path in ['/api/owner/import-timesheet','/api/owner/import-production']:
+     if not app.owner_batch or self.headers.get('X-Import-Batch')!=app.owner_batch['id']:raise ValueError('Start an import batch to make a recoverable backup first.')
+     name=urllib.parse.unquote(self.headers.get('X-Filename',''))
+     if path.endswith('import-timesheet'):return self.send(202,app.submit('owner timesheet import',lambda:app.store.import_timesheet_bytes(name,raw)))
+     return self.send(202,app.submit('owner production import',lambda:app.store.import_production(name,raw,import_mode='current',publish_parent=False)))
+    body=json.loads(raw)
+    if path=='/api/owner/begin-import':
+     def begin():
+      backup=app.store.backup();app.owner_batch={'id':secrets.token_urlsafe(24),'backup':str(backup)};return app.owner_batch
+     return self.send(202,app.submit('backup before owner imports',begin))
+    if path=='/api/owner/refresh':
+     if not app.owner_batch or body.get('batch')!=app.owner_batch['id']:raise ValueError('Start the import batch first.')
+     return self.send(202,app.submit('validate imported history',app.store.refresh))
+    if path=='/api/owner/publish':
+     if body.get('reviewedPublicScope') is not True:raise ValueError('Review the public current-roster names and derived planning data before clicking Publish.')
+     with app.store.db() as db:
+      if db.execute("SELECT count(*) FROM operations WHERE status IN ('queued','running')").fetchone()[0]:raise ValueError('Wait for the current import or publication to finish before publishing.')
+     from owner_publish import Publisher
+     return self.send(202,app.submit('publish verified planner',lambda progress:Publisher(ROOT.parent,app.store,progress).publish(),True))
+    return self.send(404,{'error':'Owner action not found.'})
    if path=='/api/import-production':
     name=urllib.parse.unquote(self.headers.get('X-Filename','EmployeeProductionExport.xlsx'))
-    def importing():r=app.store.import_production(name,raw,import_mode=self.headers.get('X-Import-Mode','current'));return {**r,**app.store.refresh()}
+    def importing():r=app.store.import_production(name,raw,import_mode='current');return {**r,**app.store.refresh()}
     return self.send(202,app.submit('production import',importing))
    if path=='/api/restore':
     _,p=app.store.raw('restore_uploads','backup.zip',raw)
@@ -111,23 +139,32 @@ class Handler(BaseHTTPRequestHandler):
    return self.send(404,{'error':'Not found'})
   except Exception as e:return self.send(400,{'error':str(e)})
 def main():
- ap=argparse.ArgumentParser();ap.add_argument('--port',type=int,default=8765);ap.add_argument('--data-dir');ap.add_argument('--timesheet-root');ap.add_argument('--export-dir');ap.add_argument('--isolated',action='store_true');ap.add_argument('--open-browser',action='store_true');a=ap.parse_args()
+ ap=argparse.ArgumentParser();ap.add_argument('--port',type=int,default=8765);ap.add_argument('--data-dir');ap.add_argument('--timesheet-root');ap.add_argument('--export-dir');ap.add_argument('--isolated',action='store_true');ap.add_argument('--open-browser',action='store_true');ap.add_argument('--owner',action='store_true');a=ap.parse_args()
  namespace=hashlib.sha256(str(ROOT.parent.resolve()).casefold().encode()).hexdigest()[:12];expected=pathlib.Path(a.data_dir or pathlib.Path(os.environ.get('LOCALAPPDATA',str(pathlib.Path.home())))/'EmployeePredictor'/'SiteHistory'/namespace).resolve()
  # Reopening the launcher should reuse this profile, not interrupt its active imports.
  for port in range(a.port,a.port+10):
   try:
-   with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/status',timeout=.5) as response:existing=json.load(response)
-   if pathlib.Path(existing.get('dataDirectory','')).resolve()==expected and existing.get('modelSha256'):
-    url=f'http://127.0.0.1:{port}/';print('Inventory Planner already running: '+url,flush=True)
+   try:
+    with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/identity',timeout=1) as response:existing=json.load(response)
+   except urllib.error.HTTPError as error:
+    if error.code!=404:raise
+    try:
+     with urllib.request.urlopen(f'http://127.0.0.1:{port}/api/status',timeout=5) as response:existing=json.load(response)
+    except TimeoutError:raise RuntimeError('An older local app is responding slowly. Finish its imports and close its console before reopening UpdatePredictor.cmd; no history was changed.')
+   if a.owner and pathlib.Path(existing.get('dataDirectory','')).resolve()==expected and existing.get('ownerWorkflowVersion')!=OWNER_VERSION:
+    raise RuntimeError('An older local app is running. Finish its imports and close its console, then reopen UpdatePredictor.cmd. Local history stays unchanged.')
+   if pathlib.Path(existing.get('dataDirectory','')).resolve()==expected and existing.get('modelSha256') and (not a.owner or existing.get('ownerWorkflowVersion')==OWNER_VERSION):
+    url=f'http://127.0.0.1:{port}/'+('owner' if a.owner else '');print('Inventory Planner already running: '+url,flush=True)
     if a.open_browser:webbrowser.open(url)
     return
+  except RuntimeError:raise
   except Exception:pass
  store=Store(a.data_dir,a.timesheet_root,a.export_dir,a.isolated);app=App(store)
  for port in range(a.port,a.port+10):
   try:server=ThreadingHTTPServer(('127.0.0.1',port),Handler);break
   except OSError:
    if port==a.port+9:raise
- server.app=app;url=f'http://127.0.0.1:{server.server_port}/';print('Inventory Planner: '+url+'\nPersistent data: '+str(store.root),flush=True)
+ server.app=app;url=f'http://127.0.0.1:{server.server_port}/'+('owner' if a.owner else '');print('Inventory Planner: '+url+'\nPersistent data: '+str(store.root),flush=True)
  if a.open_browser:webbrowser.open(url)
  try:server.serve_forever()
  finally:server.server_close();app.worker.shutdown(wait=True)

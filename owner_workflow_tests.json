@@ -1,0 +1,18 @@
+{
+  "case": "C:\\Users\\LAPTOP~1\\AppData\\Local\\Temp\\predictor-owner-test-2jfj4wc2",
+  "stagedWorkPreserved": true,
+  "wrongPushDestinationRejected": true,
+  "verificationFailureClosed": true,
+  "scopedBuildCommitPush": true,
+  "publishCurrentChangesIdempotent": true,
+  "remoteAdvanceRejectedWithoutCommit": true,
+  "rejectedPushPreservedAndRetryable": true,
+  "authFailureNoMutation": true,
+  "realFullExportBackfillIdempotentRosterPreserved": true,
+  "uploadedTimesheetValidationDuplicateAndSameNameCorrection": true,
+  "backupAndRestartRecovery": true,
+  "loopbackCsrfAndBackupGuards": true,
+  "positiveHttpUploadUsesRealImporter": true,
+  "fullExportDefinesRosterWithoutModeChoice": true,
+  "passed": true
+}

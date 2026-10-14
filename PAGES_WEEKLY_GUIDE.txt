@@ -13,9 +13,10 @@ and in the site footer. Raw production exports and timesheets are not published.
 
 YOUR ROUTINE UPDATE: LOCAL IMPORT -> BUILD -> COMMIT/PUSH -> EVERYONE GETS UPDATE
 1. Double-click StartLocalSite.cmd. In Update history, upload the received production
-   workbook. Select Historical backfill - preserve current roster for exports that
-   contain current/former workers. Use Current-employee export only for a verified
-   current roster source. Wait for imports to finish and review the activity/mappings.
+   FULL production workbook of currently employed employees. Every employee in
+   that file is included in the current roster automatically; there is no import-mode
+   choice. Earlier production history is retained. Wait for imports to finish and
+   review the activity/mappings.
 2. Double-click BuildWeeklyPages.cmd. It refreshes validated local history and builds
    the current Monday-Sunday package without retraining model weights. Other weeks:
      BuildWeeklyPages.cmd --week YYYY-MM-DD
@@ -158,3 +159,16 @@ Never run ProductionExtractor deletion paths or broadly stage the parent reposit
 
 Official Pages workflow reference:
 https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages
+
+Release byte integrity: the generated pages_repository/.gitattributes preserves exact published asset bytes; the compiler normalizes source text to LF before hashing. Include .gitattributes when committing weekly generated output. Do not change global Git line-ending settings.
+
+Current planner controls: Google approval is required before planner startup; cancelled login stays locked. Forecast-history display is hidden but browser/local history remains retained. Store suggestions are searchable; crew search accepts spreadsheet names and tab-separated notes, and Copy crew and notes exports the same format. Kroger defaults to Modas; a manual override remains available per plan. UI colors follow UniteEditSuite/App.xaml. The static UI gate still does not protect publicly downloadable assets.
+
+
+EASY OWNER UPDATE: double-click UpdatePredictor.cmd in this Website folder.
+1. Select new timesheets (files or a folder) and/or an updated production workbook. Choose Current crew only to update the roster, or Full/current + former for historical backfill that preserves the roster. Click Import selected files. A recoverable local backup is made first; originals and all correction versions stay local.
+2. Review results and the current roster. Identical imports are skipped. Invalid files are reported; successfully imported files are retained. Unmatched attendance remains available in local history/mapping tools rather than being fabricated into complete model history.
+3. Check the public-data review box and click Publish current changes. This works without new files for code/UI updates. It builds this week's plan, verifies allowlists and actual Git bytes, stages only pages_repository approved files, commits meaningful changes and pushes main to ChessBadger/Production-Predictor using your existing Git authentication.
+A pushed commit is not yet a deployed site. Use Check deployment or GitHub Actions; failed deployments remain visible and the site may show its previous version. No force pushes, remote changes or credential/billing changes are made. Staged user work and newer remote main changes require review in your Git client; they are never overwritten. If a push fails, the local commit/history remain safe and Publish current changes can retry after resolving the Git error.
+Leave the launcher console open while working. Reopening the launcher reuses this local profile. For a restored profile, UpdatePredictor.cmd accepts its directory as an optional first argument. The service binds 127.0.0.1 only; upload/publish endpoints require the current local page token and reject unexpected origins.
+Public scope remains current employee names and derived model/productivity data, downloadable independently of the interface login. Raw exports, timesheets, former identities, archives, backups, local tools and research are excluded. Visitors have no upload controls.

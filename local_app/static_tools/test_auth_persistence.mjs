@@ -1,0 +1,23 @@
+import assert from 'node:assert/strict';
+import {createGate,connectAuth} from '../static_source/auth.mjs';
+let now=1000,expires=5000,opens=0,stops=0,signouts=0,timeout,closes=[];
+const user={uid:'u1',email:'jswanson@badgerinventory.com',getIdTokenResult:async()=>({expirationTime:new Date(expires).toISOString()})};
+const gate=createGate({allowed:[user.email],now:()=>now,setTimer:fn=>(timeout=fn,1),clearTimer:()=>{},onOpen:async()=>{opens++;return ()=>stops++},onClose:m=>closes.push(m),onError:()=>{},signOut:async()=>signouts++});
+await gate.userChanged(user);const oldCloses=closes.length;expires=10000;await gate.userChanged(user);
+assert.equal(opens,1);assert.equal(stops,0);assert.equal(closes.length,oldCloses);
+now=10001;timeout();assert.equal(signouts,0);assert.equal(stops,1);
+expires=20000;await gate.userChanged(user);assert.equal(opens,2);
+await gate.logout();assert.equal(signouts,1);gate.stop();
+// SDK contract double: restoration is delivered by Firebase, never a cached email bypass.
+globalThis.addEventListener=()=>{};globalThis.removeEventListener=()=>{};
+globalThis.document={addEventListener:()=>{},removeEventListener:()=>{},hidden:false};
+let listener,mode,connected=0;expires=Date.now()+3600000;
+const auth={currentUser:user,setPersistence:async value=>{mode=value},onIdTokenChanged:fn=>{assert.equal(mode,'local');listener=fn;queueMicrotask(()=>fn(auth.currentUser));return ()=>{}},signOut:async()=>{auth.currentUser=null;await listener(null)},signInWithPopup:async()=>({user})};
+const factory=()=>auth;factory.Auth={Persistence:{LOCAL:'local',SESSION:'session'}};factory.GoogleAuthProvider=class {};
+globalThis.firebase={apps:[{}],auth:factory};
+const options={onOpen:async()=>{connected++;return ()=>{}},onClose:()=>{},onError:e=>{throw e}};
+const a=await connectAuth(options);await new Promise(r=>setTimeout(r,0));assert.equal(connected,1);a.stop();
+const b=await connectAuth(options);await new Promise(r=>setTimeout(r,0));assert.equal(connected,2);await listener(user);assert.equal(connected,2);
+await b.logout();assert.equal(auth.currentUser,null);b.stop();
+const c=await connectAuth(options);await new Promise(r=>setTimeout(r,0));assert.equal(connected,2);c.stop();
+console.log('Passed: explicit LOCAL persistence, remembered SDK session, token refresh without remount, expiry without credential deletion, reconnect, and explicit sign-out. SDK restoration uses a test double.');

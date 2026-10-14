@@ -1,3 +1,4 @@
+import {visitModes} from '../local_app/counting-mode.mjs';
 import { readFileSync } from "node:fs";
 import vm from "node:vm";
 
@@ -16,10 +17,12 @@ export function createPlannerContext() {
 
 export function initializeData(context, rawJsonText) {
   context.rawJsonText = rawJsonText;
+  const parsed=JSON.parse(rawJsonText);context.verifiedVisitModes=Object.fromEntries(visitModes(Object.values(parsed).filter(Array.isArray).flat()));
   vm.runInContext(`{
     state.historyMetadata = JSON.parse(rawJsonText)._meta || null;
     state.hasExplicitRoster = Array.isArray(state.historyMetadata?.latestEmployeeIds);
     state.rows = extractRowsFromJson(JSON.parse(rawJsonText)).map(normalizeRow).filter(row => row.valid);
+    for(const row of state.rows)row.isModas=verifiedVisitModes[row.storeKey+'|'+row.date]??null;
     state.jobs = buildJobs(state.rows);
     state.stores = buildStoreStats(state.jobs);
     state.storesList = Array.from(state.stores.values());

@@ -147,6 +147,32 @@ def archive_export(source: Path, payload, archive: Path, repo: Path, source_byte
         duplicate = next((entry for entry in manifest["snapshots"] if entry["sourceSha256"] == source_hash), None)
         if duplicate:
             read_checked(archive / duplicate["rawFile"], source_hash)
+            active_ids = sorted({employee_id(row["Employee"]) for row in incoming.values()})
+            if import_mode == "current" and duplicate.get("importMode") == "historical_backfill" and active_ids != current.get("_meta", {}).get("latestEmployeeIds"):
+                # Explicit roster reclassification never reapplies old production rows or corrections.
+                now = datetime.now(timezone.utc)
+                stamp = now.isoformat(timespec="microseconds")
+                snapshot_id = now.strftime("%Y%m%dT%H%M%S.%fZ") + "_roster_" + uuid.uuid4().hex[:8]
+                directory = archive / "snapshots" / snapshot_id
+                directory.mkdir(parents=True, exist_ok=False)
+                result = {**current, "_meta": {**current["_meta"], "importedAt": stamp, "snapshotId": snapshot_id,
+                          "snapshotCount": len(manifest["snapshots"]) + 1, "latestEmployeeIds": active_ids,
+                          "latestImportMode": "current", "rosterSourceSha256": source_hash,
+                          "rosterPolicy": "explicit current-mode reclassification; production revisions unchanged"}}
+                effective_bytes = gzip.compress(json_bytes(result), mtime=0)
+                with (directory / "effective.json.gz").open("xb") as stream:
+                    stream.write(effective_bytes); stream.flush(); os.fsync(stream.fileno())
+                entry = {**duplicate, "id": snapshot_id, "receivedAt": stamp, "importMode": "current",
+                         "activeEmployeeCount": len(active_ids), "effectiveFile": str((directory / "effective.json.gz").relative_to(archive)),
+                         "effectiveSha256": sha256(effective_bytes), "newRows": 0, "revisedRows": 0,
+                         "sourceName": source.name, "effectiveRows": len(current["EmployeeProductionHistory"]),
+                         "incomingRows": len(incoming), "retainedAbsentRows": len({row_key(row) for row in current["EmployeeProductionHistory"]} - set(incoming)),
+                         "rosterReclassified": True, "reclassifiedFromSnapshot": duplicate["id"]}
+                with (directory / "receipt.json").open("xb") as stream: stream.write(json_bytes(entry))
+                updated = {**manifest, "snapshots": [*manifest["snapshots"], entry]}
+                atomic_write(archive / "manifest.json", json_bytes(updated))
+                return {"duplicate": True, "rosterReclassified": True, "archive": archive, "snapshot": entry,
+                        "payload": result, "manifest": updated}
             return {"duplicate": True, "archive": archive, "snapshot": duplicate,
                     "payload": current, "manifest": manifest}
 

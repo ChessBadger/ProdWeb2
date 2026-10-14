@@ -1,0 +1,181 @@
+{
+  "modelHash": "3ababe85232c535f3973d2138a6849cc8d4f719d38f506e02bfd63b8f1a70051",
+  "description": "Actual toggle replay, measured crew target; absolute residuals. Typical median error, not calibrated coverage. Current actual crews, retrospective receipt availability. Reviewed 2026-10-14.",
+  "rows": [
+    {
+      "date": "2026-03-09",
+      "integrated": 0.9142885724090404,
+      "reference": 0.747966580015113
+    },
+    {
+      "date": "2026-03-09",
+      "integrated": 0.4968922543515897,
+      "reference": 0.5607047114084358
+    },
+    {
+      "date": "2026-03-09",
+      "integrated": 0.281780663583552,
+      "reference": 0.25450537792922323
+    },
+    {
+      "date": "2026-03-09",
+      "integrated": 0.4408273643124718,
+      "reference": 0.5445218998475299
+    },
+    {
+      "date": "2026-03-09",
+      "integrated": 0.48096421538566303,
+      "reference": 0.3694098515132449
+    },
+    {
+      "date": "2026-03-09",
+      "integrated": 0.5419144099902882,
+      "reference": 0.733504499653141
+    },
+    {
+      "date": "2026-03-09",
+      "integrated": 0.7131039248316728,
+      "reference": 0.13607750419106424
+    },
+    {
+      "date": "2026-03-10",
+      "integrated": 0.18763231192730423,
+      "reference": 0.35389387612958956
+    },
+    {
+      "date": "2026-03-10",
+      "integrated": 0.5023623897338396,
+      "reference": 0.4778320292431846
+    },
+    {
+      "date": "2026-09-27",
+      "integrated": null,
+      "reference": 0.6749155709604029
+    },
+    {
+      "date": "2026-10-02",
+      "integrated": 2.3758185190922765,
+      "reference": 2.083333333333334
+    },
+    {
+      "date": "2026-10-02",
+      "integrated": 1.1686317047501396,
+      "reference": 1.8833333333333337
+    },
+    {
+      "date": "2026-10-02",
+      "integrated": 0.05817789870497325,
+      "reference": 0.8237541486225186
+    },
+    {
+      "date": "2026-10-02",
+      "integrated": 0.3822561139778773,
+      "reference": 0.22647655975615333
+    },
+    {
+      "date": "2026-10-09",
+      "integrated": 0.9646432149325337,
+      "reference": 1.6500000000000004
+    },
+    {
+      "date": "2026-10-09",
+      "integrated": 0.7458378280242028,
+      "reference": 0.916666666666667
+    },
+    {
+      "date": "2026-10-08",
+      "integrated": 2.4396917564776697,
+      "reference": 2.6333333333333337
+    },
+    {
+      "date": "2026-10-09",
+      "integrated": 0.28895007260557026,
+      "reference": 0.23461081350501978
+    },
+    {
+      "date": "2026-10-06",
+      "integrated": 0.5784189057628675,
+      "reference": 0.38712952090368535
+    },
+    {
+      "date": "2026-10-05",
+      "integrated": null,
+      "reference": 0.7934288661865558
+    },
+    {
+      "date": "2026-10-05",
+      "integrated": null,
+      "reference": 2.2543491800621602
+    },
+    {
+      "date": "2026-10-10",
+      "integrated": 0.6352582270678546,
+      "reference": 0.3860690293465314
+    },
+    {
+      "date": "2026-10-08",
+      "integrated": 0.4654799190643928,
+      "reference": 0.7607318606999574
+    },
+    {
+      "date": "2026-10-11",
+      "integrated": 0.8461986685980563,
+      "reference": 1.2213485094321888
+    },
+    {
+      "date": "2026-10-05",
+      "integrated": 0.19916202124751337,
+      "reference": 0.0712276930114264
+    },
+    {
+      "date": "2026-10-05",
+      "integrated": 0.5229062857318771,
+      "reference": 0.2885878401969748
+    },
+    {
+      "date": "2026-10-08",
+      "integrated": 1.0952243758129265,
+      "reference": 0.9654704865664456
+    },
+    {
+      "date": "2026-10-06",
+      "integrated": 0.7575400393095517,
+      "reference": 0.7800704953587223
+    },
+    {
+      "date": "2026-10-09",
+      "integrated": 0.5593569818522943,
+      "reference": 0.5672662681156502
+    },
+    {
+      "date": "2026-10-07",
+      "integrated": null,
+      "reference": 0.6933878405065728
+    },
+    {
+      "date": "2026-10-07",
+      "integrated": null,
+      "reference": 3.327296357590013
+    },
+    {
+      "date": "2026-10-13",
+      "integrated": 0.6990905144532347,
+      "reference": 0.16666666666666607
+    },
+    {
+      "date": "2026-10-12",
+      "integrated": 0.37943782292742734,
+      "reference": 1.3326267815018267
+    },
+    {
+      "date": "2026-10-13",
+      "integrated": 0.09718255120006791,
+      "reference": 0.49948738124927683
+    },
+    {
+      "date": "2026-10-13",
+      "integrated": 1.6024574947209262,
+      "reference": 1.0795517166442674
+    }
+  ]
+}

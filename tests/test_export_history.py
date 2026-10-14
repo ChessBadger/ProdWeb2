@@ -67,7 +67,9 @@ class HistoryTests(unittest.TestCase):
         self.source.write_bytes(b'backfill')
         duplicate = history.archive_export(self.source, [row(1, 900), row(3)], self.archive, self.repo, import_mode='current')
         self.assertTrue(duplicate['duplicate'])
-        self.assertEqual(duplicate['payload']['_meta']['latestEmployeeIds'], ['3'])
+        self.assertTrue(duplicate['rosterReclassified'])
+        self.assertEqual(duplicate['payload']['_meta']['latestEmployeeIds'], ['1', '3'])
+        self.assertEqual(duplicate['payload']['EmployeeProductionHistory'], current['payload']['EmployeeProductionHistory'])
 
     def test_failed_commit_preserves_previous_history(self):
         first = self.ingest([row()], b"first")

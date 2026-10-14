@@ -1,0 +1,9 @@
+import assert from 'node:assert/strict';import vm from 'node:vm';import fs from 'node:fs';
+import {createPlannerContext} from 'file:///C:/Users/Laptop%20122/Desktop/Store%20Prep/06%20Employee%20Reports/Website/scripts/planner-context.mjs';
+import {extractBulkEmployeeEntries,parseCrewText} from 'file:///C:/Users/Laptop%20122/Desktop/Store%20Prep/06%20Employee%20Reports/Website/local_app/static_source/planner.mjs';
+const c=createPlannerContext(),cases=['Jane Smith, John Doe; Jane Smith',' Jane   Smith\tRX train\r\nJohn Doe\tuntil noon','"Jane Smith"\t"note with\ttab"\nJohn Doe\t"quoted ""word"""','Jane Smith\t"line one\nline two"','Jane Smith\tfirst\tsecond'];
+for(const text of cases){c.text=text;assert.deepEqual(extractBulkEmployeeEntries(text),JSON.parse(JSON.stringify(vm.runInContext('extractBulkEmployeeEntries(text)',c))))}
+const people=[{key:'j',name:'Jane Smith'},{key:'d',name:'John Doe'},{key:'x',name:'Jane Swanson'}];assert.equal(parseCrewText('Doe',people)[0].id,'d');assert.equal(parseCrewText('Jane Sm.',people)[0].id,'j');assert.throws(()=>parseCrewText('Jane S.',people),/Ambiguous/);
+for(const note of ['RX','training','work with Jane','work w/ Jane','after 9','until noon','unitl noon','regular','trainer']){c.note=note;for(const start of ['06:00','07:00']){c.start=start==='06:00'?'6:00 AM':'7:00 AM';const expected=JSON.parse(JSON.stringify(vm.runInContext('parseBulkEmployeeNoteFlags(note,{startTimeText:start})',c))),actual=parseCrewText('John Doe\t'+note,people,start)[0];for(const k of ['rx','training','earlyLate'])assert.equal(actual[k],expected[k],note+' '+start+' '+k)}}
+fs.writeFileSync('clipboard_original_parity.json',JSON.stringify({passed:true,tabularCases:cases.length,noteHintCases:18,uniqueLastNames:true,punctuatedInitials:true,ambiguityRejected:true},null,2));console.log('Original clipboard parsing and note hint parity passed');
+
