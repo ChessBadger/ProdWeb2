@@ -127,7 +127,7 @@ def row_key(row):
     return json.dumps([date, account, store, employee], ensure_ascii=False)
 
 
-def archive_export(source: Path, payload, archive: Path, repo: Path, source_bytes=None, import_mode="current"):
+def archive_export(source: Path, payload, archive: Path, repo: Path, source_bytes=None, import_mode="historical_backfill"):
     if import_mode not in {"current", "historical_backfill"}:
         raise ValueError("Import mode must be current or historical_backfill.")
     validate_archive_dir(archive, repo)
@@ -257,3 +257,36 @@ def history_as_of(archive: Path, received_before: str):
     earlier = [entry for entry in manifest["snapshots"]
                if datetime.fromisoformat(entry["receivedAt"]) < cutoff]
     return latest_payload(archive, {**manifest, "snapshots": earlier})
+
+
+def update_roster(archive: Path, employee_ids):
+    """Append an explicit roster revision without revising any production row."""
+    active_ids = sorted({employee_id(i) for i in employee_ids})
+    if not active_ids or any(not i for i in active_ids):
+        raise ValueError("Select at least one current employee.")
+    with archive_lock(archive):
+        manifest = load_manifest(archive)
+        current = latest_payload(archive, manifest)
+        known = {employee_id(r['Employee']) for r in current['EmployeeProductionHistory']}
+        if not set(active_ids) <= known:
+            raise ValueError("Roster contains unknown employees; import their production history first.")
+        if active_ids == sorted(current.get('_meta', {}).get('latestEmployeeIds', [])):
+            return current
+        stamp = datetime.now(timezone.utc).isoformat(timespec='microseconds')
+        snapshot_id = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S.%fZ') + '_roster_' + uuid.uuid4().hex[:8]
+        directory = archive / 'snapshots' / snapshot_id
+        directory.mkdir(parents=True, exist_ok=False)
+        result = {**current, '_meta': {**current['_meta'], 'importedAt': stamp,
+                  'snapshotId': snapshot_id, 'snapshotCount': len(manifest['snapshots'])+1,
+                  'latestEmployeeIds': active_ids, 'latestImportMode': 'roster_update',
+                  'rosterPolicy': 'explicit scheduling roster; independent of production history'}}
+        data = gzip.compress(json_bytes(result), mtime=0)
+        atomic_write(directory/'effective.json.gz', data)
+        entry = {**manifest['snapshots'][-1], 'id': snapshot_id, 'receivedAt': stamp,
+                 'importMode': 'roster_update', 'activeEmployeeCount': len(active_ids),
+                 'effectiveFile': str((directory/'effective.json.gz').relative_to(archive)),
+                 'effectiveSha256': sha256(data), 'newRows': 0, 'revisedRows': 0,
+                 'rosterReclassified': True, 'rosterEmployeeIds': active_ids}
+        atomic_write(directory/'receipt.json', json_bytes(entry))
+        atomic_write(archive/'manifest.json', json_bytes({**manifest, 'snapshots': [*manifest['snapshots'], entry]}))
+        return result

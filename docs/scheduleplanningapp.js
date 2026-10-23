@@ -98,7 +98,7 @@ const ANALYTICS_DB_NAME = "crew_predictor_analytics";
 const ANALYTICS_DB_VERSION = 1;
 const ANALYTICS_DB_STORE = "snapshots";
 const ANALYTICS_DB_SNAPSHOT_ID = "latest";
-const DATA_ASSET_VERSION = "20261014-171620";
+const DATA_ASSET_VERSION = "20261023-180531";
 const withDataAssetVersion = (path) => `${path}?v=${DATA_ASSET_VERSION}`;
 const HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionExport.json");
 const RETAINED_HISTORY_JSON_PATH = withDataAssetVersion("data/EmployeeProductionHistory.json");

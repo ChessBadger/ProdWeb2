@@ -1,5 +1,5 @@
 """Build and verify only the explicitly approved current-roster derived Pages release."""
-import pathlib,json,hashlib,re,subprocess,math
+import pathlib,json,hashlib,re,subprocess,math,gzip
 H=lambda b:hashlib.sha256(b).hexdigest()
 # Generated UTF-8 assets have canonical LF bytes before content addressing.
 def asset_bytes(path):
@@ -16,7 +16,7 @@ def inspect_private(s):
   elif isinstance(v,list):
    for x in v:visit(x)
  visit(s)
- return {'schema':2,'classification':'APPROVED PUBLIC DERIVED PLANNING DATA','scope':'Current active roster only; original-reference scenario/diagnostic statistics','employeeCount':len(s['persons']),'storeCount':len(s['stores']),'exposed':['Current employee display names and opaque package keys','Current employee speed, evidence, recent weekly hours and residual summaries','Role-conditioned account productivity, participation and experience for current employees','Supported account/store display choices and opaque account keys','Selected-week scheduled visit dates, times, customer number, address, contact, map and schedule notes','Aggregate visit workload, duration, crew size, seasonal/attendance and residual summaries','Limited incumbent reference duration/capacity/evidence/age weights and current-employee overlap membership required for numeric parity','Current members of latest store crew and selected latest-inventory production totals/export hours/recorded clocks when unambiguous','Current-employee regular/Modas and most-recent-account rate variants; aggregate original reference profiles and archived accuracy/error summaries','Frozen model trees, thresholds and feature names; cutoff/version/fingerprint'],'excluded':['Former employee identities and selectable former staff','Employee numbers and raw export/attendance records','Raw workbooks, bulk historical visits, visit dates and complete timesheet/export rows','Databases, source receipts, archives and backups','Local paths, credentials, tokens and source file hashes'],'warning':'Anyone with the site URL can inspect the approved names and derived planning coefficients. This is not access-controlled data.'}
+ return {'schema':2,'classification':'APPROVED PUBLIC DERIVED PLANNING DATA','scope':'Current selectable roster; complete latest-visit historical crew display','employeeCount':len(s['persons']),'storeCount':len(s['stores']),'exposed':['Current employee display names and opaque package keys','Current employee speed, evidence, recent weekly hours and residual summaries','Role-conditioned account productivity, participation and experience for current employees','Supported account/store display choices and opaque account keys','Selected-week scheduled visit dates, times, customer number, address, contact, map and schedule notes','Aggregate visit workload, duration, crew size, seasonal/attendance and residual summaries','Limited incumbent reference duration/capacity/evidence/age weights and current-employee overlap membership required for numeric parity','Latest crew before the week plus completed in-week crews, with visit dates and former employee display names, and selected latest-inventory production totals/export hours/recorded clocks when unambiguous','Current-employee regular/Modas and most-recent-account rate variants; aggregate original reference profiles and archived accuracy/error summaries','Frozen model trees, thresholds and feature names; cutoff/version/fingerprint'],'excluded':['Selectable former staff and former-employee predictive profiles','Employee numbers and raw export/attendance records','Raw workbooks, bulk historical visits and complete timesheet/export rows','Databases, source receipts, archives and backups','Local paths, credentials, tokens and source file hashes'],'warning':'Anyone with the site URL can inspect the approved names and derived planning coefficients. This is not access-controlled data.'}
 
 def verify_planning(s):
  inspect_private(s)
@@ -31,21 +31,31 @@ def verify_planning(s):
  for r in [*s['incumbentRates'].values(),*s['scenarioRates'].values()]:
   if set(r)!=ids:raise ValueError('Historical person leaked into incumbent rates')
  for store in s['stores']:
-  if set(store)!={'key','name','context','lastCrew','stableKey','scenario','needsRx'} or not store['scenario']['variants']['default']:raise ValueError('Unexpected store fields')
+  if set(store)!={'key','name','context','lastCrew','lastCrewVisits','staffingAnchors','stableKey','scenario','needsRx'} or not store['scenario']['variants']['default']:raise ValueError('Unexpected store fields')
+  if set(store['staffingAnchors'])!={k for k,v in store['scenario']['variants'].items() if v}:raise ValueError('Missing staffing anchor variants')
+  for phases in store['staffingAnchors'].values():
+   for a in phases.values():
+    if not isinstance(a.get('hasTiming'),bool) or not isinstance(a.get('mainAvailable'),bool) or (a.get('mainAvailable') and (not isinstance(a.get('mainHours'),(int,float)) or not math.isfinite(a['mainHours']) or a['mainHours']<=0)):raise ValueError('Invalid staffing anchor support')
+    if set(a)!={'capacity','mainAvailable','mainHours','referenceHours','integratedFullHours','integratedCrewHours','hasTiming'}:raise ValueError('Invalid staffing anchor fields')
+    if any(not isinstance(a[k],(int,float)) or not math.isfinite(a[k]) or a[k]<=0 for k in ['capacity','referenceHours','integratedFullHours','integratedCrewHours']):raise ValueError('Invalid staffing anchor values')
   for j in store['scenario'].get('scheduleJobs',[]):
    if set(j)!={'key','date','startTime','typeOfInv','plannedDurationHours','plannedCrewSize','details'} or not s['cutoff']<=j['date']<=s['validThrough'] or (j['startTime'] and not re.fullmatch(r'\d{2}:\d{2}',j['startTime'])):raise ValueError('Unexpected scheduled-job fields or date')
    if set(j['details'])!={'customerNumber','address','city','stateCode','zipcode','phone','mapLink','dateScheduled','storeNotes','notes','runName','meetTimeText'} or any(not isinstance(v,str) for v in j['details'].values()):raise ValueError('Unexpected schedule details')
-  last=store['lastCrew']
-  if set(last)-{'employees','supervisor','supervisorStatus','rx','rows'}:raise ValueError('Unexpected last-crew metadata')
-  if last.get('supervisorStatus','recorded' if last['supervisor'] else 'missing') not in ['recorded','not-current','missing']:raise ValueError('Invalid last-crew supervisor status')
-  if 'supervisorStatus' in last and (last['supervisorStatus']=='recorded')!=bool(last['supervisor']):raise ValueError('Inconsistent last-crew supervisor status')
-  for row in last.get('rows',[]):
-   if row.get('support') not in ['recorded','missing','ambiguous','unconfirmed']:raise ValueError('Unexpected curated last-crew support label')
-   if set(row)!={'key','piecesPerHr','inStoreHours','pieces','recordedIn','recordedOut','support'} or row['key'] not in ids or row['key'] not in last['employees']:raise ValueError('Unexpected last-crew fields or identity')
-   for field in ['recordedIn','recordedOut']:
-    if row[field] is not None and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?',row[field]):raise ValueError('Invalid recorded clock')
-
-  if not set(last['employees'])<=ids or (last['supervisor'] and last['supervisor'] not in ids) or not set(last['rx'])<=set(last['employees']):raise ValueError('Invalid current last crew')
+  for last in [store['lastCrew'],*store['lastCrewVisits']]:
+   if set(last)-{'employees','supervisor','supervisorStatus','rx','rows','names','date'}:raise ValueError('Unexpected last-crew metadata')
+   if last.get('supervisorStatus','recorded' if last['supervisor'] else 'missing') not in ['recorded','not-current','missing']:raise ValueError('Invalid last-crew supervisor status')
+   if 'supervisorStatus' in last and (last['supervisorStatus']=='recorded')!=bool(last['supervisor']):raise ValueError('Inconsistent last-crew supervisor status')
+   history_ids=set(last.get('names',{}))
+   if history_ids!=set(last['employees'])|({last['supervisor']} if last['supervisor'] else set()) or any(not re.fullmatch(r'p[0-9]+',k) or not isinstance(v,str) or not v.strip() for k,v in last.get('names',{}).items()):raise ValueError('Invalid historical display identities')
+   for row in last.get('rows',[]):
+    if row.get('support') not in ['recorded','missing','ambiguous','unconfirmed']:raise ValueError('Unexpected curated last-crew support label')
+    if set(row)!={'key','piecesPerHr','inStoreHours','pieces','recordedIn','recordedOut','support'} or row['key'] not in history_ids or row['key'] not in last['employees']:raise ValueError('Unexpected last-crew fields or identity')
+    for field in ['recordedIn','recordedOut']:
+     if row[field] is not None and not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?',row[field]):raise ValueError('Invalid recorded clock')
+ 
+   if not set(last['employees'])<=history_ids or (last['supervisor'] and last['supervisor'] not in history_ids) or not set(last['rx'])<=set(last['employees']):raise ValueError('Invalid current last crew')
+  dates=[v['date'] for v in store['lastCrewVisits']]
+  if len(dates)!=len(set(dates)) or len(dates)>7 or any(not re.fullmatch(r'\d{4}-\d{2}-\d{2}',d) or d>=s['validThrough'] for d in dates):raise ValueError('Invalid display visit dates')
   for k in (store['context']['incumbent']['kernels'] if store['context'] else []):
    for f in ['full','counter']:
     if not set(k[f]['members'])<=ids:raise ValueError('Former employee reference leaked')
@@ -76,10 +86,12 @@ def verify_public(out):
  for f in m['files']:
   if 'sha256' in f and H((out/f['path']).read_bytes())!=f['sha256']:raise ValueError('Artifact hash mismatch '+f['path'])
  for role,f in release['files'].items():
-  if not re.fullmatch(role+r'\.[a-f0-9]{64}\.'+('json' if role=='planning' else 'css' if role=='style' else 'js'),f['path']) or H((out/f['path']).read_bytes())!=f['sha256']:raise ValueError('Release filename/hash mismatch')
+  if not re.fullmatch(role+r'\.[a-f0-9]{64}\.'+(r'json(?:\.gz)?' if role=='planning' else 'css' if role=='style' else 'js'),f['path']) or H((out/f['path']).read_bytes())!=f['sha256']:raise ValueError('Release filename/hash mismatch')
  if H(json.dumps({k:release[k] for k in ['files','shellSha256','bootstrapSha256']},sort_keys=True,separators=(',',':')).encode())!=release['version']:raise ValueError('Release version mismatch')
  if H((out/'index.html').read_bytes())!=release['shellSha256'] or H((out/'bootstrap.js').read_bytes())!=release['bootstrapSha256']:raise ValueError('Shell/bootstrap hash mismatch')
- verify_planning(json.loads((out/release['files']['planning']['path']).read_text(encoding='utf8')))
+ planning_path=out/release['files']['planning']['path'];planning_bytes=planning_path.read_bytes()
+ verify_planning(json.loads(gzip.decompress(planning_bytes) if planning_path.suffix=='.gz' else planning_bytes))
+ if any(p.stat().st_size>=100*1024*1024 for p in out.iterdir() if p.is_file()):raise ValueError('Public artifact exceeds the GitHub 100 MiB file limit; publication stopped before committing.')
  for path in [out/'index.html',out/release['files']['app']['path']]:
   text=path.read_text(encoding='utf8')
   if re.search(r'type=["\x27]file|planningFile|forecastFile|readFile\(',text):raise ValueError('Visitor file input/import found')
@@ -100,8 +112,8 @@ def build_public(w,snapshot):
  predictor=asset_bytes(src/'predictor.mjs');pn='predictor.'+H(predictor)+'.js';planner=(src/'planner.mjs').read_text(encoding='utf8').replace('./predictor.mjs','./'+pn).encode();en='planner.'+H(planner)+'.js'
  shell=(src/'index.html').read_text(encoding='utf8');body=shell.split('<body>',1)[1].split('</body>',1)[0]
  app=(src/'app.mjs').read_text(encoding='utf8').replace('./predictor.mjs','./'+pn).replace('./planner.mjs','./'+en).replace("throw Error('Approved sign-in required.');","throw Error('Approved sign-in required.');\ndocument.body.innerHTML="+json.dumps(body)+';').encode()
- content={'predictor':predictor,'planner':planner,'auth':asset_bytes(src/'auth.mjs'),'app':app,'style':asset_bytes(src/'style.css'),'planning':json.dumps(snapshot,ensure_ascii=False,allow_nan=False,separators=(',',':')).encode()}
- files={role:{'path':role+'.'+H(data)+('.json' if role=='planning' else '.css' if role=='style' else '.js'),'sha256':H(data)} for role,data in content.items()}
+ content={'predictor':predictor,'planner':planner,'auth':asset_bytes(src/'auth.mjs'),'app':app,'style':asset_bytes(src/'style.css'),'planning':gzip.compress(json.dumps(snapshot,ensure_ascii=False,allow_nan=False,separators=(',',':')).encode(),mtime=0)}
+ files={role:{'path':role+'.'+H(data)+('.json.gz' if role=='planning' else '.css' if role=='style' else '.js'),'sha256':H(data)} for role,data in content.items()}
  release={'schema':3,'authPolicy':'existing-client-ui-gate-public-data','version':H(json.dumps(files,sort_keys=True,separators=(',',':')).encode()),'cutoff':snapshot['cutoff'],'validThrough':snapshot['validThrough'],'files':files}
  index=b'''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://www.gstatic.com https://apis.google.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://*.googleapis.com https://*.firebaseapp.com; script-src 'self' https://www.gstatic.com https://apis.google.com; frame-src https://*.firebaseapp.com https://accounts.google.com; style-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"><title>Shift Crew Planner</title></head><body><main role="status" aria-live="polite"><h1>Shift Crew Planner</h1><p id="bootStatus">Loading latest shared planning data...</p><button id="retry" type="button" hidden>Retry loading</button></main><script type="module" src="./bootstrap.js?v=3"></script></body></html>'''
  bootstrap=asset_bytes(src/'bootstrap.mjs');index=index.replace(b'bootstrap.js?v=3',b'bootstrap.js?v='+H(bootstrap).encode());release.update(shellSha256=H(index),bootstrapSha256=H(bootstrap));release['version']=H(json.dumps({k:release[k] for k in ['files','shellSha256','bootstrapSha256']},sort_keys=True,separators=(',',':')).encode())
@@ -134,7 +146,7 @@ def build_clean_repository(w,out):
   p=repo/n;p.parent.mkdir(parents=True,exist_ok=True);data=source.read_bytes()
   if n=='.github/workflows/pages.yml' and (repo/'PUBLICATION_HOLD.txt').exists():data=data.replace(b'    steps:\n',b'    steps:\n      - name: Work-in-progress publication hold\n        run: exit 1\n',1)
   p.write_bytes(data)
- (repo/'README.txt').write_text('Shared Shift Crew Planner. This clean publishing folder includes approved current employee names and derived planning statistics/model weights, enumerated in pages_export/export-allowlist.json. Raw exports, timesheets, former employee identities, databases and backups remain local. Build locally after imports; commit only this folder and push main. The Pages Actions workflow publishes automatically on main pushes. Do not copy the parent Website repository or its Git history. No visitor uploads or file selection. Existing Google sign-in and a client-side approved-email list gate the UI only; static planning data remains publicly downloadable. Do not push while PUBLICATION_HOLD.txt exists. See the local weekly guide.\n',encoding='utf8')
+ (repo/'README.txt').write_text('Shared Shift Crew Planner. This clean publishing folder includes approved current employee names and derived planning statistics/model weights, enumerated in pages_export/export-allowlist.json. Latest-visit crew display includes former employee names and curated visit values. Raw exports, timesheets, databases and backups remain local. Build locally after imports; commit only this folder and push main. The Pages Actions workflow publishes automatically on main pushes. Do not copy the parent Website repository or its Git history. No visitor uploads or file selection. Existing Google sign-in and a client-side approved-email list gate the UI only; static planning data remains publicly downloadable. Do not push while PUBLICATION_HOLD.txt exists. See the local weekly guide.\n',encoding='utf8')
  verify_public(target)
 def verify_repository_root(repo):
  repo=pathlib.Path(repo).resolve()

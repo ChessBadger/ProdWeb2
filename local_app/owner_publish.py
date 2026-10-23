@@ -52,10 +52,10 @@ class Publisher:
   from export_week import build_snapshot,public_snapshot
   from verify_export import build_public,inspect_private
   from features import week
-  self.store.refresh();state=self.store.state();catalog=self.store.catalog();cut=week(datetime.date.today().isoformat());snapshot=build_snapshot(state,catalog,cut)
+  self.store.refresh();state=self.store.state();catalog=self.store.catalog();cut=datetime.date.today().isoformat();snapshot=build_snapshot(state,catalog,cut)
   private=self.store.root/'weekly_private';out=private/('planning-'+cut+'-'+state['fingerprint'][:12]+'.json');atomic(out,json.dumps(snapshot,allow_nan=False,separators=(',',':')).encode())
   private_report=inspect_private(snapshot);private_report.update(classification='PRIVATE FULL HISTORICAL REFERENCE - NOT PUBLISHED',privateFile=str(out),sha256=hashlib.sha256(out.read_bytes()).hexdigest());atomic(private/'LATEST.json',json.dumps(private_report,indent=2).encode())
-  release=build_public(self.website,public_snapshot(snapshot,state,catalog));report={'staticDirectory':str(self.website/'pages_export'),'privatePlanningFile':str(out),'publicPlanningFile':str(self.website/'pages_export'/release['files']['planning']['path']),'releaseVersion':release['version'],'cutoff':cut,'validThrough':snapshot['validThrough'],'activeRosterCount':sum(p['active'] for p in catalog['employees']),'publicContainsCompanyData':True,'publicScope':'Approved current employee names and derived prediction data only'};atomic(ROOT/'verification/static_latest.json',json.dumps(report,indent=2).encode());return release
+  release=build_public(self.website,public_snapshot(snapshot,state,catalog));report={'staticDirectory':str(self.website/'pages_export'),'privatePlanningFile':str(out),'publicPlanningFile':str(self.website/'pages_export'/release['files']['planning']['path']),'releaseVersion':release['version'],'cutoff':cut,'validThrough':snapshot['validThrough'],'activeRosterCount':sum(p['active'] for p in catalog['employees']),'publicContainsCompanyData':True,'publicScope':'Current planning roster and derived predictions; complete latest-visit historical crew display'};atomic(ROOT/'verification/static_latest.json',json.dumps(report,indent=2).encode());return release
  def verify_staged_bytes(self):
   # Verify the actual Git blob bytes, including line-ending conversions, before committing.
   with tempfile.TemporaryDirectory(prefix='owner-release-check-') as td:
@@ -71,15 +71,16 @@ class Publisher:
   except FileExistsError:raise PublishError('Another owner publication is running. Wait for it to finish. If it was interrupted, review repository status before removing its owner lock file.')
   os.close(fd);own_tree=None;committed=False
   try:
-   self.progress('Building the current week from retained local history. No new input files are required.');release=self.build();verify_public(self.repo/'pages_export');self.unstaged_guard();self.progress('Verifying and staging only reviewed public files.')
+   self.progress('Building the next seven days using imported history through yesterday. No new input files are required.');release=self.build();verify_public(self.repo/'pages_export');self.unstaged_guard();self.progress('Verifying and staging only reviewed public files.')
    self.git('add','-A','--',*SCOPED);staged=self.git('diff','--cached','--name-only').stdout.splitlines()
    if any(not allowed(n) for n in staged):raise PublishError('Unrelated staged changes appeared during publication. Stopped without committing them; review Git status.')
    own_tree=self.git('write-tree').stdout.strip();self.verify_staged_bytes()
    if staged:
-    self.progress('Committing the verified weekly release locally.');self.git('commit','-m','Update crew planner '+release['cutoff']+' release '+release['version'][:12]);committed=True
+    self.progress('Committing the verified planning release locally.');self.git('commit','-m','Update crew planner '+release['cutoff']+' release '+release['version'][:12]);committed=True
    sha=self.git('rev-parse','HEAD').stdout.strip();self.progress('Pushing main. A successful push is not yet a completed Pages deployment.')
    push=self.git('push','origin','HEAD:refs/heads/main',check=False)
    if push.returncode:
+    if 'GH001' in push.stderr or 'exceeds GitHub' in push.stderr:raise PublishError('GitHub rejected an oversized file in unpublished commits. Local history is preserved. Rebuild with compressed planning data and repair the unpublished commit before retrying; no force push was attempted.')
     raise PublishError('Push failed or was rejected. Your verified local commit and imported history are preserved. Check authentication/network or reconcile newer remote main changes in your Git client, then retry Publish current changes. No force push was attempted.')
    result={'status':'pushed','commit':sha,'committed':committed,'releaseVersion':release['version'],'actionsUrl':ACTIONS,'siteUrl':SITE,'message':'Pushed successfully. GitHub Pages deployment is pending; check Actions before expecting the online update.'};atomic(self.store.root/'owner_publish.json',json.dumps(result,indent=2).encode());return result
   except Exception:

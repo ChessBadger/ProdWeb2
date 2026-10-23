@@ -1,0 +1,13 @@
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+import {gzipSync} from 'node:zlib';
+const source=fs.readFileSync(new URL('../static_source/bootstrap.mjs',import.meta.url),'utf8');
+const context={Blob,Response,DecompressionStream,TextDecoder};
+vm.runInNewContext(source.replace('load().catch(error=>gate(error.message));','globalThis.decode=decodePlanning;'),context);
+const input={persons:[{name:'Test',active:true}],stores:[{rate:1234.56789012345}],zero:0};
+const raw=Buffer.from(JSON.stringify(input));
+assert.equal(JSON.stringify(await context.decode(gzipSync(raw),'planning.test.json.gz')),JSON.stringify(input));
+assert.equal(JSON.stringify(await context.decode(raw,'planning.test.json')),JSON.stringify(input));
+await assert.rejects(()=>context.decode(Buffer.from('invalid'),'planning.test.json.gz'));
+console.log('PASS: browser decompression path preserves exact data, accepts legacy JSON, rejects corrupt gzip');

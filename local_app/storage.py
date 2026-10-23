@@ -113,7 +113,7 @@ class Store:
    with self.db() as db:
     prior=db.execute('SELECT receipt FROM events WHERE event_key=?',(eid,)).fetchone();payload=json.dumps(event);db.execute('INSERT INTO receipts VALUES(?,?,?,?,?,?)',(digest,'timesheet',source.name,event['receivedAt'],str(path.relative_to(self.root)),payload));db.execute('INSERT INTO event_versions VALUES(?,?,?,?)',(eid,digest,event['receivedAt'],payload));db.execute('INSERT OR REPLACE INTO events VALUES(?,?,?)',(eid,digest,payload))
    self.invalidate();return {'duplicate':False,'revision':bool(prior),'event':eid,'hash':digest,'message':'Timesheet archived; attendance and model eligibility refreshed. Unmatched production remains attendance-only.'}
- def import_production(self,name,data,fail_after_archive=False,import_mode="current",publish_parent=True):
+ def import_production(self,name,data,fail_after_archive=False,import_mode="historical_backfill",publish_parent=True):
   with self.lock:
    if pathlib.Path(name).suffix.lower() not in ['.xlsx','.xlsm','.xls']:raise ValueError('Choose an EmployeeProduction Excel workbook.')
    
@@ -127,7 +127,13 @@ class Store:
     history=result['payload'];meta=history['_meta'];current=[{k:v for k,v in r.items() if k!='_history'} for r in history['EmployeeProductionHistory'] if r['_history']['sourceSha256']==meta['latestExportSha256']]
     for directory in [WEBSITE,WEBSITE/'public/data',WEBSITE/'docs/data',WEBSITE/'data']:
      atomic(directory/'EmployeeProductionHistory.json',json_bytes(history));atomic(directory/'EmployeeProductionExport.json',json_bytes({'EmployeeProductionExport':current}))
-   self.invalidate();return {'duplicate':result['duplicate'],'rosterReclassified':result.get('rosterReclassified',False),'snapshot':result['payload']['_meta']['snapshotId'],'historyRows':len(result['payload']['EmployeeProductionHistory']),'importMode':import_mode,'activeEmployeeCount':len(result['payload']['_meta']['latestEmployeeIds']),'archive':str(self.export_dir),'message':('Identical workbook data retained; explicit current-roster reclassification applied without changing production revisions.' if result.get('rosterReclassified') else 'Production history archived and reconciled; earlier employees/jobs remain retained.')}
+   self.invalidate();return {'duplicate':result['duplicate'],'rosterReclassified':result.get('rosterReclassified',False),'snapshot':result['payload']['_meta']['snapshotId'],'historyRows':len(result['payload']['EmployeeProductionHistory']),'importMode':import_mode,'activeEmployeeCount':len(result['payload']['_meta']['latestEmployeeIds']),'archive':str(self.export_dir),'message':('Identical workbook data retained; explicit current-roster reclassification applied without changing production revisions.' if result.get('rosterReclassified') else 'Production history archived and reconciled; earlier employees/jobs remain retained. Scheduling roster unchanged.' if import_mode=='historical_backfill' else 'Production history and explicitly supplied current roster updated.')}
+ def update_roster(self,employee_ids):
+  from export_history import update_roster
+  with self.lock:
+   backup=self.backup();payload=update_roster(self.export_dir,employee_ids)
+   with self.db() as db:db.execute('INSERT OR REPLACE INTO settings VALUES(?,?)',('export_payload',json.dumps(payload)))
+   self.invalidate();return {'activeEmployeeCount':len(payload['_meta']['latestEmployeeIds']),'backup':str(backup),'message':'Scheduling roster updated; all production history preserved.'}
  def map_store(self,store,alias):
   if not re.fullmatch(r'\d{8}',store):raise ValueError('Numeric customer ID must have eight digits.')
   aliases={s['alias'] for s in self.catalog()['stores']}

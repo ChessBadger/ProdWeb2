@@ -9,9 +9,9 @@
   "exposure": {
     "schema": 2,
     "classification": "APPROVED PUBLIC DERIVED PLANNING DATA",
-    "scope": "Current active roster only; original-reference scenario/diagnostic statistics",
+    "scope": "Current selectable roster; complete latest-visit historical crew display",
     "employeeCount": 60,
-    "storeCount": 866,
+    "storeCount": 874,
     "exposed": [
       "Current employee display names and opaque package keys",
       "Current employee speed, evidence, recent weekly hours and residual summaries",
@@ -20,14 +20,14 @@
       "Selected-week scheduled visit dates, times, customer number, address, contact, map and schedule notes",
       "Aggregate visit workload, duration, crew size, seasonal/attendance and residual summaries",
       "Limited incumbent reference duration/capacity/evidence/age weights and current-employee overlap membership required for numeric parity",
-      "Current members of latest store crew and selected latest-inventory production totals/export hours/recorded clocks when unambiguous",
+      "Latest crew before the week plus completed in-week crews, with visit dates and former employee display names, and selected latest-inventory production totals/export hours/recorded clocks when unambiguous",
       "Current-employee regular/Modas and most-recent-account rate variants; aggregate original reference profiles and archived accuracy/error summaries",
       "Frozen model trees, thresholds and feature names; cutoff/version/fingerprint"
     ],
     "excluded": [
-      "Former employee identities and selectable former staff",
+      "Selectable former staff and former-employee predictive profiles",
       "Employee numbers and raw export/attendance records",
-      "Raw workbooks, bulk historical visits, visit dates and complete timesheet/export rows",
+      "Raw workbooks, bulk historical visits and complete timesheet/export rows",
       "Databases, source receipts, archives and backups",
       "Local paths, credentials, tokens and source file hashes"
     ],
@@ -36,11 +36,11 @@
   "files": [
     {
       "path": "index.html",
-      "sha256": "611ba252d15a8a9a44ad26444ec88c6b9c63d0725c6ffbb2470f8bfb5cf0a9a6"
+      "sha256": "ce2f3f230b729796b63ea3d6f50abbfe6c14215876e0b0bdfb92ce91e50effc9"
     },
     {
       "path": "bootstrap.js",
-      "sha256": "2b0f1bbb5f99fb8fb541c6cc4f23572c0e3c05f6ce31797040f386428dd9eae3"
+      "sha256": "6bb0cc8f661f01f77e33604af288ecbfe7e4582da585facc2612a66bad6e41ba"
     },
     {
       "path": ".nojekyll",
@@ -48,31 +48,31 @@
     },
     {
       "path": "release.json",
-      "sha256": "4bd95a282b3d09ea6f046b5551f45264bcf49489fe6d189bbbff3aa0c3c31065"
+      "sha256": "3f45438890d02427820af0849e230b65d81bb792ce5c12df7191ab78757785ac"
     },
     {
-      "path": "predictor.a30df4296dbda746729ed217a460eca1899e7ec3e854a926769f8b5070d21659.js",
-      "sha256": "a30df4296dbda746729ed217a460eca1899e7ec3e854a926769f8b5070d21659"
+      "path": "predictor.eb21d9a23fa1e3026097792832ef396e6d3ed12626296a711db6b53b6b78ed0b.js",
+      "sha256": "eb21d9a23fa1e3026097792832ef396e6d3ed12626296a711db6b53b6b78ed0b"
     },
     {
-      "path": "planner.df11db64fcf4cd2f6d24e18d7d766d7b887a817d6f340e025b28f05272375143.js",
-      "sha256": "df11db64fcf4cd2f6d24e18d7d766d7b887a817d6f340e025b28f05272375143"
+      "path": "planner.3ec83287deb40b4812cc4a029626bddd36f57b0b1a86c0c5ee651f1a35a2a6cf.js",
+      "sha256": "3ec83287deb40b4812cc4a029626bddd36f57b0b1a86c0c5ee651f1a35a2a6cf"
     },
     {
       "path": "auth.3d24988ab471739e1e1818cdbeb5e60b3ac47fb1b0ac860c1bf9a8624cedceb8.js",
       "sha256": "3d24988ab471739e1e1818cdbeb5e60b3ac47fb1b0ac860c1bf9a8624cedceb8"
     },
     {
-      "path": "app.f9c4588821cb7bc50dfc9d0cb0688d1d251bf03c2496416ae830de1262c08b5c.js",
-      "sha256": "f9c4588821cb7bc50dfc9d0cb0688d1d251bf03c2496416ae830de1262c08b5c"
+      "path": "app.1d7e2e219ba098ac23c852d15f25de6e4818f1f125f3f04f5d2a99ec6a987d3f.js",
+      "sha256": "1d7e2e219ba098ac23c852d15f25de6e4818f1f125f3f04f5d2a99ec6a987d3f"
     },
     {
       "path": "style.3416e64697a2dced4adb3852b23d9abc12d03f6862e2b739ae7ee584d70185bc.css",
       "sha256": "3416e64697a2dced4adb3852b23d9abc12d03f6862e2b739ae7ee584d70185bc"
     },
     {
-      "path": "planning.5231c98f3569cf60fdef63ccced2ed3a89fa9e59e9d18e6b2e41d3ac818e0cd5.json",
-      "sha256": "5231c98f3569cf60fdef63ccced2ed3a89fa9e59e9d18e6b2e41d3ac818e0cd5"
+      "path": "planning.9f1f3fbbdfada329238fe1ab0adc0ff9ae01ace6661e47c49c070ce18bc1e00b.json.gz",
+      "sha256": "9f1f3fbbdfada329238fe1ab0adc0ff9ae01ace6661e47c49c070ce18bc1e00b"
     },
     {
       "path": "export-allowlist.json",

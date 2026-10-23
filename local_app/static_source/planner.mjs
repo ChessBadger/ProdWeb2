@@ -985,7 +985,12 @@ export function predictPlan(snapshot,plan){
 
 function predictPlanCore(snapshot,plan){
 
- const main=predict(snapshot,plan),mainAvailable=main.status==='ok';
+ const rawMain=predict(snapshot,plan),store=snapshot.stores.find(s=>s.key===plan.storeKey);
+ // Keep the published staffing baseline usable beyond its original schedule window.
+ const anchors=store.staffingAnchors?.[plan.countingMode||'default'];
+ const anchor=anchors?.[Number(plan.date.slice(5,7))%3]||anchors?.[Number(snapshot.cutoff.slice(5,7))%3];
+ if(!anchor)throw Error('Rebuild planning data to include full historical staffing anchors.');
+ const main={...rawMain,predictedHours:anchor.mainHours},mainAvailable=anchor.mainAvailable;
 
  const roleKeys=['rx','training','earlyLate'];if(roleKeys.some(k=>(plan.roles?.[k]||[]).some(id=>!plan.employees.includes(id))))throw Error('All roles must belong to the selected crew.');
 
@@ -1005,21 +1010,19 @@ function predictPlanCore(snapshot,plan){
 
  const neutralReference=referencePrediction(snapshot,baselinePlan,plan.countingMode||'default');
 
- const historicalFullOnsiteHours=plan.model==='reference'||!mainAvailable?neutralReference.onSiteDuration:Math.max(.25,main.predictedHours+neutralReference.onSiteDuration-referenceBase.onSiteDuration);
-
- const timing=mainAvailable&&plan.model!=='reference'&&plan.employees.some(id=>id!==plan.roles?.supervisor)?snapshot.stores.find(s=>s.key===plan.storeKey)?.scenario?.crewTiming:null;
-
- const historicalCrewHours=timing?Math.max(.25,historicalFullOnsiteHours-timing.correctionHours):historicalFullOnsiteHours;
+ const historicalFullOnsiteHours=plan.model==='reference'?anchor.referenceHours:anchor.integratedFullHours;
+ const timing=plan.model!=='reference'&&anchor.hasTiming?store.scenario.crewTiming:null;
+ const historicalCrewHours=plan.model==='reference'?anchor.referenceHours:anchor.integratedCrewHours;
 
  const capacity=(p,rates)=>p.employees.reduce((total,id)=>total+Math.max(0,rates[id]?.[0]||0)*DurationModel.roleFactor(id,p),0);
 
- const baselineCapacity=capacity(baselinePlan,neutralReference.rates),currentCapacity=capacity(plan,reference.rates);
+ const baselineCapacity=anchor.capacity,currentCapacity=capacity(plan,reference.rates);
 
  if(!(baselineCapacity>0&&currentCapacity>0))throw Error('No counting capacity supports this plan.');
 
  const capacityRatio=baselineCapacity/currentCapacity,adjusted=!!scenarioActive(plan);
 
- const displayHours=Math.max(.25,historicalCrewHours*capacityRatio),fullOnsiteHours=displayHours+(historicalFullOnsiteHours-historicalCrewHours),supervisorExtensionHours=timing&&plan.employees.includes(plan.roles?.supervisor)?timing.extensionHours:null;
+ const displayHours=Math.max(.25,historicalCrewHours*Math.pow(capacityRatio,.3)),fullOnsiteHours=displayHours+(historicalFullOnsiteHours-historicalCrewHours),supervisorExtensionHours=timing&&plan.employees.includes(plan.roles?.supervisor)?timing.extensionHours:null;
 
  const capacityScenario={baselineCapacity,currentCapacity,ratio:capacityRatio,workload:historicalCrewHours*baselineCapacity,historicalCrewHours,historicalFullOnsiteHours};
 
@@ -1027,7 +1030,7 @@ function predictPlanCore(snapshot,plan){
 
  const target=Number(plan.targetValue)||0;if(target<0)throw Error('Target must not be negative.');const laborHours=displayHours*crew.length,goalValue=plan.goalMode==='manhours'?laborHours:displayHours,delta=target>0?goalValue-target:null,riskBand=plan.goalMode==='manhours'?2:.5;
 
- return {...main,status:'ok',mainAvailable,crewSize:crew.length,main,reference,referenceBase,capacityScenario,displayHours,fullOnsiteHours,crewTiming:timing,supervisorExtensionHours,laborHours,effectiveCountingHours:displayHours*crew.reduce((a,p)=>a+p.factor,0),adjusted,crew,delta,recommendation:delta===null?'Duration Estimate':Math.abs(delta)<=riskBand?'On Target':delta>0?'Estimate Exceeds Goal':'Ahead of Goal',estimateKind:Math.abs(capacityRatio-1)>1e-9?'Fixed-workload capacity scenario':timing?'Crew estimate from prior clocks':!mainAvailable?'Original reference fallback — no mapped full history':plan.model==='reference'?'Original attendance-proxy reference':'Integrated full-onsite model',scenarioRule:'Fixed-workload scenario: the historical crew estimate is anchored to this crew at default contributions (supervisor/RX 50%, other counters 100%) and standard production in the selected counting mode. Time scales by baseline/current effective pieces per hour. The entire crew window is assumed to scale; separate counting-only time is unavailable. Supervisor time outside the crew window is retained. Scenario accuracy is not separately validated.',historicalCalibration:reference.pack.calibration};
+ return {...main,status:'ok',mainAvailable,crewSize:crew.length,main,reference,referenceBase,capacityScenario,displayHours,fullOnsiteHours,crewTiming:timing,supervisorExtensionHours,laborHours,effectiveCountingHours:displayHours*crew.reduce((a,p)=>a+p.factor,0),adjusted,crew,delta,recommendation:delta===null?'Duration Estimate':Math.abs(delta)<=riskBand?'On Target':delta>0?'Estimate Exceeds Goal':'Ahead of Goal',estimateKind:Math.abs(capacityRatio-1)>1e-9?'Fixed-workload capacity scenario':timing?'Crew estimate from prior clocks':!mainAvailable?'Original reference fallback — no mapped full history':plan.model==='reference'?'Original attendance-proxy reference':'Integrated full-onsite model',scenarioRule:'Staffing estimate uses a fixed full historical crew reference, including former employees. Duration scales with the reference/current capacity ratio raised to 0.3, so more capacity shortens time with diminishing benefit. Role contributions and availability affect capacity. Projected pieces are capacity-based estimates, not a measured store workload. Supervisor time outside the crew window is retained.',historicalCalibration:reference.pack.calibration};
 
 }
 
@@ -1049,7 +1052,7 @@ export async function allocate(snapshot,config,{onProgress=()=>{},cancelled=()=>
 
  const names=id=>snapshot.persons.find(p=>p.key===id)?.name||id,units=buildEmployeeLinkedUnits(ids,[config.supervisorA],[config.supervisorB],constraints,names);if(units.error)throw Error(units.error);let best=null,evaluated=0;const memo=new Map();
 
- function score(a,b){if(cancelled())throw Error('Assignment cancelled because inputs changed.');if(!a.length||!b.length||a.length>50||b.length>50||!constraintsSatisfiedForAssignment(constraints,a,b))return null;function prediction(crew,which){const selected=new Set(crew),st=which==='A'?config.storeA:config.storeB,store=snapshot.stores.find(s=>s.key===st),roles={supervisor:which==='A'?config.supervisorA:config.supervisorB,rx:(config.sharedRoles?.rx||[]).filter(i=>selected.has(i)),training:(config.sharedRoles?.training||[]).filter(i=>selected.has(i)),earlyLate:(config.sharedRoles?.earlyLate||[]).filter(i=>selected.has(i))};if(store.needsRx&&!roles.rx.length)return null;const override=which==='A'?config.countingModeA:config.countingModeB;const countingMode=override&&override!=='default'?override:(/\bkroger\b/i.test(store.name)?'modas':'default');const p={...config.plan,notes:Object.fromEntries(crew.map(id=>[id,config.notes?.[id]||''])),startTime:which==='A'?(config.startTimeA||''):(config.startTimeB||''),scheduleJobKey:which==='A'?config.scheduleJobKeyA:config.scheduleJobKeyB,hasScheduledJob:!!(which==='A'?config.scheduleJobKeyA:config.scheduleJobKeyB),countingMode,storeKey:st,date:config.date,employees:crew,roles,modes:{...DurationModel.DEFAULT_MODES,...config.modes,supervisor:which==='A'?config.supervisorModeA:config.supervisorModeB},targetValue:which==='A'?config.goalA:config.goalB,goalMode:config.goalMode,shrink:{...config.plan?.shrink,employeeIds:(config.plan?.shrink?.employeeIds||[]).filter(i=>selected.has(i))}};const key=JSON.stringify([which,[...crew].sort()]);if(!memo.has(key)){try{memo.set(key,predictPlan(snapshot,p))}catch{memo.set(key,null)}}return memo.get(key);}
+ function score(a,b){if(cancelled())throw Error('Assignment cancelled because inputs changed.');if(!a.length||!b.length||a.length>50||b.length>50||!constraintsSatisfiedForAssignment(constraints,a,b))return null;function prediction(crew,which){const selected=new Set(crew),st=which==='A'?config.storeA:config.storeB,store=snapshot.stores.find(s=>s.key===st),roles={supervisor:which==='A'?config.supervisorA:config.supervisorB,rx:(config.sharedRoles?.rx||[]).filter(i=>selected.has(i)),training:(config.sharedRoles?.training||[]).filter(i=>selected.has(i)),earlyLate:(config.sharedRoles?.earlyLate||[]).filter(i=>selected.has(i))};if(store.needsRx&&!roles.rx.length)return null;const override=which==='A'?config.countingModeA:config.countingModeB;const countingMode=override&&override!=='default'?override:(/\b(?:kroger|mariano(?:[\u0027\u2019]s|s)?)\b/i.test(store.name)?'modas':'default');const p={...config.plan,notes:Object.fromEntries(crew.map(id=>[id,config.notes?.[id]||''])),startTime:which==='A'?(config.startTimeA||''):(config.startTimeB||''),scheduleJobKey:which==='A'?config.scheduleJobKeyA:config.scheduleJobKeyB,hasScheduledJob:!!(which==='A'?config.scheduleJobKeyA:config.scheduleJobKeyB),countingMode,storeKey:st,date:config.date,employees:crew,roles,modes:{...DurationModel.DEFAULT_MODES,...config.modes,supervisor:which==='A'?config.supervisorModeA:config.supervisorModeB},targetValue:which==='A'?config.goalA:config.goalB,goalMode:config.goalMode,shrink:{...config.plan?.shrink,employeeIds:(config.plan?.shrink?.employeeIds||[]).filter(i=>selected.has(i))}};const key=JSON.stringify([which,[...crew].sort()]);if(!memo.has(key)){try{memo.set(key,predictPlan(snapshot,p))}catch{memo.set(key,null)}}return memo.get(key);}
 
   const A=prediction(a,'A'),B=prediction(b,'B');if(!A||!B)return null;const valueA=config.goalMode==='manhours'?A.laborHours:A.displayHours,valueB=config.goalMode==='manhours'?B.laborHours:B.displayHours,errA=Math.abs(valueA-config.goalA),errB=Math.abs(valueB-config.goalB);return {crewA:[...a],crewB:[...b],A,B,valueA,valueB,score:errA+errB,maxErr:Math.max(errA,errB)};}
 
@@ -1067,7 +1070,7 @@ export async function allocate(snapshot,config,{onProgress=()=>{},cancelled=()=>
 
 
 
-export function migrateDraft(draft,snapshot){if(!draft)return null;const people=new Map(snapshot.persons.map(p=>[p.stableKey,p.key])),stores=new Map(snapshot.stores.map(s=>[s.stableKey,s.key]));const map=i=>people.get(i);return {...draft,notes:Object.fromEntries(Object.entries(draft.stableNotes||{}).map(([id,note])=>[map(id),note]).filter(([id])=>id)),storeKey:stores.get(draft.stableStore)||'',employees:(draft.stableEmployees||[]).map(map).filter(Boolean),roles:{supervisor:map(draft.stableRoles?.supervisor)||'',rx:(draft.stableRoles?.rx||[]).map(map).filter(Boolean),training:(draft.stableRoles?.training||[]).map(map).filter(Boolean),earlyLate:(draft.stableRoles?.earlyLate||[]).map(map).filter(Boolean)},shrink:{...draft.shrink,employeeIds:(draft.stableShrink||[]).map(map).filter(Boolean)},date:draft.date<snapshot.cutoff?snapshot.cutoff:draft.date>snapshot.validThrough?snapshot.validThrough:draft.date};}
+export function migrateDraft(draft,snapshot){if(!draft)return null;const people=new Map(snapshot.persons.map(p=>[p.stableKey,p.key])),stores=new Map(snapshot.stores.map(s=>[s.stableKey,s.key]));const map=i=>people.get(i);return {...draft,notes:Object.fromEntries(Object.entries(draft.stableNotes||{}).map(([id,note])=>[map(id),note]).filter(([id])=>id)),storeKey:stores.get(draft.stableStore)||'',employees:(draft.stableEmployees||[]).map(map).filter(Boolean),roles:{supervisor:map(draft.stableRoles?.supervisor)||'',rx:(draft.stableRoles?.rx||[]).map(map).filter(Boolean),training:(draft.stableRoles?.training||[]).map(map).filter(Boolean),earlyLate:(draft.stableRoles?.earlyLate||[]).map(map).filter(Boolean)},shrink:{...draft.shrink,employeeIds:(draft.stableShrink||[]).map(map).filter(Boolean)},date:draft.date<snapshot.cutoff?snapshot.cutoff:draft.date};}
 
 export function persistentDraft(plan,snapshot){const person=id=>snapshot.persons.find(p=>p.key===id)?.stableKey||'',store=snapshot.stores.find(s=>s.key===plan.storeKey);return {...plan,stableStore:store?.stableKey||'',stableEmployees:plan.employees.map(person),stableRoles:Object.fromEntries(Object.entries(plan.roles).map(([k,v])=>[k,Array.isArray(v)?v.map(person):person(v)])),stableNotes:Object.fromEntries(Object.entries(plan.notes||{}).map(([id,note])=>[person(id),note])),stableShrink:(plan.shrink?.employeeIds||[]).map(person)};}
 

@@ -29,7 +29,7 @@ class HistoryTests(unittest.TestCase):
 
     def ingest(self, rows, content):
         self.source.write_bytes(content)
-        return history.archive_export(self.source, {"sheet": rows}, self.archive, self.repo)
+        return history.archive_export(self.source, {"sheet": rows}, self.archive, self.repo, import_mode="current")
 
     def test_overlap_revision_absence_and_old_duplicate(self):
         first = self.ingest([row(1), row(2)], b"first")
@@ -105,12 +105,13 @@ class HistoryTests(unittest.TestCase):
 
     def test_import_publication_is_retryable_and_keeps_raw_private(self):
         import convert_xl_to_json as converter
+        self.ingest([row(), row(2)], b"roster-seed")
         captured = (b"workbook", {"sheet": [row(), row(2)]})
         with patch.object(converter, "read_excel_payload", return_value=captured):
             with patch.object(converter, "atomic_write", side_effect=OSError("publication failed")):
                 with self.assertRaises(OSError):
                     converter.import_production_export(self.source, self.repo, self.archive)
-            self.assertEqual(history.verify_archive(self.archive), 1)
+            self.assertEqual(history.verify_archive(self.archive), 2)
             self.assertFalse((self.repo / "EmployeeProductionExport.json").exists())
             result = converter.import_production_export(self.source, self.repo, self.archive)
         self.assertTrue(result["duplicate"])

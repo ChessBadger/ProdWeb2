@@ -65,19 +65,31 @@ def build_snapshot(s,catalog,cut):
    key='r'+str(len(rate_sets));rate_hashes[digest]=key;rate_sets[key]=rates
   inc['rateSet']=rate_hashes[digest]
  return {'planning':planning,'incumbentRates':rate_sets,'schema':1,'modelVersion':'validated-history-unified-v1','modelSha256':s['modelHash'],'dataFingerprint':s['fingerprint'],'cutoff':cut,'validThrough':(datetime.date.fromisoformat(cut)+datetime.timedelta(days=6)).isoformat(),'persons':persons,'unassignedSupervisor':{'recentHours':recent[''],'supervisorTail':shrink(tails['supervisor'][''][-20:],10),'baseSupervisorResidual':shrink(errors['base']['supervisor'][''][-30:],10),'incumbentSupervisorResidual':shrink(errors['incumbent']['supervisor'][''][-30:],10)},'stores':resultstores,'accounts':compiled['accounts'],'model':s['model'],'privacy':'PRIVATE LOCAL FILE: employee-level derived performance, names, customer labels and reference coefficients. Do not commit or upload. Browser reads this file locally.'}
-def project_last_crew(employees,supervisor,rx,rows,current_ids):
- # A recorded assignment is independent of an individual counting/production row.
- selected=list(dict.fromkeys(i for i in employees if i in current_ids))
- return {'employees':selected,'supervisor':supervisor if supervisor in current_ids else '',
-         'supervisorStatus':'recorded' if supervisor in current_ids else 'not-current' if supervisor else 'missing',
+def project_last_crew(employees,supervisor,rx,rows,people):
+ # Historical display includes former staff; selection uses the separate current roster.
+ selected=list(dict.fromkeys(i for i in employees if i in people))
+ supervisor=supervisor if supervisor in people else ''
+ return {'employees':selected,'supervisor':supervisor,
+         'supervisorStatus':'recorded' if supervisor else 'missing',
+         'names':{i:people[i] for i in dict.fromkeys(selected+([supervisor] if supervisor else []))},
          'rx':[i for i in rx if i in selected],
          'rows':[r for r in rows if r['key'] in selected]}
 
-def public_snapshot(snapshot,state,catalog):
+def public_snapshot(snapshot,state,catalog,_anchors=True):
+ staffing_anchors=None
+ if _anchors:
+  full=copy.deepcopy(snapshot);full_catalog=copy.deepcopy(catalog)
+  for person in full['persons']:person['active']=True
+  for person in full_catalog['employees']:person['active']=True
+  full_public=public_snapshot(full,state,full_catalog,False)
+  run=subprocess.run(['node',str(ROOT/'static_tools/compile_staffing_anchors.mjs')],input=json.dumps(full_public,allow_nan=False),text=True,encoding='utf8',capture_output=True,cwd=W,timeout=300)
+  if run.returncode:raise RuntimeError(run.stderr[-3000:])
+  staffing_anchors=json.loads(run.stdout)
  result=copy.deepcopy(snapshot);planning=result.pop('planning');result.pop('privacy',None);result['publicationScope']='current-roster-derived'
  result['persons']=[p for p in result['persons'] if p['active']];stable=lambda value:hmac.new(bytes.fromhex(state['publicationSalt']),value.encode(),hashlib.sha256).hexdigest()[:24]
  for person in result['persons']:person['stableKey']=stable('person:'+catalog['employees'][int(person['key'][1:])]['id'])
  ids={p['key'] for p in result['persons']}
+ historical_names={p['key']:p['name'] for p in snapshot['persons']}
  keys={p['id']:'p'+str(i) for i,p in enumerate(catalog['employees'])}
  result['stores']=[st for i,st in enumerate(result['stores']) if (st['context'] and st['context']['incumbent']) or planning['stores'].get(catalog['stores'][i]['alias'],{}).get('variants',{}).get('default')]
  aliases={s['alias']:s for s in catalog['stores']}
@@ -87,11 +99,15 @@ def public_snapshot(snapshot,state,catalog):
   prior=max([j for j in state['history']['jobs'] if j['storeId']==bykey[s['key']]['storeId'] and j['date']<snapshot['cutoff']],key=lambda j:j['date'],default=None)
   exported=s['scenario'].get('lastCrew',{})
   if exported.get('employees'):
-   selected=[i for i in exported['employees'] if i in ids];sup=exported.get('supervisor','')
-   s['lastCrew']=project_last_crew(selected,sup,exported.get('rx',[]),exported.get('rows',[]),ids)
+   selected=exported['employees'];sup=exported.get('supervisor','')
+   s['lastCrew']=project_last_crew(selected,sup,exported.get('rx',[]),exported.get('rows',[]),historical_names)
   else:
-   selected=[keys[e] for e in prior['employees'] if keys.get(e) in ids] if prior else [];sup=keys.get(prior['supervisor'],'') if prior else ''
-   s['lastCrew']=project_last_crew(selected,sup,[keys[e] for e in prior['rx'] if keys.get(e) in ids] if prior else [],[],ids)
+   selected=[keys[e] for e in prior['employees'] if keys.get(e) in historical_names] if prior else [];sup=keys.get(prior['supervisor'],'') if prior else ''
+   s['lastCrew']=project_last_crew(selected,sup,[keys[e] for e in prior['rx'] if keys.get(e) in historical_names] if prior else [],[],historical_names)
+  s['lastCrew']['date']=exported.get('date') or (prior['date'] if prior else '')
+  s['lastCrewVisits']=[dict(project_last_crew(v['employees'],v.get('supervisor',''),v.get('rx',[]),v.get('rows',[]),historical_names),date=v['date']) for v in s['scenario'].pop('lastCrewVisits',[]) if v['date']<datetime.date.today().isoformat()]
+  if not s['lastCrewVisits'] and s['lastCrew']['date']:s['lastCrewVisits']=[copy.deepcopy(s['lastCrew'])]
+  if staffing_anchors is not None:s['staffingAnchors']=staffing_anchors[s['key']]
   s['scenario'].pop('lastCrew',None)
   s['scenario']['recentAccountProduction']={k:v for k,v in s['scenario'].get('recentAccountProduction',{}).items() if k in ids}
   for k in (s['context']['incumbent']['kernels'] if s['context'] else []):
@@ -122,8 +138,9 @@ def public_snapshot(snapshot,state,catalog):
  return result
 
 def main():
- ap=argparse.ArgumentParser();ap.add_argument('--week');ap.add_argument('--data-dir');args=ap.parse_args();cut=args.week or week(datetime.date.today().isoformat())
- if week(cut)!=cut:raise ValueError('--week must be a Monday YYYY-MM-DD')
+ ap=argparse.ArgumentParser();dates=ap.add_mutually_exclusive_group();dates.add_argument('--week',help='Explicit historical Monday cutoff for research/replay');dates.add_argument('--as-of',help='Use completed history before this date (default: today)');ap.add_argument('--data-dir');args=ap.parse_args();cut=args.as_of or args.week or datetime.date.today().isoformat()
+ datetime.date.fromisoformat(cut)
+ if args.week and week(cut)!=cut:raise ValueError('--week must be a Monday YYYY-MM-DD')
  namespace=hashlib.sha256(str(W.resolve()).casefold().encode()).hexdigest()[:12];canonical=pathlib.Path(os.environ.get('LOCALAPPDATA',str(pathlib.Path.home())))/'EmployeePredictor';root=pathlib.Path(args.data_dir or canonical/'SiteHistory'/namespace);archive=(root/'export_archive') if (root/'export_archive').exists() else default_archive_dir(W)
  if (root/'history.sqlite3').exists():
   with sqlite3.connect(root/'history.sqlite3') as db:
@@ -132,5 +149,5 @@ def main():
  private=store.root/'weekly_private';private.mkdir(exist_ok=True);out=private/('planning-'+cut+'-'+s['fingerprint'][:12]+'.json');atomic(out,json.dumps(snapshot,allow_nan=False,separators=(',',':')).encode())
  from verify_export import build_public,inspect_private
  private_report=inspect_private(snapshot);private_report.update(classification='PRIVATE FULL HISTORICAL REFERENCE - NOT PUBLISHED',scope='Full historical reference retained locally',privateFile=str(out),sha256=hashlib.sha256(out.read_bytes()).hexdigest(),bytes=out.stat().st_size);atomic(private/'LATEST.json',json.dumps(private_report,indent=2).encode());release=build_public(W,public_snapshot(snapshot,s,catalog))
- report={'staticDirectory':str(W/'pages_export'),'privatePlanningFile':str(out),'publicPlanningFile':str(W/'pages_export'/release['files']['planning']['path']),'releaseVersion':release['version'],'cutoff':cut,'validThrough':snapshot['validThrough'],'privateDataReport':str(private/'LATEST.json'),'publicContainsCompanyData':True,'publicScope':'Approved current employee names and derived prediction data only','activeRosterCount':sum(p['active'] for p in catalog['employees'])};atomic(ROOT/'verification/static_latest.json',json.dumps(report,indent=2).encode());print(json.dumps(report,indent=2))
+ report={'staticDirectory':str(W/'pages_export'),'privatePlanningFile':str(out),'publicPlanningFile':str(W/'pages_export'/release['files']['planning']['path']),'releaseVersion':release['version'],'cutoff':cut,'validThrough':snapshot['validThrough'],'privateDataReport':str(private/'LATEST.json'),'publicContainsCompanyData':True,'publicScope':'Current planning roster and derived predictions; complete latest-visit historical crew display','activeRosterCount':sum(p['active'] for p in catalog['employees'])};atomic(ROOT/'verification/static_latest.json',json.dumps(report,indent=2).encode());print(json.dumps(report,indent=2))
 if __name__=='__main__':main()

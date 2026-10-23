@@ -26,7 +26,7 @@ class App:
   if date<catalog['today']:raise ValueError('Use today or a future planning date.')
   roles=p.get('roles') or {};sup=identity(roles['supervisor']) if roles.get('supervisor') else '';rx=list(dict.fromkeys(identity(x) for x in roles.get('rx',[])))
   if sup and sup not in ids or not set(rx)<=set(ids):raise ValueError('Roles must belong to the selected crew.')
-  plan={'storeKey':entry['alias'],'storeId':entry['storeId'],'accountKey':entry['accountKey'],'date':date,'historyCutoff':week(date),'employees':ids,'roles':{'supervisor':sup,'rx':rx}}
+  plan={'storeKey':entry['alias'],'storeId':entry['storeId'],'accountKey':entry['accountKey'],'date':date,'historyCutoff':min(date,catalog['today']),'employees':ids,'roles':{'supervisor':sup,'rx':rx}}
   if not entry['storeId']:return {'status':'no_history','message':'This export store is not yet linked to a numeric timesheet customer. Use Imports to map it; no history is fabricated.'},plan
   key=hashlib.sha256(json.dumps([plan,catalog['fingerprint']],sort_keys=True).encode()).hexdigest()
   with self.lock:
@@ -91,8 +91,12 @@ class Handler(BaseHTTPRequestHandler):
      if not app.owner_batch or self.headers.get('X-Import-Batch')!=app.owner_batch['id']:raise ValueError('Start an import batch to make a recoverable backup first.')
      name=urllib.parse.unquote(self.headers.get('X-Filename',''))
      if path.endswith('import-timesheet'):return self.send(202,app.submit('owner timesheet import',lambda:app.store.import_timesheet_bytes(name,raw)))
-     return self.send(202,app.submit('owner production import',lambda:app.store.import_production(name,raw,import_mode='current',publish_parent=False)))
+     return self.send(202,app.submit('owner production import',lambda:app.store.import_production(name,raw,import_mode='historical_backfill',publish_parent=False)))
     body=json.loads(raw)
+    if path=='/api/owner/update-roster':
+     ids=body.get('employeeIds')
+     if not isinstance(ids,list) or any(not isinstance(i,str) for i in ids):raise ValueError('Select the current scheduling roster.')
+     return self.send(202,app.submit('update scheduling roster',lambda:app.store.update_roster(ids)))
     if path=='/api/owner/begin-import':
      def begin():
       backup=app.store.backup();app.owner_batch={'id':secrets.token_urlsafe(24),'backup':str(backup)};return app.owner_batch
@@ -109,7 +113,7 @@ class Handler(BaseHTTPRequestHandler):
     return self.send(404,{'error':'Owner action not found.'})
    if path=='/api/import-production':
     name=urllib.parse.unquote(self.headers.get('X-Filename','EmployeeProductionExport.xlsx'))
-    def importing():r=app.store.import_production(name,raw,import_mode='current');return {**r,**app.store.refresh()}
+    def importing():r=app.store.import_production(name,raw,import_mode='historical_backfill');return {**r,**app.store.refresh()}
     return self.send(202,app.submit('production import',importing))
    if path=='/api/restore':
     _,p=app.store.raw('restore_uploads','backup.zip',raw)

@@ -8,7 +8,7 @@ export function recordedClock(value){
  return String(h).padStart(2,'0')+':'+m[2]+(second?':'+String(second).padStart(2,'0'):'');
 }
 export function curateLastCrew(raw,alias,inventoryDate,inventoryType,members,catalog,keys){
- const people=new Map(catalog.filter(p=>p.active).map(p=>[id(p.id),p])),rows=raw.filter(r=>(String(r.AccountName||r.Account||'').trim()+'||'+String(r.StoreName||'').trim())===alias&&day(r.DateOfInv)===inventoryDate),types=new Set(rows.map(r=>clean(r.TypeOfInv||'Unknown'))),ambiguousInventory=types.size>1||(inventoryType&&clean(inventoryType)!=='unknown'&&types.size===1&&!types.has(clean(inventoryType)));
+ const people=new Map(catalog.map(p=>[id(p.id),p])),rows=raw.filter(r=>(String(r.AccountName||r.Account||'').trim()+'||'+String(r.StoreName||'').trim())===alias&&day(r.DateOfInv)===inventoryDate),types=new Set(rows.map(r=>clean(r.TypeOfInv||'Unknown'))),ambiguousInventory=types.size>1||(inventoryType&&clean(inventoryType)!=='unknown'&&types.size===1&&!types.has(clean(inventoryType)));
  return members.map(id).filter(e=>people.has(e)).map(e=>{const base={key:keys[e],piecesPerHr:null,inStoreHours:null,pieces:null,recordedIn:null,recordedOut:null,support:'missing'},candidates=rows.filter(r=>id(r.Employee)===e),unique=new Map(candidates.map(r=>[JSON.stringify([r.Total_Ext_Qty,r.Expr1,r.PiecesPerHr,r.TimeIn,r.TimeOut,r.TypeOfInv,r.FirstName,r.LastName]),r]));
   if(ambiguousInventory||unique.size>1)return {...base,support:'ambiguous'};
   if(unique.size!==1)return base;const r=[...unique.values()][0];if(clean([r.FirstName,r.LastName].filter(Boolean).join(' '))!==clean(people.get(e).name))return {...base,support:'unconfirmed'};

@@ -18,7 +18,7 @@ YOUR ROUTINE UPDATE: LOCAL IMPORT -> BUILD -> COMMIT/PUSH -> EVERYONE GETS UPDAT
    choice. Earlier production history is retained. Wait for imports to finish and
    review the activity/mappings.
 2. Double-click BuildWeeklyPages.cmd. It refreshes validated local history and builds
-   the current Monday-Sunday package without retraining model weights. Other weeks:
+   a seven-day package starting today, using imported history dated before today without retraining model weights. Explicit historical replay builds (not the default):
      BuildWeeklyPages.cmd --week YYYY-MM-DD
    The date must be a Monday. Restored profiles:
      BuildWeeklyPages.cmd --data-dir "full restored SiteHistory directory"
