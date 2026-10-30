@@ -2,8 +2,8 @@
   "id": "latest",
   "version": 9,
   "modelVersion": "duration-v4-weekly",
-  "fingerprint": "24868430:f2536f86",
-  "createdAt": "2026-10-23T23:05:31.900Z",
+  "fingerprint": "25078489:24a6f6a8",
+  "createdAt": "2026-10-30T20:54:48.919Z",
   "durationAnalytics": {
     "version": "duration-v4-weekly",
     "config": {
@@ -16,59 +16,59 @@
         "elasticity": 0
       }
     },
-    "validationJobs": 1068,
+    "validationJobs": 1069,
     "calibrationStart": "2025-12-29",
     "calibrationJobs": 725,
     "interval": {
       "nominalCoverage": 0.8,
-      "testedJobs": 730,
-      "coverage": 0.7506849315068493
+      "testedJobs": 763,
+      "coverage": 0.747051114023591
     },
-    "validationMae": 0.6111423603445636,
+    "validationMae": 0.6110383918129035,
     "evaluationPolicy": "Monday weekly cutoff; assumes previous week available Monday. Retrospective retained-history simulation, not historical as-of exports.",
     "validationEnd": "2025-12-28",
     "testMetrics": {
-      "jobs": 730,
-      "durationMae": 0.6287315501841648,
-      "biasHours": -0.03781478091251169,
-      "mape": 16.469989071568897,
-      "within30Minutes": 0.5589041095890411,
-      "within60Minutes": 0.7931506849315069,
+      "jobs": 763,
+      "durationMae": 0.6302306823292212,
+      "biasHours": -0.02425062252892712,
+      "mape": 16.7856101246917,
+      "within30Minutes": 0.5583224115334207,
+      "within60Minutes": 0.7929226736566186,
       "splitDate": "2026-05-18",
-      "attempted": 730
+      "attempted": 763
     },
     "benchmarks": {
       "pairedModel": {
-        "jobs": 684,
-        "durationMae": 0.5967456602842693,
-        "biasHours": -0.03567951764054609,
-        "mape": 15.385606028203032,
-        "within30Minutes": 0.577485380116959,
-        "within60Minutes": 0.8114035087719298
+        "jobs": 716,
+        "durationMae": 0.5982067187391001,
+        "biasHours": -0.01892908518096562,
+        "mape": 15.74729631042014,
+        "within30Minutes": 0.5768156424581006,
+        "within60Minutes": 0.8114525139664804
       },
       "lastVisit": {
-        "jobs": 684,
-        "durationMae": 0.7428362573099422,
-        "biasHours": -0.09605263157894751,
-        "mape": 19.51255682559042,
-        "within30Minutes": 0.5058479532163743,
-        "within60Minutes": 0.7514619883040936
+        "jobs": 716,
+        "durationMae": 0.7581005586592187,
+        "biasHours": -0.05726256983240241,
+        "mape": 20.936339787670114,
+        "within30Minutes": 0.4958100558659218,
+        "within60Minutes": 0.7402234636871509
       },
       "recentStore": {
-        "jobs": 684,
-        "durationMae": 0.6519980506822616,
-        "biasHours": -0.058918128654970696,
-        "mape": 17.201692332406882,
-        "within30Minutes": 0.5131578947368421,
-        "within60Minutes": 0.8026315789473685
+        "jobs": 716,
+        "durationMae": 0.6588687150837992,
+        "biasHours": -0.03843109869646176,
+        "mape": 17.877179330445966,
+        "within30Minutes": 0.5041899441340782,
+        "within60Minutes": 0.8002793296089385
       },
       "newStores": {
-        "jobs": 46,
-        "durationMae": 1.1043478260869568,
-        "biasHours": -0.06956521739130447,
-        "mape": 32.59429345553075,
-        "within30Minutes": 0.2826086956521739,
-        "within60Minutes": 0.5217391304347826
+        "jobs": 47,
+        "durationMae": 1.1180851063829789,
+        "biasHours": -0.10531914893617032,
+        "mape": 32.60332695487113,
+        "within30Minutes": 0.2765957446808511,
+        "within60Minutes": 0.5106382978723404
       }
     },
     "errorGlobal": {
@@ -4465,10 +4465,10 @@
       }
     },
     "accuracyCache": {
-      "mae": 0.6287315501841648,
-      "mape": 16.469989071568897,
-      "counted": 730,
-      "totalWeight": 730,
+      "mae": 0.6302306823292212,
+      "mape": 16.7856101246917,
+      "counted": 763,
+      "totalWeight": 763,
       "allRows": [
         {
           "storeKey": "AURORA OUTPATIENT RX||AURORA OUTPATIENT RX #1194, MILWAUKEE",
@@ -5051,36 +5051,36 @@
           "account": "ONEIDA RETAIL ENTERPRISE",
           "accountKey": "oneida retail enterprise",
           "label": "ONEIDA RETAIL ENTERPRISE | ONEIDA #2020 ONE STOP WESTWIND, GREEN BAY",
-          "mae": 0.82,
-          "mape": 32.3621506121506,
-          "actualAvgDuration": 2.28,
-          "predictedAvgDuration": 1.86,
-          "count": 5,
-          "weightSum": 5
+          "mae": 0.6833333333333332,
+          "mape": 26.968458843458833,
+          "actualAvgDuration": 2.1999999999999997,
+          "predictedAvgDuration": 1.8500000000000003,
+          "count": 6,
+          "weightSum": 6
         },
         {
           "storeKey": "ONEIDA RETAIL ENTERPRISE||ONEIDA #2025 ONE STOP PACKERLAND, GREEN BAY",
           "account": "ONEIDA RETAIL ENTERPRISE",
           "accountKey": "oneida retail enterprise",
           "label": "ONEIDA RETAIL ENTERPRISE | ONEIDA #2025 ONE STOP PACKERLAND, GREEN BAY",
-          "mae": 1.0399999999999998,
-          "mape": 34.05176103705516,
-          "actualAvgDuration": 2.48,
-          "predictedAvgDuration": 1.8,
-          "count": 5,
-          "weightSum": 5
+          "mae": 0.8833333333333332,
+          "mape": 29.418134197545964,
+          "actualAvgDuration": 2.3333333333333335,
+          "predictedAvgDuration": 1.7833333333333332,
+          "count": 6,
+          "weightSum": 6
         },
         {
           "storeKey": "ONEIDA RETAIL ENTERPRISE||ONEIDA #2026 ONE STOP LARSEN, GREEN BAY",
           "account": "ONEIDA RETAIL ENTERPRISE",
           "accountKey": "oneida retail enterprise",
           "label": "ONEIDA RETAIL ENTERPRISE | ONEIDA #2026 ONE STOP LARSEN, GREEN BAY",
-          "mae": 0.45000000000000007,
-          "mape": 18.433179723502306,
-          "actualAvgDuration": 1.975,
-          "predictedAvgDuration": 1.725,
-          "count": 4,
-          "weightSum": 4
+          "mae": 0.38,
+          "mape": 15.996543778801842,
+          "actualAvgDuration": 1.9,
+          "predictedAvgDuration": 1.72,
+          "count": 5,
+          "weightSum": 5
         },
         {
           "storeKey": "AURORA OUTPATIENT RX||AURORA OUTPATIENT RX #1053, SLINGER",
@@ -5135,84 +5135,84 @@
           "account": "ONEIDA RETAIL ENTERPRISE",
           "accountKey": "oneida retail enterprise",
           "label": "ONEIDA RETAIL ENTERPRISE | ONEIDA #2021 ONE STOP 54, ONEIDA",
-          "mae": 0.8599999999999998,
-          "mape": 29.71367521367521,
-          "actualAvgDuration": 2.4000000000000004,
-          "predictedAvgDuration": 1.86,
-          "count": 5,
-          "weightSum": 5
+          "mae": 0.7666666666666665,
+          "mape": 27.142348392348385,
+          "actualAvgDuration": 2.35,
+          "predictedAvgDuration": 1.8500000000000003,
+          "count": 6,
+          "weightSum": 6
         },
         {
           "storeKey": "ONEIDA RETAIL ENTERPRISE||ONEIDA #2022 ONE STOP E & EE, DEPERE",
           "account": "ONEIDA RETAIL ENTERPRISE",
           "accountKey": "oneida retail enterprise",
           "label": "ONEIDA RETAIL ENTERPRISE | ONEIDA #2022 ONE STOP E & EE, DEPERE",
-          "mae": 1.02,
-          "mape": 36.07695709862893,
-          "actualAvgDuration": 2.28,
-          "predictedAvgDuration": 1.6199999999999999,
-          "count": 5,
-          "weightSum": 5
+          "mae": 0.9666666666666668,
+          "mape": 35.61968647107967,
+          "actualAvgDuration": 2.2499999999999996,
+          "predictedAvgDuration": 1.5833333333333333,
+          "count": 6,
+          "weightSum": 6
         },
         {
           "storeKey": "ONEIDA RETAIL ENTERPRISE||ONEIDA #2024 TRAVEL CENTER, PULASKI",
           "account": "ONEIDA RETAIL ENTERPRISE",
           "accountKey": "oneida retail enterprise",
           "label": "ONEIDA RETAIL ENTERPRISE | ONEIDA #2024 TRAVEL CENTER, PULASKI",
-          "mae": 0.8799999999999999,
-          "mape": 30.46153846153846,
-          "actualAvgDuration": 2.42,
-          "predictedAvgDuration": 1.86,
-          "count": 5,
-          "weightSum": 5
+          "mae": 0.7666666666666666,
+          "mape": 27.236467236467234,
+          "actualAvgDuration": 2.316666666666667,
+          "predictedAvgDuration": 1.8833333333333335,
+          "count": 6,
+          "weightSum": 6
         },
         {
           "storeKey": "ONEIDA RETAIL ENTERPRISE||ONEIDA #2027 FOUR PATHS, GREEN BAY",
           "account": "ONEIDA RETAIL ENTERPRISE",
           "accountKey": "oneida retail enterprise",
           "label": "ONEIDA RETAIL ENTERPRISE | ONEIDA #2027 FOUR PATHS, GREEN BAY",
-          "mae": 1.4400000000000002,
-          "mape": 37.061302681992345,
-          "actualAvgDuration": 2.6599999999999997,
-          "predictedAvgDuration": 1.42,
-          "count": 5,
-          "weightSum": 5
+          "mae": 1.2500000000000002,
+          "mape": 35.051085568326954,
+          "actualAvgDuration": 2.4166666666666665,
+          "predictedAvgDuration": 1.4333333333333333,
+          "count": 6,
+          "weightSum": 6
         },
         {
           "storeKey": "ONEIDA RETAIL ENTERPRISE||ONEIDA #2030 SMOKE SHOP CASINO, GREEN BAY",
           "account": "ONEIDA RETAIL ENTERPRISE",
           "accountKey": "oneida retail enterprise",
           "label": "ONEIDA RETAIL ENTERPRISE | ONEIDA #2030 SMOKE SHOP CASINO, GREEN BAY",
-          "mae": 0.275,
-          "mape": 14.078947368421053,
-          "actualAvgDuration": 1.6749999999999998,
+          "mae": 0.24,
+          "mape": 12.801619433198379,
+          "actualAvgDuration": 1.5999999999999999,
           "predictedAvgDuration": 1.4,
-          "count": 4,
-          "weightSum": 4
+          "count": 5,
+          "weightSum": 5
         },
         {
           "storeKey": "ONEIDA RETAIL ENTERPRISE||ONEIDA #2031 SMOKE SHOP BINGO, GREEN BAY",
           "account": "ONEIDA RETAIL ENTERPRISE",
           "accountKey": "oneida retail enterprise",
           "label": "ONEIDA RETAIL ENTERPRISE | ONEIDA #2031 SMOKE SHOP BINGO, GREEN BAY",
-          "mae": 0.36,
-          "mape": 22.519936204146724,
-          "actualAvgDuration": 1.4400000000000002,
-          "predictedAvgDuration": 1.2799999999999998,
-          "count": 5,
-          "weightSum": 5
+          "mae": 0.3166666666666666,
+          "mape": 20.281765018607118,
+          "actualAvgDuration": 1.3833333333333335,
+          "predictedAvgDuration": 1.2666666666666666,
+          "count": 6,
+          "weightSum": 6
         },
         {
           "storeKey": "ONEIDA RETAIL ENTERPRISE||ONEIDA #2032 SMOKE SHOP ISBELL, GREEN BAY",
           "account": "ONEIDA RETAIL ENTERPRISE",
           "accountKey": "oneida retail enterprise",
           "label": "ONEIDA RETAIL ENTERPRISE | ONEIDA #2032 SMOKE SHOP ISBELL, GREEN BAY",
-          "mae": 0.38,
-          "mape": 16.493506493506494,
-          "actualAvgDuration": 2,
-          "predictedAvgDuration": 1.78,
-          "count": 5,
-          "weightSum": 5
+          "mae": 0.3666666666666667,
+          "mape": 17.07792207792208,
+          "actualAvgDuration": 1.9166666666666667,
+          "predictedAvgDuration": 1.7833333333333334,
+          "count": 6,
+          "weightSum": 6
         },
         {
           "storeKey": "ALBRECHT'S MARKET||ALBRECHT'S DELAFIELD MARKET",
@@ -6419,12 +6419,12 @@
           "account": "LITTLE STAR C-STORE",
           "accountKey": "little star c-store",
           "label": "LITTLE STAR C-STORE | LITTLE STAR CONVENIENCE STORE",
-          "mae": 0.3143413047024215,
-          "mape": 11.404055269993833,
-          "actualAvgDuration": 2.85,
-          "predictedAvgDuration": 3.164341304702422,
-          "count": 2,
-          "weightSum": 2
+          "mae": 0.2762275364682809,
+          "mape": 9.56348782705471,
+          "actualAvgDuration": 3.033333333333333,
+          "predictedAvgDuration": 3.3095608698016146,
+          "count": 3,
+          "weightSum": 3
         },
         {
           "storeKey": "MARIANO'S||MARIANO'S #541 +FC-RX, DES PLAINES",
@@ -6467,24 +6467,24 @@
           "account": "CONDON OIL",
           "accountKey": "condon oil",
           "label": "CONDON OIL | CONDON OIL #150, KIEL",
-          "mae": 0.3244997157992425,
-          "mape": 18.048756014048134,
-          "actualAvgDuration": 1.9,
-          "predictedAvgDuration": 2.2244997157992428,
-          "count": 2,
-          "weightSum": 2
+          "mae": 0.42499882975894415,
+          "mape": 25.94354973555092,
+          "actualAvgDuration": 1.7666666666666666,
+          "predictedAvgDuration": 2.191665496425611,
+          "count": 3,
+          "weightSum": 3
         },
         {
           "storeKey": "CONDON OIL||CONDON OIL #165, CHILTON",
           "account": "CONDON OIL",
           "accountKey": "condon oil",
           "label": "CONDON OIL | CONDON OIL #165, CHILTON",
-          "mae": 0.35278056743630737,
-          "mape": 13.519109333911638,
-          "actualAvgDuration": 2.8,
-          "predictedAvgDuration": 3.1527805674363076,
-          "count": 2,
-          "weightSum": 2
+          "mae": 0.43376142053373173,
+          "mape": 17.286671871615823,
+          "actualAvgDuration": 2.6666666666666665,
+          "predictedAvgDuration": 3.100428087200399,
+          "count": 3,
+          "weightSum": 3
         },
         {
           "storeKey": "KROGER||METRO #102 + RX, SUN PRAIRIE-IRONWOOD",
@@ -7163,12 +7163,12 @@
           "account": "KELLEY WILLIAMSON",
           "accountKey": "kelley williamson",
           "label": "KELLEY WILLIAMSON | KELLEY #80, SANDY HOLLOW MOBIL, ROCKFORD",
-          "mae": 0.3727757567026435,
-          "mape": 7.766161597971741,
+          "mae": 0.24419919553596614,
+          "mape": 5.087483240332628,
           "actualAvgDuration": 4.8,
-          "predictedAvgDuration": 5.172775756702643,
-          "count": 1,
-          "weightSum": 1
+          "predictedAvgDuration": 5.044199195535966,
+          "count": 2,
+          "weightSum": 2
         },
         {
           "storeKey": "KROGER||METRO #892 +RX, MENOMONEE FALLS-COUNTY LINE RD",
@@ -7187,12 +7187,12 @@
           "account": "RELIANCE FUEL, LLC",
           "accountKey": "fuel on",
           "label": "RELIANCE FUEL, LLC | FUEL ON #65, STILES",
-          "mae": 0.6154105033676522,
-          "mape": 11.83481737245485,
-          "actualAvgDuration": 5.2,
-          "predictedAvgDuration": 4.584589496632348,
-          "count": 1,
-          "weightSum": 1
+          "mae": 1.1290109422626058,
+          "mape": 28.1148597829512,
+          "actualAvgDuration": 4.45,
+          "predictedAvgDuration": 4.963600438894954,
+          "count": 2,
+          "weightSum": 2
         },
         {
           "storeKey": "FESTIVAL||FESTIVAL #2705, KENOSHA",
@@ -7223,12 +7223,12 @@
           "account": "KELLEY WILLIAMSON",
           "accountKey": "kelley williamson",
           "label": "KELLEY WILLIAMSON | KELLEY #43, BYRON MOBIL",
-          "mae": 0.27913208994357763,
-          "mape": 7.544110539015611,
-          "actualAvgDuration": 3.7,
-          "predictedAvgDuration": 3.4208679100564225,
-          "count": 1,
-          "weightSum": 1
+          "mae": 0.2648658348791477,
+          "mape": 7.569018600033833,
+          "actualAvgDuration": 3.5,
+          "predictedAvgDuration": 3.48573374493557,
+          "count": 2,
+          "weightSum": 2
         },
         {
           "storeKey": "AURORA OUTPATIENT RX||AURORA OUTPATIENT RX #1312 KAUKAUNA",
@@ -7739,12 +7739,12 @@
           "account": "RELIANCE FUEL, LLC",
           "accountKey": "fuel on",
           "label": "RELIANCE FUEL, LLC | FUEL ON #66, PESHTIGO",
-          "mae": 0.31764143713266435,
-          "mape": 7.0586986029480965,
-          "actualAvgDuration": 4.5,
-          "predictedAvgDuration": 4.182358562867336,
-          "count": 1,
-          "weightSum": 1
+          "mae": 0.828828617520238,
+          "mape": 25.142507332245202,
+          "actualAvgDuration": 3.8,
+          "predictedAvgDuration": 4.311187180387574,
+          "count": 2,
+          "weightSum": 2
         },
         {
           "storeKey": "AURORA OUTPATIENT RX||AURORA OUTPATIENT RX #1055 WEST BEND",
@@ -7799,12 +7799,12 @@
           "account": "KELLEY WILLIAMSON",
           "accountKey": "kelley williamson",
           "label": "KELLEY WILLIAMSON | KELLEY #41, WINNEBAGO MOBIL",
-          "mae": 0.847819291955239,
-          "mape": 15.996590414249793,
-          "actualAvgDuration": 5.3,
-          "predictedAvgDuration": 6.147819291955239,
-          "count": 1,
-          "weightSum": 1
+          "mae": 0.7034039402414916,
+          "mape": 12.735486635326119,
+          "actualAvgDuration": 5.6,
+          "predictedAvgDuration": 5.744415351713748,
+          "count": 2,
+          "weightSum": 2
         },
         {
           "storeKey": "MILE BLUFF||MILE BLUFF OUTPATIENT PHARMACY, MAUSTON",
@@ -8231,12 +8231,12 @@
           "account": "RELIANCE FUEL, LLC",
           "accountKey": "fuel on",
           "label": "RELIANCE FUEL, LLC | FUEL ON #68, MARINETTE",
-          "mae": 0.3328414377124256,
-          "mape": 7.081732717285651,
-          "actualAvgDuration": 4.7,
-          "predictedAvgDuration": 4.367158562287575,
-          "count": 1,
-          "weightSum": 1
+          "mae": 1.3521649191962357,
+          "mape": 55.094962025600346,
+          "actualAvgDuration": 3.5,
+          "predictedAvgDuration": 4.51932348148381,
+          "count": 2,
+          "weightSum": 2
         },
         {
           "storeKey": "FESTIVAL||FESTIVAL #2725, MENASHA",
@@ -9575,12 +9575,12 @@
           "account": "RELIANCE FUEL, LLC",
           "accountKey": "fuel on",
           "label": "RELIANCE FUEL, LLC | FUEL ON #96, ESCANABA",
-          "mae": 0.09935745050695743,
-          "mape": 2.159944576238205,
-          "actualAvgDuration": 4.6,
-          "predictedAvgDuration": 4.500642549493042,
-          "count": 1,
-          "weightSum": 1
+          "mae": 1.373595554284227,
+          "mape": 83.82477410254087,
+          "actualAvgDuration": 3.0999999999999996,
+          "predictedAvgDuration": 4.3742381037772695,
+          "count": 2,
+          "weightSum": 2
         },
         {
           "storeKey": "FESTIVAL SUPPORT OFFICE||DAVE'S COUNTY MARKET, MERRILL",
@@ -9607,14 +9607,26 @@
           "weightSum": 1
         },
         {
+          "storeKey": "VERNON MEMORIAL||VERNON HEALTH LAFARGE PHARMACY",
+          "account": "VERNON MEMORIAL",
+          "accountKey": "vernon memorial",
+          "label": "VERNON MEMORIAL | VERNON HEALTH LAFARGE PHARMACY",
+          "mae": 0.26373784107856313,
+          "mape": 7.7569953258400925,
+          "actualAvgDuration": 3.4,
+          "predictedAvgDuration": 3.136262158921437,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
           "storeKey": "VERNON MEMORIAL||VERNON MEMORIAL RX, LA FARGE",
           "account": "VERNON MEMORIAL",
           "accountKey": "vernon memorial",
           "label": "VERNON MEMORIAL | VERNON MEMORIAL RX, LA FARGE",
-          "mae": 0.21356914026815854,
-          "mape": 6.281445302004664,
+          "mae": 0.26373784107856313,
+          "mape": 7.7569953258400925,
           "actualAvgDuration": 3.4,
-          "predictedAvgDuration": 3.1864308597318414,
+          "predictedAvgDuration": 3.136262158921437,
           "count": 1,
           "weightSum": 1
         },
@@ -10311,6 +10323,150 @@
           "mape": 5.172413793103446,
           "actualAvgDuration": 5.8,
           "predictedAvgDuration": 5.5,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
+          "storeKey": "AURORA OUTPATIENT RX||AURORA OUTPATIENT RX #1110, MILWAUKEE",
+          "account": "AURORA OUTPATIENT RX",
+          "accountKey": "aurora outpatient rx",
+          "label": "AURORA OUTPATIENT RX | AURORA OUTPATIENT RX #1110, MILWAUKEE",
+          "mae": 1.6136404103769815,
+          "mape": 53.78801367923272,
+          "actualAvgDuration": 3,
+          "predictedAvgDuration": 4.6136404103769815,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
+          "storeKey": "AURORA OUTPATIENT RX||AURORA OUTPATIENT RX #1300 WAUTOMA",
+          "account": "AURORA OUTPATIENT RX",
+          "accountKey": "aurora outpatient rx",
+          "label": "AURORA OUTPATIENT RX | AURORA OUTPATIENT RX #1300 WAUTOMA",
+          "mae": 0.7657995870281682,
+          "mape": 25.52665290093894,
+          "actualAvgDuration": 3,
+          "predictedAvgDuration": 3.765799587028168,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
+          "storeKey": "KROGER||PICK #867 +RX, BROWN DEER",
+          "account": "KROGER",
+          "accountKey": "kroger",
+          "label": "KROGER | PICK #867 +RX, BROWN DEER",
+          "mae": 0.3750496304202571,
+          "mape": 5.953168736829477,
+          "actualAvgDuration": 6.3,
+          "predictedAvgDuration": 6.675049630420257,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
+          "storeKey": "KROGER||PICK #868, MILWAUKEE-EAST POINTE",
+          "account": "KROGER",
+          "accountKey": "kroger",
+          "label": "KROGER | PICK #868, MILWAUKEE-EAST POINTE",
+          "mae": 0.04999999999999982,
+          "mape": 1.0638297872340388,
+          "actualAvgDuration": 4.7,
+          "predictedAvgDuration": 4.75,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
+          "storeKey": "PIGS RED||PIGGLY WIGGLY #243, OSHKOSH",
+          "account": "PIGS RED",
+          "accountKey": "piggly wiggly",
+          "label": "PIGS RED | PIGGLY WIGGLY #243, OSHKOSH",
+          "mae": 0.7291365911671539,
+          "mape": 13.25702893031189,
+          "actualAvgDuration": 5.5,
+          "predictedAvgDuration": 6.229136591167154,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
+          "storeKey": "SENDIKS||SENDIK'S, WAUWATOSA",
+          "account": "SENDIKS",
+          "accountKey": "sendiks",
+          "label": "SENDIKS | SENDIK'S, WAUWATOSA",
+          "mae": 0.175910354995497,
+          "mape": 3.2575991665832777,
+          "actualAvgDuration": 5.4,
+          "predictedAvgDuration": 5.575910354995497,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
+          "storeKey": "*Single C-stores $ CASH||BP, DE PERE - BROADWAY",
+          "account": "*Single C-stores $ CASH",
+          "accountKey": "single c-stores",
+          "label": "*Single C-stores $ CASH | BP, DE PERE - BROADWAY",
+          "mae": 1.75,
+          "mape": 33.01886792452831,
+          "actualAvgDuration": 5.3,
+          "predictedAvgDuration": 3.55,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
+          "storeKey": "RELIANCE FUEL, LLC||FUEL ON #59, WESTON-CTY RD J",
+          "account": "RELIANCE FUEL, LLC",
+          "accountKey": "fuel on",
+          "label": "RELIANCE FUEL, LLC | FUEL ON #59, WESTON-CTY RD J",
+          "mae": 0.17231182267992828,
+          "mape": 3.3136888976909287,
+          "actualAvgDuration": 5.2,
+          "predictedAvgDuration": 5.027688177320072,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
+          "storeKey": "MARIANO'S||MARIANO'S #518 +RX, GLENVIEW",
+          "account": "MARIANO'S",
+          "accountKey": "kroger",
+          "label": "MARIANO'S | MARIANO'S #518 +RX, GLENVIEW",
+          "mae": 0.09999999999999964,
+          "mape": 1.5624999999999944,
+          "actualAvgDuration": 6.4,
+          "predictedAvgDuration": 6.5,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
+          "storeKey": "SENDIKS||SENDIK'S, GREENFIELD",
+          "account": "SENDIKS",
+          "accountKey": "sendiks",
+          "label": "SENDIKS | SENDIK'S, GREENFIELD",
+          "mae": 0.9500000000000002,
+          "mape": 13.970588235294121,
+          "actualAvgDuration": 6.8,
+          "predictedAvgDuration": 5.85,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
+          "storeKey": "KELLEY WILLIAMSON||KELLEY #30, PERRYVILLE MOBIL, ROCKFORD",
+          "account": "KELLEY WILLIAMSON",
+          "accountKey": "kelley williamson",
+          "label": "KELLEY WILLIAMSON | KELLEY #30, PERRYVILLE MOBIL, ROCKFORD",
+          "mae": 0.6973438192728665,
+          "mape": 18.351153138759646,
+          "actualAvgDuration": 3.8,
+          "predictedAvgDuration": 4.497343819272866,
+          "count": 1,
+          "weightSum": 1
+        },
+        {
+          "storeKey": "MARIANO'S||MARIANO'S #505 +RX, PALATINE",
+          "account": "MARIANO'S",
+          "accountKey": "kroger",
+          "label": "MARIANO'S | MARIANO'S #505 +RX, PALATINE",
+          "mae": 1.6500000000000004,
+          "mape": 20.886075949367093,
+          "actualAvgDuration": 7.9,
+          "predictedAvgDuration": 6.25,
           "count": 1,
           "weightSum": 1
         }
